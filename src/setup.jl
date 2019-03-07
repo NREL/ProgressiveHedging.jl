@@ -3,200 +3,165 @@ function _error(astring::String)
     return
 end
 
-function fill_scenario_bundles(node_map::Dict{StructJuMP.StructuredModel,
-                                              ModelInfo{K}},
-                               leaves::Dict{K,StructJuMP.StructuredModel}
-                               ) where {K}
-    for (scen,leaf) in pairs(leaves)
-        m = leaf
-        while m != nothing
-            push!(node_map[m].scen_bundle, scen)
-            m = StructJuMP.getparent(m)
+function build_scenario_tree(root_model::StructJuMP.StructuredModel)
+    
+    scen_tree = ScenarioTree(root_model)
+    
+    sj_models = [tuple(root_model.children[id], 2, root_model.probability[id])
+                 for id in sort!(collect(keys(root_model.children)))]
+    probs = Dict{ScenarioID, Float64}()
+    
+    while !isempty(sj_models)
+        (sjm, stage, prob) = popfirst!(sj_models)
+
+        sjm_children = StructJuMP.getchildren(sjm)
+        for id in sort!(collect(keys(sjm_children)))
+            mod = sjm_children[id]
+            # Assumes a Markov structure. This seems to be required by
+            # the scenario structure induced by StructJuMP.
+            push!(sj_models, tuple(mod, stage+1, prob * sjm.probability[id]))
+        end
+
+        node = add_node(scen_tree, sjm, StageID(stage))
+
+        if isempty(sjm_children)
+            s = add_scenario(scen_tree, sjm)
+            probs[s] = prob
         end
     end
-end
 
-function extract_structure_recursive(model::StructJuMP.StructuredModel,
-                                     node_map::Dict{StructJuMP.StructuredModel,
-                                                    ModelInfo{K}},
-                                     depth::Int
-                                     ) where {K}
-    child_probs = Dict{eltype(keys(model.children)), Float64}()
-    leaves = Dict{eltype(keys(model.children)), StructJuMP.StructuredModel}()
-    num_scens = 0
-
-    if model.parent == nothing
-        node_map[model] = ModelInfo("0", depth, Set{K}())
-    end
-    
-    for key in keys(model.children)
-        
-        node_map[model.children[key]] = ModelInfo(node_map[model].id * "." * string(key), depth+1, Set{K}())
-        (nscen, probs, leafs) = extract_structure_recursive(model.children[key],
-                                                            node_map, depth+1)
-        num_scens += nscen
-        
-        if isempty(probs)
-            child_probs[key] = model.probability[key]
-            leaves[key] = model.children[key]
-        else
-            leaves = merge!(leaves, leafs)
-            for k in keys(probs)
-                if k in keys(child_probs)
-                    @error ("Leaves of scenario tree must have unique identifiers:"
-                            * " $k was repeated")
-                else
-                    # Assumes a Markov structure. This seems to be required by
-                    # the scenario structure induced by StructJuMP.
-                    child_probs[k] = probs[k] * model.probability[key]
-                end
-            end
-        end
-        
-    end
-    
-    retval = (isempty(child_probs) ? 1 : num_scens,
-              child_probs,
-              leaves,
-              node_map)
-    
-    return retval
-end
-
-function extract_structure(root_model::StructJuMP.StructuredModel)
-    node_map = Dict{StructJuMP.StructuredModel,
-                    ModelInfo{eltype(keys(root_model.children))}}()
-    
-    (nscen, probs, leaves, node_map) = extract_structure_recursive(root_model,
-                                                                   node_map, 1)
-    fill_scenario_bundles(node_map, leaves)
-    scen_set = Set(keys(probs))
-
-    if abs(sum(values(probs)) - 1.0) > 1e-12
-        @warn "Probability of all scenarios sums to " * string(sum(values(probs)))
+    if abs(sum(values(probs)) - 1.0) > 1e-10
+        @warn("Probabilities of all scenarios do not sum to 1 but to " *
+              string(sum(values(probs))))
     end
 
-    key_type = eltype(keys(root_model.children))
-    model_dict = Dict{key_type, JuMP.Model}()
-    phii = PHInitInfo{key_type}(scen_set, leaves, node_map)
-    
-    return (phii, probs)
+    return (scen_tree, probs)
 end
 
-function name_variables(model::StructJuMP.StructuredModel)
+function add_variables_extensive(model::M,
+                                 var_map::Dict{VariableID, VariableInfo{K}},
+                                 name_map::Dict{VariableID, String},
+                                 scen_tree::ScenarioTree,
+                                 var_translator::Dict{NodeID,Dict{Int,Index}},
+                                 sj_model::StructJuMP.StructuredModel,
+                                 last_used::Index
+                                 ) where {M <: JuMP.AbstractModel,
+                                          K <: JuMP.AbstractVariableRef}
+    idx = last_used
+    scid = DUMMY_SCENARIO_ID
 
-    vdict=Dict{String, StructJuMP.StructuredVariableRef}()
-    
-    for id in keys(model.variables)
-        name = model.varnames[id]
-        vdict[name] = StructJuMP.StructuredVariableRef(model,id)
-    end
-    
-    return vdict
-end
-
-function map_new_variables(variable_map::Dict{String, VariableInfo{K}},
-                           sj_model::StructJuMP.StructuredModel,
-                           new_vars::Dict{String, StructJuMP.StructuredVariableRef},
-                           model_info::ModelInfo{K}
-                           ) where {K, M <: JuMP.AbstractModel}
-    for name in keys(new_vars)
-        if name in keys(variable_map)
-            vi = variable_map[name]
-            if vi.stage != model_info.stage
-                @error("Variable stage mismatch: " * name
-                       * " in stages $vi.stage and $model_info.stage")
-            end
-            if vi.scenario_bundle != model_info.scen_bundle
-                @error("Variable scenario bundle mismatch: " * name
-                       * " in " * string(vi.scenario_bundle) * " and "
-                       * string(model_info.scen_bundle))
-            end
-            if vi.sj_model != sj_model
-                @error("Variable StructJuMP model mismatch: " * name
-                       * " belongs to multiple StructJuMP models")
-            end
-        else
-            variable_map[name] = VariableInfo(model_info.stage,
-                                              model_info.scen_bundle,
-                                              sj_model)
-        end
-    end
-end
-
-function collect_variables(variable_map::Dict{String, VariableInfo{K}},
-                           node_map::Dict{StructJuMP.StructuredModel, ModelInfo{K}},
-                           leaf_model::StructJuMP.StructuredModel
-                           ) where {M <: JuMP.AbstractModel, K}
-    
-    vars = Dict{String, StructJuMP.StructuredVariableRef}()
-    m = leaf_model
-    
-    while m != nothing
-        new_vars = name_variables(m)
-        
-        if !isempty(intersect(vars, new_vars))
-            @error("Common variable names in different stages is not supported: "
-                   * string(intersect(vars, new_vars)))
-            break
-        end
-        
-        map_new_variables(variable_map, m, new_vars, node_map[m])
-        merge!(vars, new_vars)
-        m = StructJuMP.getparent(m)
-    end
-    
-    return vars
-end
-
-function add_variables(model::M, variable_map::Dict{String, VariableInfo{K}},
-                       node_map::Dict{StructJuMP.StructuredModel, ModelInfo{K}},
-                       leaf_model::StructJuMP.StructuredModel
-                       ) where {M <: JuMP.AbstractModel, K}
-    vars = collect_variables(variable_map, node_map, leaf_model)
-    for (name, ref) in pairs(vars)
-        vi = ref.model.variables[ref.idx].info
+    for (id, var) in sj_model.variables
+        vi = var.info
         info = JuMP.VariableInfo(vi.has_lb, vi.lower_bound,
                                  vi.has_ub, vi.upper_bound,
                                  vi.has_fix, vi.fixed_value,
                                  vi.has_start, vi.start,
                                  vi.binary, vi.integer)
-        JuMP.add_variable(model, JuMP.build_variable(_error, info), name)
+
+        idx = _increment(idx)
+        node = translate(scen_tree, sj_model)
+        ph_vid = VariableID(scid, node.stage, idx)
+
+        name = sj_model.varnames[id]
+        var_translator[node.id][id] = idx
+        name_map[ph_vid] = name
+
+        ref = JuMP.add_variable(model, JuMP.build_variable(_error, info), name)
+        var_map[ph_vid] = VariableInfo(ref)
     end
+
+    return scid
+end
+
+function add_variables(submodels::Dict{ScenarioID, M},
+                       var_map::Dict{VariableID, VariableInfo{K}},
+                       name_map::Dict{VariableID, String},
+                       var_translator::Dict{NodeID, Dict{Int,Index}},
+                       node::ScenarioNode,
+                       sj_model::StructJuMP.StructuredModel
+                       ) where {M <: JuMP.AbstractModel,
+                                K <: JuMP.AbstractVariableRef}
+    vdict = Dict{Int,Index}()
+    for id in sort!(collect(keys(sj_model.variables)))
+        vi = sj_model.variables[id].info
+        info = JuMP.VariableInfo(vi.has_lb, vi.lower_bound,
+                                 vi.has_ub, vi.upper_bound,
+                                 vi.has_fix, vi.fixed_value,
+                                 vi.has_start, vi.start,
+                                 vi.binary, vi.integer)
+        name = sj_model.varnames[id]
+        idx = next_index(node)
+        vdict[id] = idx
+
+        for s in node.scenario_bundle
+            model = submodels[s]
+            ph_vid = VariableID(s, node.stage, idx)
+            
+            ref = JuMP.add_variable(model, JuMP.build_variable(_error, info), name)
+            var_map[ph_vid] = VariableInfo(ref)
+            name_map[ph_vid] = name
+        end
+    end
+    
+    var_translator[node.id] = vdict
+
+    if node.num_variables != length(node.variable_indices)
+        @error("Expected $node.nvar variables but got " *
+               length(node.variable_indices))
+    end
+    
     return
 end
 
-function get_new_var(model::M, var::StructJuMP.StructuredVariableRef) where M <: JuMP.AbstractModel
-    name = var.model.varnames[var.idx]
-    return JuMP.variable_by_name(model, name)
+function translate_variable_ref(sj_ref::StructJuMP.StructuredVariableRef,
+                                scen_tree::ScenarioTree,
+                                var_node_trans::Dict{NodeID,Dict{Int,Index}},
+                                scen::ScenarioID,
+                                var_map::Dict{VariableID, VariableInfo{V}}
+                                ) where {V <: JuMP.AbstractVariableRef}
+    node = translate(scen_tree, sj_ref.model)
+    vtrans = var_node_trans[node.id]
+    vid = VariableID(scen, node.stage, vtrans[sj_ref.idx])
+    return var_map[vid].ref
 end
 
-function convert_expression(model::M, expr::JuMP.GenericAffExpr{Float64, StructJuMP.StructuredVariableRef}) where {M <: JuMP.AbstractModel}
+function convert_expression(::Type{V},
+                            expr::JuMP.GenericAffExpr{Float64, StructJuMP.StructuredVariableRef},
+                            scen_tree::ScenarioTree,
+                            vtrans::Dict{NodeID,Dict{Int,Index}},
+                            scen::ScenarioID,
+                            var_map::Dict{VariableID,VariableInfo{V}}
+                            ) where {V <: JuMP.AbstractVariableRef}
     
-    V = JuMP.variable_type(model)
     new_expr = JuMP.GenericAffExpr{Float64, V}()
     
     new_expr += JuMP.constant(expr)
     
     for (coef, var) in JuMP.linear_terms(expr)
-        new_var = get_new_var(model, var)
+        new_var = translate_variable_ref(var, scen_tree, vtrans, scen, var_map)
         new_expr += JuMP.GenericAffExpr{Float64, V}(0.0, new_var => coef)
     end
     
     return new_expr
 end
 
-function convert_expression(model::M, expr::JuMP.GenericQuadExpr{Float64, StructJuMP.StructuredVariableRef}) where {M <: JuMP.AbstractModel}
+function convert_expression(::Type{V},
+                            expr::JuMP.GenericQuadExpr{Float64, StructJuMP.StructuredVariableRef},
+                            scen_tree::ScenarioTree,
+                            vtrans::Dict{NodeID,Dict{Int,Index}},
+                            scen::ScenarioID,
+                            var_map::Dict{VariableID,VariableInfo{V}}
+                            ) where {V <: JuMP.AbstractVariableRef}
     
-    V = JuMP.variable_type(model)
     new_expr = JuMP.GenericQuadExpr{Float64, V}()
     
-    new_expr += convert_expression(model, expr.aff)
+    new_expr += convert_expression(V, expr.aff, scen_tree, vtrans, scen, var_map)
     
     for (coef, var1, var2) in JuMP.quad_terms(expr)
-        new_var1 = get_new_var(model, var1)
-        new_var2 = get_new_var(model, var2)
+        new_var1 = translate_variable_ref(var1, scen_tree, vtrans, scen, var_map)
+        new_var2 = translate_variable_ref(var2, scen_tree, vtrans, scen, var_map)
         up = JuMP.UnorderedPair{V}(new_var1, new_var2)
+        
         zero_aff_expr = zero(JuMP.GenericAffExpr{Float64, V})
         new_expr += JuMP.GenericQuadExpr{Float64, V}(zero_aff_expr, up => coef)
     end
@@ -204,28 +169,16 @@ function convert_expression(model::M, expr::JuMP.GenericQuadExpr{Float64, Struct
     return new_expr
 end
 
-function convert_expression(model::M, expr::S) where {M <: JuMP.AbstractModel, S <: JuMP.AbstractJuMPScalar}
+function convert_expression(::Type{V},
+                            expr::S,
+                            scen_tree::ScenarioTree,
+                            vtrans::Dict{NodeID,Dict{Int,Index}},
+                            scen::ScenarioID,
+                            var_map::Dict{VariableID,VariableInfo{V}}
+                            ) where {V <: JuMP.AbstractVariableRef,
+                                     S <: JuMP.AbstractJuMPScalar}
     @error("Unrecognized expression type: " * string(S))
     return nothing
-end
-
-function collect_objectives(model::M, leaf_model::StructJuMP.StructuredModel) where {M <: JuMP.AbstractModel}
-    V = JuMP.variable_type(model)
-    obj = JuMP.GenericAffExpr{Float64, V}()
-    m = leaf_model
-    while m != nothing
-        obj += convert_expression(model, m.objective_function)
-        m = StructJuMP.getparent(m)
-    end
-    return obj
-end
-
-function add_objective(model::M, root_model::StructJuMP.StructuredModel,
-                       leaf_model::StructJuMP.StructuredModel
-                       ) where {M <: JuMP.AbstractModel}
-    obj = collect_objectives(model, leaf_model)
-    JuMP.set_objective(model, root_model.objective_sense, obj)
-    return
 end
 
 function make_constraint(new_expr::S, con::JuMP.ScalarConstraint
@@ -245,58 +198,107 @@ function make_constraint(new_expr::S, con::C) where {S <: JuMP.AbstractJuMPScala
     return nothing
 end
 
-function copy_constraints(model::M, sj_model::StructJuMP.StructuredModel
-                          ) where {M <: JuMP.AbstractModel}
+function copy_constraints(model::M, sj_model::StructJuMP.StructuredModel,
+                          scen_tree::ScenarioTree,
+                          var_translator::Dict{NodeID, Dict{Int,Index}},
+                          scen::ScenarioID,
+                          var_map::Dict{VariableID, VariableInfo{V}}
+                          ) where {M <: JuMP.AbstractModel,
+                                   V <: JuMP.AbstractVariableRef}
     for (id, con) in sj_model.constraints
-        new_con_expr = convert_expression(model, JuMP.jump_function(con))
+        new_con_expr = convert_expression(JuMP.variable_type(model),
+                                          JuMP.jump_function(con),
+                                          scen_tree, var_translator,
+                                          scen, var_map)
         new_con = make_constraint(new_con_expr, con)
         JuMP.add_constraint(model, new_con, sj_model.connames[id])
     end
     return
 end
 
-function add_constraints(model::M, leaf_model::StructJuMP.StructuredModel
-                         ) where {M <: JuMP.AbstractModel}
-    m = leaf_model
-    while m != nothing
-        copy_constraints(model, m)
-        m = StructJuMP.getparent(m)
+function add_constraints(submodels::Dict{ScenarioID,M},
+                         node::ScenarioNode,
+                         sj_model::StructJuMP.StructuredModel,
+                         scen_tree::ScenarioTree,
+                         var_translator::Dict{NodeID, Dict{Int,Index}},
+                         var_map::Dict{VariableID, VariableInfo{V}}
+                         ) where {M <: JuMP.AbstractModel,
+                                  V <: JuMP.AbstractVariableRef}
+    for s in node.scenario_bundle
+        model = submodels[s]
+        copy_constraints(model, sj_model, scen_tree, var_translator,
+                         s, var_map)
     end
+
     return
 end
 
-function build_submodels(root_model::StructJuMP.StructuredModel,
-                         optimizer_factory::JuMP.OptimizerFactory,
-                         phii::PHInitInfo{K}, ::Type{M}
-                         ) where {K, M <: JuMP.AbstractModel}
-    submodels = Dict{K,M}()
-    variable_map = Dict{String, VariableInfo{K}}()
-    for s in phii.scenarios
-        m = JuMP.Model(optimizer_factory)
-        lmodel = phii.leaves[s]
+function add_objectives(submodels::Dict{ScenarioID,M},
+                        node::ScenarioNode,
+                        sj_model::StructJuMP.StructuredModel,
+                        scen_tree::ScenarioTree,
+                        var_translator::Dict{NodeID, Dict{Int,Index}},
+                        var_map::Dict{VariableID, VariableInfo{V}}
+                        ) where {M <: JuMP.AbstractModel,
+                                 V <: JuMP.AbstractVariableRef}
+    
+    for s in node.scenario_bundle
+        model = submodels[s]
+        obj = JuMP.objective_function(model)
+        obj += convert_expression(JuMP.variable_type(model),
+                                  sj_model.objective_function,
+                                  scen_tree,
+                                  var_translator,
+                                  s, var_map)
+        JuMP.set_objective(model, sj_model.objective_sense, obj)
+    end
+    
+    return
+end
 
-        add_variables(m, variable_map, phii.node_map, lmodel)
-        add_objective(m, root_model, lmodel)
-        add_constraints(m, lmodel)
+function add_attributes(submodels::Dict{ScenarioID, M},
+                        var_map::Dict{VariableID, VariableInfo{K}},
+                        name_map::Dict{VariableID, String},
+                        sj_model::StructJuMP.StructuredModel,
+                        node::ScenarioNode,
+                        scen_tree::ScenarioTree,
+                        var_translator::Dict{NodeID, Dict{Int, Index}}
+                        ) where {M <: JuMP.AbstractModel,
+                                 K <: JuMP.AbstractVariableRef}
+    add_variables(submodels, var_map, name_map, var_translator,
+                  node, sj_model)
+    add_constraints(submodels, node, sj_model, scen_tree,
+                    var_translator, var_map)
+    add_objectives(submodels, node, sj_model, scen_tree,
+                   var_translator, var_map)
+    return
+end
 
-        submodels[s] = m
+function convert_to_submodels(root_model::StructJuMP.StructuredModel,
+                              opt_factory::JuMP.OptimizerFactory,
+                              scen_tree::ScenarioTree,
+                              ::Type{M}
+                              ) where {M <: JuMP.AbstractModel}
+    
+    submodels = Dict{ScenarioID, M}(s => M(opt_factory)
+                                    for s in scenarios(scen_tree))
+    V = JuMP.variable_type(first(submodels)[2])
+    var_map = Dict{VariableID, VariableInfo{V}}()
+    name_map = Dict{VariableID, String}()
+    var_translator = Dict{NodeID, Dict{Int,Index}}()
+
+    sj_models = [root_model]
+    while !isempty(sj_models)
+        sjm = popfirst!(sj_models)
+        
+        append!(sj_models, values(StructJuMP.getchildren(sjm)))
+        
+        add_attributes(submodels, var_map, name_map,
+                       sjm, translate(scen_tree, sjm),
+                       scen_tree, var_translator)
     end
 
-    return (submodels, variable_map)
-end
-
-function set_params(r::N, variable_map::Dict{String, VariableInfo{K}},
-                    probs, phii::PHInitInfo{K}
-                    ) where {N <: Number, K, M <: JuMP.AbstractModel}
-    return PHParams(r, phii.scenarios, probs, variable_map)
-end
-
-function set_data(r::N, variable_map::Dict{String, VariableInfo{K}},
-                  submodels::Dict{K,M}, probs, phii::PHInitInfo{K}
-                  ) where {N <: Number, K, M <: JuMP.AbstractModel}
-    php = set_params(r, variable_map, probs, phii)
-    phd = PHData(phii, php, submodels)
-    return phd
+    return (submodels, var_map, name_map)
 end
 
 function compute_start_points(phd::PHData)
@@ -304,31 +306,50 @@ function compute_start_points(phd::PHData)
     # This is parallelizable
     for (scen, model) in pairs(phd.submodels)
         JuMP.optimize!(model)
+
+        # MOI refers to the MathOptInterface package. Apparently this is made
+        # accessible by JuMP since it is not imported here
+        sts = JuMP.termination_status(model)
+        if sts != MOI.OPTIMAL && sts != MOI.LOCALLY_SOLVED
+            @error("Initialization solve for scenario $scen returned $sts.")
+        end
     end
     
     return
 end
 
 function augment_objectives(phd::PHData)
+    V = JuMP.variable_type(first(phd.submodels)[2])
     
-    for (scen, model) in pairs(phd.submodels)
+    for (nid, node) in pairs(phd.scenario_tree.tree_map)
 
-        obj = JuMP.objective_function(model)
-        
-        for var in JuMP.all_variables(model)
-            # add "parameters" W and Xhat (to be fixed later)
-            w_ref = VariableRef(model)
-            set_name(w_ref, "W_" * JuMP.name(var))
-            # JuMP.fix(w_ref, 0.0, force=true)
-            
-            xhat_ref = VariableRef(model)
-            set_name(xhat_ref, "Xhat_" * JuMP.name(var))
-        
-            # appropriately modify the objective function
-            obj += var*w_ref + 0.5 * phd.params.r * (var - xhat_ref)^2
+        for s in node.scenario_bundle
+
+            model = phd.submodels[s]
+            obj = JuMP.objective_function(model)
+
+            for i in node.variable_indices
+
+                var_id = VariableID(s, node.stage, i)
+                xhat_id = XhatID(nid, i)
+                var_ref = phd.variable_map[var_id].ref
+                
+                w_ref = V(model)
+                JuMP.set_name(w_ref, "W_" * JuMP.name(var_ref))
+                phd.W_ref[var_id] = w_ref
+                
+                xhat_ref = V(model)
+                JuMP.set_name(xhat_ref, "Xhat_" * JuMP.name(var_ref))
+                if !(xhat_id in keys(phd.Xhat_ref))
+                    phd.Xhat_ref[xhat_id] = Set{V}()
+                end
+                push!(phd.Xhat_ref[xhat_id], xhat_ref)
+
+                obj += var_ref * w_ref + 0.5 * phd.r * (var_ref - xhat_ref)^2
+            end
+
+            JuMP.set_objective_function(model, obj)
         end
-
-        JuMP.set_objective_function(model, obj)
     end
     
     return
@@ -337,13 +358,13 @@ end
 function initialize(root_model::StructJuMP.StructuredModel, r::N,
                     optimizer_factory::JuMP.OptimizerFactory, ::Type{M}
                     ) where {N <: Number, M <: JuMP.AbstractModel}
-    (phii, probs) = extract_structure(root_model)
-    (submods, var_map) = build_submodels(root_model, optimizer_factory,
-                                         phii, M)
-    phd = set_data(r, var_map, submods, probs, phii)
-
-    compute_start_points(phd)
-    augment_objectives(phd)
-
-    return phd
+    (scen_tree, probs) = build_scenario_tree(root_model)
+    (submodels, var_map, name_map) = convert_to_submodels(root_model,
+                                                          optimizer_factory,
+                                                          scen_tree,
+                                                          M)
+    ph_data = PHData(r, scen_tree, probs, submodels, var_map, name_map)
+    compute_start_points(ph_data)
+    augment_objectives(ph_data)
+    return ph_data
 end

@@ -1,4 +1,5 @@
-julia 1.0
-JuMP 0.19
+julia v1.0
+JuMP v0.19
 StructJuMP v0.1+
+MathOptInterface v0.8
 DataFrames
