@@ -78,6 +78,12 @@ struct VariableID
     stage::StageID # stage to which this variable belongs
     index::Index # coordinate in vector
 end
+function Base.isless(a::VariableID, b::VariableID)
+    return (a.stage < b.stage ||
+            (a.stage == b.stage &&
+             (a.scenario < b.scenario) ||
+             (a.scenario == b.scenario && a.index < b.index)))
+end
 
 struct XhatID
     node::NodeID
