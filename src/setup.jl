@@ -365,6 +365,7 @@ function initialize(root_model::StructJuMP.StructuredModel, r::N,
                                                           M)
     ph_data = PHData(r, scen_tree, probs, submodels, var_map, name_map)
     compute_start_points(ph_data)
+    compute_and_save_xhat(ph_data)
     augment_objectives(ph_data)
     return ph_data
 end

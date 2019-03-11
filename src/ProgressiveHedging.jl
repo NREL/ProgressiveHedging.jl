@@ -22,37 +22,13 @@ include("setup.jl")
 
 function solve(root_model::StructJuMP.StructuredModel,
                optimizer_factory::JuMP.OptimizerFactory,
-               r::T; model_type::Type{M}=JuMP.Model, max_iter=500, atol=1e-8
+               r::T; model_type::Type{M}=JuMP.Model, max_iter=100, atol=1e-8
                ) where {T <: Number, M <: JuMP.AbstractModel}
     # Initialization
     ph_data = initialize(root_model, r, optimizer_factory, M)
     
     # Solution
-    niter = 0
-    residual = atol + 1.0e10
-    
-    while niter < max_iter && residual > atol
-        # Update Xhat values
-        compute_and_save_xhat(ph_data)
-        
-        # Set initial values, fix cross model values (W and Xhat) and
-        # solve the subproblems
-        set_start_values(ph_data)
-        fix_ph_variables(ph_data)
-        solve_subproblems(ph_data)
-
-        # Update W values
-        compute_and_save_w(ph_data)
-
-        # Update stopping criteria
-        residual = compute_residual(ph_data)
-        niter += 1
-    end
-
-    if niter >= max_iter
-        @warn("Performed $niter iterations without convergence. " *
-              "Consider increasing max_iter from $max_iter.")
-    end
+    (niter, residual) = hedge(ph_data, max_iter, atol)
 
     # Post Processing
     #(soln_df, cost_dict) = retrieve_soln(ph_data)

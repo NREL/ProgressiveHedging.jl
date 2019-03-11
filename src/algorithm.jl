@@ -3,10 +3,10 @@ function compute_and_save_xhat(phd::PHData)
 
     for (node_id, node) in pairs(phd.scenario_tree.tree_map)
 
-        xhat = 0.0
-        norm = 0.0
-
         for i in node.variable_indices
+
+            xhat = 0.0
+            norm = 0.0
             
             for s in node.scenario_bundle
                 
@@ -26,6 +26,21 @@ function compute_and_save_xhat(phd::PHData)
                 
             end
 
+            # if length(node.scenario_bundle) == 2
+            #     s = first(node.scenario_bundle)
+            #     println("****************************")
+            #     println("Variable: ", phd.variable_map[VariableID(s, node.stage, i)].ref)
+            #     println("Hat value: ", xhat/norm)
+            #     val_str = "Values: ("
+            #     for s in node.scenario_bundle
+            #         val_str *= string(value(phd, s, node.stage, i)) * ", "
+            #     end
+            #     val_str = strip(val_str, [' ',','])
+            #     val_str *= ")"
+            #     println(val_str)
+            #     println("****************************")
+            # end
+
             # println("Xhat Value: ", xhat/norm)
             
             phd.Xhat[XhatID(node_id,i)] = xhat / norm
@@ -41,11 +56,46 @@ function compute_and_save_w(phd::PHData)
         for i in node.variable_indices
 
             xhat = phd.Xhat[XhatID(node_id,i)]
+            
+            exp = 0.0
+            norm = 0.0
 
+            # if length(node.scenario_bundle) == 2
+            #     s = first(node.scenario_bundle)
+            #     println("----------------------------")
+            #     println("Variable: ", phd.variable_map[VariableID(s, node.stage, i)].ref)
+            #     println("Hat value: ", xhat)
+            #     val_str = "Values: ("
+            #     kx_str = "KX: ("
+            #     for s in node.scenario_bundle
+            #         val_str *= string(value(phd, s, node.stage, i)) * ", "
+            #         kx_str *= string(value(phd, s, node.stage, i) - xhat) * ", "
+            #     end
+            #     val_str = strip(val_str, [' ',','])
+            #     kx_str = strip(kx_str, [' ',','])
+            #     val_str *= ")"
+            #     kx_str *= ")"
+            #     println(val_str)
+            #     println(kx_str)
+            #     println("----------------------------")
+            # end
+
+
+            # TODO: Decide whether to keep this or not...
             for s in node.scenario_bundle
                 var_id = VariableID(s, node.stage, i)
                 kx = value(phd, var_id) - xhat
                 phd.W[var_id] += phd.r * kx
+
+                p = phd.probabilities[s]
+                exp += p * phd.W[var_id]
+                norm += p
+            end
+
+            if abs(exp) > 1e-12
+                @warn("Conditional expectation of " *
+                      "W[$(node.scenario_bundle),$(node.stage),$i] is non-zero: " *
+                      string(exp/norm))
             end
         end
     end
@@ -121,4 +171,35 @@ function solve_subproblems(phd::PHData)
             @error("Scenario $scen subproblem returned $sts.")
         end
     end
+end
+
+function hedge(ph_data::PHData, max_iter=100, atol=1e-8)
+    niter = 0
+    residual = atol + 1.0e10
+    
+    while niter < max_iter && residual > atol
+        
+        # Set initial values, fix cross model values (W and Xhat) and
+        # solve the subproblems
+        set_start_values(ph_data)
+        fix_ph_variables(ph_data)
+        solve_subproblems(ph_data)
+
+        # Update Xhat values
+        compute_and_save_xhat(ph_data)
+
+        # Update W values
+        compute_and_save_w(ph_data)
+
+        # Update stopping criteria
+        residual = compute_residual(ph_data)
+        niter += 1
+    end
+
+    if niter >= max_iter
+        @warn("Performed $niter iterations without convergence. " *
+              "Consider increasing max_iter from $max_iter.")
+    end
+
+    return (niter, residual)
 end

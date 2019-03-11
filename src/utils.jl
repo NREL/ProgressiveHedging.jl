@@ -1,16 +1,4 @@
 
-# function get_value(model::M, name::String) where M <: JuMP.AbstractModel
-#     return JuMP.value(JuMP.variable_by_name(model, name))
-# end
-
-# function get_fix_value(model::M, name::String) where M <: JuMP.AbstractModel
-#     return JuMP.fix_value(JuMP.variable_by_name(model, name))
-# end
-
-# function ref(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)
-#     return phd.variable_map[VariableID(scen, stage, idx)].ref
-# end
-
 function value(phd::PHData, vid::VariableID)
     return JuMP.value(phd.variable_map[vid].ref)
 end
@@ -101,7 +89,7 @@ function retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
 end
 
 function retrieve_w(phd::PHData)::DataFrames.DataFrame
-    vars = Vector{JuMP.variable_type(first(phd.submodels)[2])}()
+    vars = Vector{String}()
     vals = Vector{Float64}()
     stage = Vector{STAGE_ID}()
     scenario = Vector{SCENARIO_ID}()
@@ -109,7 +97,7 @@ function retrieve_w(phd::PHData)::DataFrames.DataFrame
     
     for vid in sort!(collect(keys(phd.W)))
         vinfo = phd.variable_map[vid]
-        push!(vars, vinfo.ref)
+        push!(vars, "W_" * string(vinfo.ref))
         push!(vals, phd.W[vid])
         push!(stage, _value(vid.stage))
         push!(scenario, _value(vid.scenario))
