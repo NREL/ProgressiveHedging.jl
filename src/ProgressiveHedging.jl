@@ -22,20 +22,22 @@ include("setup.jl")
 
 function solve(root_model::StructJuMP.StructuredModel,
                optimizer_factory::JuMP.OptimizerFactory,
-               r::T; model_type::Type{M}=JuMP.Model, max_iter=100, atol=1e-8
+               r::T; model_type::Type{M}=JuMP.Model, max_iter=100, atol=1e-8,
+               report=false
                ) where {T <: Number, M <: JuMP.AbstractModel}
     # Initialization
     ph_data = initialize(root_model, r, optimizer_factory, M)
     
     # Solution
-    (niter, residual) = hedge(ph_data, max_iter, atol)
+    (niter, residual) = hedge(ph_data, max_iter, atol, report)
 
     # Post Processing
     #(soln_df, cost_dict) = retrieve_soln(ph_data)
     soln_df = retrieve_soln(ph_data)
+    obj = retrieve_obj_value(ph_data)
     
     # return (niter, residual, soln_df, cost_dict, ph_data)
-    return (niter, residual, soln_df, ph_data)
+    return (niter, residual, obj, soln_df, ph_data)
 end
 
 function build_extensive_form(root_model::StructJuMP.StructuredModel,

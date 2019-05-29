@@ -139,7 +139,8 @@ function convert_expression(::Type{V},
     
     for (coef, var) in JuMP.linear_terms(expr)
         new_var = translate_variable_ref(var, scen_tree, vtrans, scen, var_map)
-        new_expr += JuMP.GenericAffExpr{Float64, V}(0.0, new_var => coef)
+        JuMP.add_to_expression!(new_expr, coef, new_var)
+        # new_expr += JuMP.GenericAffExpr{Float64, V}(0.0, new_var => coef)
     end
     
     return new_expr
@@ -154,8 +155,12 @@ function convert_expression(::Type{V},
                             ) where {V <: JuMP.AbstractVariableRef}
     
     new_expr = JuMP.GenericQuadExpr{Float64, V}()
-    
-    new_expr += convert_expression(V, expr.aff, scen_tree, vtrans, scen, var_map)
+
+    JuMP.add_to_expression!(new_expr,
+                            convert_expression(V, expr.aff, scen_tree, vtrans,
+                                               scen, var_map)
+                            )
+    #new_expr += convert_expression(V, expr.aff, scen_tree, vtrans, scen, var_map)
     
     for (coef, var1, var2) in JuMP.quad_terms(expr)
         new_var1 = translate_variable_ref(var1, scen_tree, vtrans, scen, var_map)
@@ -163,7 +168,11 @@ function convert_expression(::Type{V},
         up = JuMP.UnorderedPair{V}(new_var1, new_var2)
         
         zero_aff_expr = zero(JuMP.GenericAffExpr{Float64, V})
-        new_expr += JuMP.GenericQuadExpr{Float64, V}(zero_aff_expr, up => coef)
+        JuMP.add_to_expression!(new_expr,
+                                JuMP.GenericQuadExpr{Float64,V}(zero_aff_expr,
+                                                                up => coef)
+                                )
+        #new_expr += JuMP.GenericQuadExpr{Float64, V}(zero_aff_expr, up => coef)
     end
     
     return new_expr
@@ -326,7 +335,10 @@ function augment_objectives(phd::PHData)
         for s in node.scenario_bundle
 
             model = phd.submodels[s]
-            obj = JuMP.objective_function(model)
+            # obj = JuMP.objective_function(model)
+            obj = zero(JuMP.GenericQuadExpr{Float64, JuMP.VariableRef})
+            JuMP.add_to_expression!(obj, JuMP.objective_function(model))
+            #obj += JuMP.objective_function(model)
 
             for i in node.variable_indices
 
@@ -345,7 +357,10 @@ function augment_objectives(phd::PHData)
                 end
                 push!(phd.Xhat_ref[xhat_id], xhat_ref)
 
-                obj += var_ref * w_ref + 0.5 * phd.r * (var_ref - xhat_ref)^2
+                JuMP.add_to_expression!(obj,
+                                        (var_ref * w_ref +
+                                         0.5*phd.r*(var_ref - xhat_ref)^2)
+                                        )
             end
 
             JuMP.set_objective_function(model, obj)

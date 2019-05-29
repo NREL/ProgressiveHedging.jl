@@ -276,15 +276,15 @@ function PHData(r::N, tree::ScenarioTree,
                   Dict{XhatID, Set{V}}())
 end
 
-function stage_id(xid::XhatID, phd::PHData)
+function stage_id(xid::XhatID, phd::PHData)::StageID
     return phd.scenario_tree.tree_map[xid.node].stage
 end
 
-function scenario_bundle(xid::XhatID, phd::PHData)
+function scenario_bundle(xid::XhatID, phd::PHData)::Set{ScenarioID}
     return phd.scenario_tree.tree_map[xid.node].scenario_bundle
 end
 
-function convert_to_variable_set(xid::XhatID, phd::PHData)
+function convert_to_variable_set(xid::XhatID, phd::PHData)::Set{VariableID}
     idx = xid.index
     stage = stage_id(xid, phd)
     scens = scenario_bundle(xid, phd)
@@ -297,9 +297,21 @@ function convert_to_variable_set(xid::XhatID, phd::PHData)
     return vset
 end
 
-function convert_to_variable_id(xid::XhatID, phd::PHData)
+function convert_to_variable_id(xid::XhatID, phd::PHData)::VariableID
     idx = xid.index
     stage = stage_id(xid, phd)
     scen = first(scenario_bundle(xid, phd))
     return VariableID(scen, stage, idx)
+end
+
+function convert_to_xhat_id(vid::VariableID, phd::PHData)::XhatID
+    nodes = phd.scenario_tree.stage_map[vid.stage]
+    node_id = -1
+    for nid in nodes
+        if vid.scenario in phd.scenario_tree.tree_map[nid].scenario_bundle
+            node_id = nid
+            break
+        end
+    end
+    return XhatID(node_id, vid.index)
 end
