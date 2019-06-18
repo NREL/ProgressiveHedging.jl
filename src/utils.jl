@@ -1,11 +1,16 @@
+function _fetch_variable_value(phd::PHData, scid::ScenarioID,
+                               vi::VariableInfo)::Float64
+    ref = vi.ref
+    return @fetchfrom(phd.scen_proc_map[scid], JuMP.value(fetch(ref)))
+end
 
 function value(phd::PHData, vid::VariableID)::Float64
-    return JuMP.value(phd.variable_map[vid].ref)
+    return _fetch_variable_value(phd, vid.scenario, phd.variable_map[vid])
 end
 
 function value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
     vid = VariableID(scen, stage, idx)
-    return value(phd, vid)
+    return _fetch_variable_value(phd, scen, phd.variable_map[vid])
 end
 
 function value(phd::PHData, xhat_id::XhatID)::Float64
@@ -29,7 +34,7 @@ function xhat_value(phd::PHData, vid::VariableID)::Float64
     return xhat_value(phd, convert_to_xhat_id(vid, phd))
 end
 
-function stringify(set::Set{K}) where K
+function stringify(set::Set{K})::String where K
     str = ""
     for s in sort!(collect(set))
         str *= string(s) * ", "
@@ -37,7 +42,7 @@ function stringify(set::Set{K}) where K
     return rstrip(str, [',',' '])
 end
 
-function stringify(array::Vector{K}) where K
+function stringify(array::Vector{K})::String where K
     str = ""
     for s in sort(array)
         str *= string(s) * ", "
@@ -67,20 +72,25 @@ function retrieve_soln(phd::PHData)::DataFrames.DataFrame
 end
 
 function retrieve_obj_value(phd::PHData)::Float64
+
     # This is just the average of the various objective functions -- includes the
-    # augmented terms though so perhaps not exactly correct
+    # augmented terms
     obj_value = 0.0
     for (scid, model) in pairs(phd.submodels)
-        obj_value += phd.probabilities[scid] * JuMP.objective_value(model)
+        obj = @spawnat(phd.scen_proc_map[scid], JuMP.objective_value(fetch(model)))
+        obj_value += phd.probabilities[scid] * fetch(obj)
     end
+
     # Remove extra terms
     for (vid, var) in pairs(phd.variable_map)
         w_val = w_value(phd, vid)
         xhat_val = xhat_value(phd, vid)
-        x_val = JuMP.value(var.ref)
+        x_val = value(phd, vid)
+        p = phd.probabilities[vid.scenario]
 
-        obj_value -= w_val * x_val + 0.5 * phd.r * (x_val - xhat_val)^2
+        obj_value -= p*(w_val * x_val + 0.5 * phd.r * (x_val - xhat_val)^2)
     end
+
     return obj_value
 end
 
@@ -97,10 +107,15 @@ function retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
     scenario = Vector{SCENARIO_ID}()
     index = Vector{INDEX}()
     
-    for vid in sort!(collect(keys(phd.variable_map)))
-        vinfo = phd.variable_map[vid]
-        push!(vars, JuMP.name(vinfo.ref))
-        push!(vals, JuMP.value(vinfo.ref))
+    @sync for vid in sort!(collect(keys(phd.variable_map)))
+        ref = phd.variable_map[vid].ref
+        val = @spawnat(phd.scen_proc_map[vid.scenario],
+                       JuMP.value(fetch(ref)))
+        name = @spawnat(phd.scen_proc_map[vid.scenario],
+                        JuMP.name(fetch(ref)))
+
+        push!(vars, fetch(name))
+        push!(vals, fetch(val))
         push!(stage, _value(vid.stage))
         push!(scenario, _value(vid.scenario))
         push!(index, _value(vid.index))
@@ -119,9 +134,10 @@ function retrieve_w(phd::PHData)::DataFrames.DataFrame
     scenario = Vector{SCENARIO_ID}()
     index = Vector{INDEX}()
     
-    for vid in sort!(collect(keys(phd.W)))
-        vinfo = phd.variable_map[vid]
-        push!(vars, "W_" * string(vinfo.ref))
+    @sync for vid in sort!(collect(keys(phd.W)))
+        wref = phd.W_ref[vid]
+        proc = phd.scen_proc_map[vid.scenario]
+        push!(vars, @fetchfrom(1, JuMP.name(fetch(wref))))
         push!(vals, phd.W[vid])
         push!(stage, _value(vid.stage))
         push!(scenario, _value(vid.scenario))

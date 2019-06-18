@@ -33,6 +33,9 @@ function compute_and_save_xhat(phd::PHData)::Float64
         end
     end
 
+    # This element of the residual was causing convergence issues so
+    # leave it as zero for now
+
     # xhat_res = 0.0
     # for (xhat_id, xhat) in pairs(phd.Xhat)
         
@@ -43,12 +46,11 @@ function compute_and_save_xhat(phd::PHData)::Float64
     #         xhat_res += phd.probabilities[s] * (xhat - xhat_olds[xhat_id])^2
     #     end
     # end
-        
 
     return xhat_res
 end
 
-function compute_and_save_w(phd::PHData)
+function compute_and_save_w(phd::PHData)::Nothing
 
     for (node_id, node) in pairs(phd.scenario_tree.tree_map)
         for i in node.variable_indices
@@ -80,10 +82,15 @@ function compute_and_save_w(phd::PHData)
     return
 end
 
-function set_start_values(phd)
+function set_start_values(phd::PHData)::Nothing
 
-    for (var_id, var_info) in pairs(phd.variable_map)
-        JuMP.set_start_value(var_info.ref, JuMP.value(var_info.ref))
+    @sync for (var_id, var_info) in pairs(phd.variable_map)
+
+        ref = var_info.ref
+
+        @spawnat(phd.scen_proc_map[var_id.scenario],
+                 JuMP.set_start_value(fetch(ref), JuMP.value(fetch(ref)))
+                 )
     end
 
     return
@@ -91,17 +98,19 @@ function set_start_values(phd)
 end
 
 function compute_x_residual(phd::PHData)::Float64
+
     kxsq = 0.0
-    
+
     for (node_id, node) in pairs(phd.scenario_tree.tree_map)
         for i in node.variable_indices
             
             xhat = phd.Xhat[XhatID(node_id, i)]
             
             for s in node.scenario_bundle
-                var_id = VariableID(s, node.stage, i)
-                x = JuMP.value(phd.variable_map[var_id].ref)
+
+                x = value(phd, VariableID(s, node.stage, i))
                 kxsq += phd.probabilities[s] * (x - xhat)^2
+
             end
         end
     end
@@ -109,27 +118,36 @@ function compute_x_residual(phd::PHData)::Float64
     return kxsq
 end
 
-function fix_xhat(phd::PHData)
+function fix_xhat(phd::PHData)::Nothing
 
-    for (xhat_id, value) in phd.Xhat
-        for xhat_ref in phd.Xhat_ref[xhat_id]
-            JuMP.fix(xhat_ref, value, force=true)
+    # for (xhat_id, value) in phd.Xhat
+    #     for xhat_ref in phd.Xhat_ref[xhat_id]
+    #         JuMP.fix(xhat_ref, value, force=true)
+    #     end
+    # end
+
+    @sync for (xhat_id, value) in phd.Xhat
+        for (scid, xhat_ref) in phd.Xhat_ref[xhat_id]
+            @spawnat(phd.scen_proc_map[scid],
+                     JuMP.fix(fetch(xhat_ref), value, force=true))
         end
     end
     
     return
 end
 
-function fix_w(phd::PHData)
+function fix_w(phd::PHData)::Nothing
 
-    for (w_id, value) in phd.W
-        JuMP.fix(phd.W_ref[w_id], value, force=true)
+    @sync for (w_id, value) in phd.W
+        s = w_id.scenario
+        ref = phd.W_ref[w_id]
+        @spawnat(phd.scen_proc_map[s], JuMP.fix(fetch(ref), value, force=true))
     end
     
     return
 end
 
-function fix_ph_variables(phd::PHData)
+function fix_ph_variables(phd::PHData)::Nothing
     fix_w(phd)
     fix_xhat(phd)
     return
@@ -137,13 +155,17 @@ end
 
 function solve_subproblems(phd::PHData)
 
-    # Find subproblem solutions--this is parallelizable
-    for (scen, model) in pairs(phd.submodels)
-        JuMP.optimize!(model)
+    # Find subproblem solutions--in parallel if we have the workers for it.  @sync
+    # will wait for all processes to complete
+    @sync for (scen, model) in pairs(phd.submodels)
+        @spawnat(phd.scen_proc_map[scen], JuMP.optimize!(fetch(model)))
+    end
 
+    for (scen, model) in pairs(phd.submodels)
+        proc = phd.scen_proc_map[scen]
         # MOI refers to the MathOptInterface package. Apparently this is made
         # accessible by JuMP since it is not imported here
-        sts = JuMP.termination_status(model)
+        sts = fetch(@spawnat(proc, JuMP.termination_status(fetch(model))))
         if sts != MOI.OPTIMAL && sts != MOI.LOCALLY_SOLVED
             @error("Scenario $scen subproblem returned $sts.")
         end
@@ -153,7 +175,7 @@ end
 function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
     niter = 0
     residual = atol + 1.0e10
-    report_interval = Int(max_iter / 10)
+    report_interval = Int(floor(max_iter / 10))
 
     if report
         x_residual = compute_x_residual(ph_data)

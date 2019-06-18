@@ -94,10 +94,8 @@ function Base.isless(a::XhatID, b::XhatID)
             (a.node == b.node && a.index < b.index))
 end
 
-struct VariableInfo{V <: JuMP.AbstractVariableRef}
-    # node::NodeID
-    # index::Index
-    ref::V
+struct VariableInfo
+    ref::Future
 end
 
 struct Translator{A,B}
@@ -234,29 +232,31 @@ function translate(tree::ScenarioTree, nid::NodeID)
     return translate(tree, node)
 end
 
-struct PHData{M <: JuMP.AbstractModel, V <: JuMP.AbstractVariableRef}
+struct PHData
     r::Float64
     scenario_tree::ScenarioTree
+    scen_proc_map::Dict{ScenarioID, Int}
     probabilities::Dict{ScenarioID, Float64}
-    submodels::Dict{ScenarioID, M}
-    variable_map::Dict{VariableID, VariableInfo{V}}
+    submodels::Dict{ScenarioID, Future}
+    variable_map::Dict{VariableID, VariableInfo}
     name::Dict{VariableID, String}
     W::Dict{VariableID, Float64}
-    W_ref::Dict{VariableID, V}
+    W_ref::Dict{VariableID, Future}
     Xhat::Dict{XhatID, Float64}
-    Xhat_ref::Dict{XhatID, Set{V}}
+    Xhat_ref::Dict{XhatID, Dict{ScenarioID, Future}}
 end
 
 function PHData(r::N, tree::ScenarioTree,
+                scen_proc_map::Dict{ScenarioID, Int},
                 probs::Dict{ScenarioID, Float64},
-                submodels::Dict{ScenarioID, M},
-                var_map::Dict{VariableID, VariableInfo{V}},
+                submodels::Dict{ScenarioID, Future},
+                var_map::Dict{VariableID, VariableInfo},
                 name_map::Dict{VariableID, String}
-                ) where {N <: Number,
-                         M <: JuMP.AbstractModel,
-                         V <: JuMP.AbstractVariableRef}
+                ) where {N <: Number}
+
     w_dict = Dict{VariableID, Float64}(vid => 0.0 for vid in keys(var_map))
     xhat_dict = Dict{XhatID, Float64}()
+
     for (nid, ninfo) in pairs(tree.tree_map)
         for i in ninfo.variable_indices
             xhat_id = XhatID(nid, i)
@@ -266,14 +266,15 @@ function PHData(r::N, tree::ScenarioTree,
 
     return PHData(float(r),
                   tree,
+                  scen_proc_map,
                   probs,
                   submodels,
                   var_map,
                   name_map,
                   w_dict,
-                  Dict{VariableID, V}(),
+                  Dict{VariableID, Future}(),
                   xhat_dict,
-                  Dict{XhatID, Set{V}}())
+                  Dict{XhatID, Dict{ScenarioID, Future}}())
 end
 
 function stage_id(xid::XhatID, phd::PHData)::StageID

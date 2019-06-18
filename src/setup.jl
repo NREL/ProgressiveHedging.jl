@@ -38,15 +38,13 @@ function build_scenario_tree(root_model::StructJuMP.StructuredModel)
     return (scen_tree, probs)
 end
 
-function add_variables_extensive(model::M,
-                                 var_map::Dict{VariableID, VariableInfo{K}},
+function add_variables_extensive(model::Future,
+                                 var_map::Dict{VariableID, VariableInfo},
                                  name_map::Dict{VariableID, String},
                                  scen_tree::ScenarioTree,
                                  var_translator::Dict{NodeID,Dict{Int,Index}},
                                  sj_model::StructJuMP.StructuredModel,
-                                 last_used::Index
-                                 ) where {M <: JuMP.AbstractModel,
-                                          K <: JuMP.AbstractVariableRef}
+                                 last_used::Index)
     idx = last_used
     scid = DUMMY_SCENARIO_ID
 
@@ -66,21 +64,104 @@ function add_variables_extensive(model::M,
         var_translator[node.id][id] = idx
         name_map[ph_vid] = name
 
-        ref = JuMP.add_variable(model, JuMP.build_variable(_error, info), name)
+        # Always local
+        ref = @spawnat(1,
+                       JuMP.add_variable(fetch(model),
+                                         JuMP.build_variable(_error, info),
+                                         name)
+                       )
         var_map[ph_vid] = VariableInfo(ref)
     end
 
     return scid
 end
 
-function add_variables(submodels::Dict{ScenarioID, M},
-                       var_map::Dict{VariableID, VariableInfo{K}},
+function build_extensive_form(root_model::StructJuMP.StructuredModel,
+                              model::Future)
+    (scen_tree, probs) = build_scenario_tree(root_model)
+
+    sj_models = [root_model]
+    probs = [1.0]
+    obj = JuMP.GenericAffExpr{Float64, JuMP.variable_type(fetch(model))}()
+
+    last_used = Index(0)
+    var_map = Dict{VariableID, VariableInfo}()
+    name_map = Dict{VariableID, String}()
+    var_translator = Dict{NodeID, Dict{Int,Index}}()
+
+    while !isempty(sj_models)
+        sjm = popfirst!(sj_models)
+        p = popfirst!(probs)
+
+        for (id, cmod) in pairs(sjm.children)
+            push!(sj_models, cmod)
+            # Here's that Markov assumption again
+            push!(probs, p * sjm.probability[id])
+        end
+
+        # Add variables
+        node = translate(scen_tree, sjm)
+        var_translator[node.id] = Dict{Int,Index}()
+        scid = add_variables_extensive(model, var_map, name_map,
+                                       scen_tree, var_translator,
+                                       sjm, last_used)
+        last_used = maximum(values(var_translator[node.id]))
+
+        # Add constraints
+        copy_constraints(model, sjm, scen_tree, var_translator, var_map,
+                         scid, 1) # 1 here is the local process id
+
+        # Add to objective function
+        add_obj = convert_expression(model,
+                                     sjm.objective_function,
+                                     scen_tree, var_translator,
+                                     scid, 1, # 1 here is the local process id
+                                     var_map)
+        obj += p * fetch(add_obj)
+    end
+
+    # Add objective function
+    JuMP.set_objective(fetch(model), root_model.objective_sense, obj)
+
+    return model
+end
+
+function assign_scenarios_to_procs(scen_tree::ScenarioTree)
+    sp_map = Dict{ScenarioID, Int}()
+
+    nprocs = Distributed.nworkers()
+    wrks = workers()
+    for (k,s) in enumerate(scenarios(scen_tree))
+        sp_map[s] = wrks[(k-1) % nprocs + 1]
+    end
+
+    return sp_map
+end
+
+function create_submodels(scen_tree::ScenarioTree,
+                          scen_proc_map::Dict{ScenarioID, Int},
+                          opt_factory::JuMP.OptimizerFactory,
+                          ::Type{M}
+                          ) where {M <: JuMP.AbstractModel}
+
+    submodels = Dict{ScenarioID, Future}()
+    for s in scenarios(scen_tree)
+        # TODO: Not sure how pushing a JuMP.OptimizerFactory to another
+        # process is going to work efficiency wise.  Maybe look at this later.
+        submodels[s] = @spawnat(scen_proc_map[s], M(opt_factory))
+    end
+
+    return submodels
+end
+
+function add_variables(submodels::Dict{ScenarioID, Future},
+                       scen_proc_map::Dict{ScenarioID, Int},
+                       var_map::Dict{VariableID, VariableInfo},
                        name_map::Dict{VariableID, String},
                        var_translator::Dict{NodeID, Dict{Int,Index}},
                        node::ScenarioNode,
-                       sj_model::StructJuMP.StructuredModel
-                       ) where {M <: JuMP.AbstractModel,
-                                K <: JuMP.AbstractVariableRef}
+                       sj_model::StructJuMP.StructuredModel)
+
     vdict = Dict{Int,Index}()
     for id in sort!(collect(keys(sj_model.variables)))
         vi = sj_model.variables[id].info
@@ -93,11 +174,16 @@ function add_variables(submodels::Dict{ScenarioID, M},
         idx = next_index(node)
         vdict[id] = idx
 
-        for s in node.scenario_bundle
+        @sync for s in node.scenario_bundle
             model = submodels[s]
+            proc = scen_proc_map[s]
+
             ph_vid = VariableID(s, node.stage, idx)
             
-            ref = JuMP.add_variable(model, JuMP.build_variable(_error, info), name)
+            ref = @spawnat(proc,
+                           JuMP.add_variable(fetch(model),
+                                             JuMP.build_variable(_error, info),
+                                             name))
             var_map[ph_vid] = VariableInfo(ref)
             name_map[ph_vid] = name
         end
@@ -106,8 +192,8 @@ function add_variables(submodels::Dict{ScenarioID, M},
     var_translator[node.id] = vdict
 
     if node.num_variables != length(node.variable_indices)
-        @error("Expected $node.nvar variables but got " *
-               length(node.variable_indices))
+        @error("Expected $(node.nvar) variables but got " *
+               string(length(node.variable_indices)))
     end
     
     return
@@ -117,169 +203,190 @@ function translate_variable_ref(sj_ref::StructJuMP.StructuredVariableRef,
                                 scen_tree::ScenarioTree,
                                 var_node_trans::Dict{NodeID,Dict{Int,Index}},
                                 scen::ScenarioID,
-                                var_map::Dict{VariableID, VariableInfo{V}}
-                                ) where {V <: JuMP.AbstractVariableRef}
+                                var_map::Dict{VariableID, VariableInfo})
     node = translate(scen_tree, sj_ref.model)
     vtrans = var_node_trans[node.id]
     vid = VariableID(scen, node.stage, vtrans[sj_ref.idx])
     return var_map[vid].ref
 end
 
-function convert_expression(::Type{V},
+function convert_expression(model::Future,
                             expr::JuMP.GenericAffExpr{Float64, StructJuMP.StructuredVariableRef},
                             scen_tree::ScenarioTree,
                             vtrans::Dict{NodeID,Dict{Int,Index}},
                             scen::ScenarioID,
-                            var_map::Dict{VariableID,VariableInfo{V}}
-                            ) where {V <: JuMP.AbstractVariableRef}
-    
-    new_expr = JuMP.GenericAffExpr{Float64, V}()
-    
-    new_expr += JuMP.constant(expr)
+                            proc::Int,
+                            var_map::Dict{VariableID, VariableInfo})
+
+    V = @spawnat(proc, JuMP.variable_type(fetch(model)))
+    new_expr = @spawnat(proc, JuMP.GenericAffExpr{Float64, fetch(V)}())
+
+    constant = JuMP.constant(expr)
+    @spawnat(proc, JuMP.add_to_expression!(fetch(new_expr), constant))
     
     for (coef, var) in JuMP.linear_terms(expr)
         new_var = translate_variable_ref(var, scen_tree, vtrans, scen, var_map)
-        JuMP.add_to_expression!(new_expr, coef, new_var)
-        # new_expr += JuMP.GenericAffExpr{Float64, V}(0.0, new_var => coef)
+        @spawnat(proc,
+                 JuMP.add_to_expression!(fetch(new_expr), coef, fetch(new_var)))
     end
     
     return new_expr
 end
 
-function convert_expression(::Type{V},
+function convert_expression(model::Future,
                             expr::JuMP.GenericQuadExpr{Float64, StructJuMP.StructuredVariableRef},
                             scen_tree::ScenarioTree,
-                            vtrans::Dict{NodeID,Dict{Int,Index}},
+                            vtrans::Dict{NodeID,Dict{Int, Index}},
                             scen::ScenarioID,
-                            var_map::Dict{VariableID,VariableInfo{V}}
-                            ) where {V <: JuMP.AbstractVariableRef}
-    
-    new_expr = JuMP.GenericQuadExpr{Float64, V}()
+                            proc::Int,
+                            var_map::Dict{VariableID, VariableInfo})
 
-    JuMP.add_to_expression!(new_expr,
-                            convert_expression(V, expr.aff, scen_tree, vtrans,
-                                               scen, var_map)
-                            )
-    #new_expr += convert_expression(V, expr.aff, scen_tree, vtrans, scen, var_map)
+    V = @spawnat(proc, JuMP.variable_type(fetch(model)))
+    new_expr = @spawnat(proc, JuMP.GenericQuadExpr{Float64, fetch(V)}())
+
+    new_aff_expr = convert_expression(model, expr.aff, scen_tree, vtrans,
+                                      scen, proc, var_map)
+
+    @spawnat(proc, JuMP.add_to_expression!(fetch(new_expr), fetch(new_aff_expr)))
     
     for (coef, var1, var2) in JuMP.quad_terms(expr)
         new_var1 = translate_variable_ref(var1, scen_tree, vtrans, scen, var_map)
         new_var2 = translate_variable_ref(var2, scen_tree, vtrans, scen, var_map)
-        up = JuMP.UnorderedPair{V}(new_var1, new_var2)
+        up = @spawnat(proc,
+                      JuMP.UnorderedPair{fetch(V)}(fetch(new_var1),
+                                                   fetch(new_var2)))
         
-        zero_aff_expr = zero(JuMP.GenericAffExpr{Float64, V})
-        JuMP.add_to_expression!(new_expr,
-                                JuMP.GenericQuadExpr{Float64,V}(zero_aff_expr,
-                                                                up => coef)
-                                )
-        #new_expr += JuMP.GenericQuadExpr{Float64, V}(zero_aff_expr, up => coef)
+        zero_aff_expr = @spawnat(proc,
+                                 zero(JuMP.GenericAffExpr{Float64, fetch(V)}))
+        @spawnat(proc,
+                 JuMP.add_to_expression!(fetch(new_expr),
+                                         JuMP.GenericQuadExpr{Float64,fetch(V)}(
+                                             fetch(zero_aff_expr),
+                                             fetch(up) => coef)
+                                         )
+                 )
     end
     
     return new_expr
 end
 
-function convert_expression(::Type{V},
+function convert_expression(model::Future,
                             expr::S,
                             scen_tree::ScenarioTree,
                             vtrans::Dict{NodeID,Dict{Int,Index}},
                             scen::ScenarioID,
-                            var_map::Dict{VariableID,VariableInfo{V}}
+                            proc::Int,
+                            var_map::Dict{VariableID, VariableInfo}
                             ) where {V <: JuMP.AbstractVariableRef,
                                      S <: JuMP.AbstractJuMPScalar}
     @error("Unrecognized expression type: " * string(S))
     return nothing
 end
 
-function make_constraint(new_expr::S, con::JuMP.ScalarConstraint
+function make_constraint(new_expr::Future, con::JuMP.ScalarConstraint, proc::Int
                          ) where S <: JuMP.AbstractJuMPScalar
-    new_con = JuMP.ScalarConstraint(new_expr, JuMP.moi_set(con))
+    set = JuMP.moi_set(con)
+    new_con = @spawnat(proc, JuMP.ScalarConstraint(fetch(new_expr), set))
     return new_con
 end
 
-function make_constraint(new_expr::S, con::JuMP.VectorConstraint
+function make_constraint(new_expr::Future, con::JuMP.VectorConstraint, proc::Int
                          ) where S <: JuMP.AbstractJuMPScalar
-    new_con = JuMP.VectorConstraint(new_expr, JuMP.moi_set(con), JuMP.shape(con))
+    set = JuMP.moi_set(con)
+    shape = JuMP.shape(con)
+    new_con = @spawnat(proc, JuMP.VectorConstraint(fetch(new_expr), set, shape))
     return new_con
 end
 
-function make_constraint(new_expr::S, con::C) where {S <: JuMP.AbstractJuMPScalar, C <: JuMP.AbstractConstraint}
+function make_constraint(new_expr::Future, con::C, proc::Int) where {C <: JuMP.AbstractConstraint}
     @error "Unsupported constraint type: " * string(C)
     return nothing
 end
 
-function copy_constraints(model::M, sj_model::StructJuMP.StructuredModel,
+function copy_constraints(model::Future, sj_model::StructJuMP.StructuredModel,
                           scen_tree::ScenarioTree,
                           var_translator::Dict{NodeID, Dict{Int,Index}},
+                          var_map::Dict{VariableID, VariableInfo},
                           scen::ScenarioID,
-                          var_map::Dict{VariableID, VariableInfo{V}}
-                          ) where {M <: JuMP.AbstractModel,
-                                   V <: JuMP.AbstractVariableRef}
-    for (id, con) in sj_model.constraints
-        new_con_expr = convert_expression(JuMP.variable_type(model),
+                          proc::Int)
+
+    @sync for (id, con) in sj_model.constraints
+        new_con_expr = convert_expression(model,
                                           JuMP.jump_function(con),
                                           scen_tree, var_translator,
-                                          scen, var_map)
-        new_con = make_constraint(new_con_expr, con)
-        JuMP.add_constraint(model, new_con, sj_model.connames[id])
+                                          scen, proc, var_map)
+        new_con = make_constraint(new_con_expr, con, proc)
+        @spawnat(proc, JuMP.add_constraint(fetch(model), fetch(new_con),
+                                           sj_model.connames[id]))
     end
+
     return
 end
 
-function add_constraints(submodels::Dict{ScenarioID,M},
+function add_constraints(submodels::Dict{ScenarioID, Future},
                          node::ScenarioNode,
                          sj_model::StructJuMP.StructuredModel,
                          scen_tree::ScenarioTree,
-                         var_translator::Dict{NodeID, Dict{Int,Index}},
-                         var_map::Dict{VariableID, VariableInfo{V}}
-                         ) where {M <: JuMP.AbstractModel,
-                                  V <: JuMP.AbstractVariableRef}
+                         scen_proc_map::Dict{ScenarioID, Int},
+                         var_translator::Dict{NodeID, Dict{Int, Index}},
+                         var_map::Dict{VariableID, VariableInfo})
+
     for s in node.scenario_bundle
         model = submodels[s]
+        proc = scen_proc_map[s]
         copy_constraints(model, sj_model, scen_tree, var_translator,
-                         s, var_map)
+                         var_map, s, proc)
     end
 
     return
 end
 
-function add_objectives(submodels::Dict{ScenarioID,M},
+function add_objectives(submodels::Dict{ScenarioID,Future},
                         node::ScenarioNode,
                         sj_model::StructJuMP.StructuredModel,
                         scen_tree::ScenarioTree,
+                        scen_proc_map::Dict{ScenarioID, Int},
                         var_translator::Dict{NodeID, Dict{Int,Index}},
-                        var_map::Dict{VariableID, VariableInfo{V}}
-                        ) where {M <: JuMP.AbstractModel,
-                                 V <: JuMP.AbstractVariableRef}
+                        var_map::Dict{VariableID, VariableInfo})
     
-    for s in node.scenario_bundle
+    @sync for s in node.scenario_bundle
         model = submodels[s]
-        obj = JuMP.objective_function(model)
-        obj += convert_expression(JuMP.variable_type(model),
-                                  sj_model.objective_function,
-                                  scen_tree,
-                                  var_translator,
-                                  s, var_map)
-        JuMP.set_objective(model, sj_model.objective_sense, obj)
+        proc = scen_proc_map[s]
+        obj = @spawnat(proc, JuMP.objective_function(fetch(model)))
+        add_expr = convert_expression(model,
+                                      sj_model.objective_function,
+                                      scen_tree,
+                                      var_translator,
+                                      s,
+                                      proc,
+                                      var_map)
+        new_obj = @spawnat(proc, fetch(obj) + fetch(add_expr))
+        @spawnat(proc,
+                 JuMP.set_objective(fetch(model),
+                                    sj_model.objective_sense,
+                                    fetch(new_obj))
+                 )
     end
     
     return
 end
 
-function add_attributes(submodels::Dict{ScenarioID, M},
-                        var_map::Dict{VariableID, VariableInfo{K}},
+function add_attributes(submodels::Dict{ScenarioID, Future},
+                        var_map::Dict{VariableID, VariableInfo},
                         name_map::Dict{VariableID, String},
                         sj_model::StructJuMP.StructuredModel,
                         node::ScenarioNode,
                         scen_tree::ScenarioTree,
-                        var_translator::Dict{NodeID, Dict{Int, Index}}
-                        ) where {M <: JuMP.AbstractModel,
-                                 K <: JuMP.AbstractVariableRef}
-    add_variables(submodels, var_map, name_map, var_translator,
-                  node, sj_model)
-    add_constraints(submodels, node, sj_model, scen_tree,
+                        scen_proc_map::Dict{ScenarioID, Int},
+                        var_translator::Dict{NodeID, Dict{Int, Index}})
+
+    add_variables(submodels, scen_proc_map, var_map, name_map,
+                  var_translator, node, sj_model)
+    add_constraints(submodels, node, sj_model, scen_tree, scen_proc_map,
                     var_translator, var_map)
-    add_objectives(submodels, node, sj_model, scen_tree,
+    add_objectives(submodels, node, sj_model, scen_tree, scen_proc_map,
                    var_translator, var_map)
+
     return
 end
 
@@ -288,11 +395,11 @@ function convert_to_submodels(root_model::StructJuMP.StructuredModel,
                               scen_tree::ScenarioTree,
                               ::Type{M}
                               ) where {M <: JuMP.AbstractModel}
+
+    scen_proc_map = assign_scenarios_to_procs(scen_tree)
+    submodels = create_submodels(scen_tree, scen_proc_map, opt_factory, M)
     
-    submodels = Dict{ScenarioID, M}(s => M(opt_factory)
-                                    for s in scenarios(scen_tree))
-    V = JuMP.variable_type(first(submodels)[2])
-    var_map = Dict{VariableID, VariableInfo{V}}()
+    var_map = Dict{VariableID, VariableInfo}()
     name_map = Dict{VariableID, String}()
     var_translator = Dict{NodeID, Dict{Int,Index}}()
 
@@ -304,23 +411,28 @@ function convert_to_submodels(root_model::StructJuMP.StructuredModel,
         
         add_attributes(submodels, var_map, name_map,
                        sjm, translate(scen_tree, sjm),
-                       scen_tree, var_translator)
+                       scen_tree, scen_proc_map,
+                       var_translator)
     end
 
-    return (submodels, var_map, name_map)
+    return (submodels, scen_proc_map, var_map, name_map)
 end
 
 function compute_start_points(phd::PHData)
     
-    # This is parallelizable
-    for (scen, model) in pairs(phd.submodels)
-        JuMP.optimize!(model)
+    @sync for (scen, model) in pairs(phd.submodels)
+        proc = phd.scen_proc_map[scen]
+        @spawnat(proc, JuMP.optimize!(fetch(model)))
+    end
 
+    for (scen, model) in pairs(phd.submodels)
+        proc = phd.scen_proc_map[scen]
         # MOI refers to the MathOptInterface package. Apparently this is made
         # accessible by JuMP since it is not imported here
-        sts = JuMP.termination_status(model)
+        sts = fetch(@spawnat(proc, JuMP.termination_status(fetch(model))))
         if sts != MOI.OPTIMAL && sts != MOI.LOCALLY_SOLVED
-            @error("Initialization solve for scenario $scen returned $sts.")
+            @error("Initialization solve for scenario $scen on process $proc" *
+                   "returned $sts.")
         end
     end
     
@@ -328,17 +440,20 @@ function compute_start_points(phd::PHData)
 end
 
 function augment_objectives(phd::PHData)
-    V = JuMP.variable_type(first(phd.submodels)[2])
     
-    for (nid, node) in pairs(phd.scenario_tree.tree_map)
+    @sync for (nid, node) in pairs(phd.scenario_tree.tree_map)
 
         for s in node.scenario_bundle
 
             model = phd.submodels[s]
-            # obj = JuMP.objective_function(model)
-            obj = zero(JuMP.GenericQuadExpr{Float64, JuMP.VariableRef})
-            JuMP.add_to_expression!(obj, JuMP.objective_function(model))
-            #obj += JuMP.objective_function(model)
+            proc = phd.scen_proc_map[s]
+
+            V = @spawnat(proc, JuMP.variable_type(fetch(model)))
+            obj = @spawnat(proc, zero(JuMP.GenericQuadExpr{Float64, fetch(V)}))
+            @spawnat(proc,
+                     JuMP.add_to_expression!(fetch(obj),
+                                             JuMP.objective_function(fetch(model)))
+                     )
 
             for i in node.variable_indices
 
@@ -346,24 +461,29 @@ function augment_objectives(phd::PHData)
                 xhat_id = XhatID(nid, i)
                 var_ref = phd.variable_map[var_id].ref
                 
-                w_ref = V(model)
-                JuMP.set_name(w_ref, "W_" * JuMP.name(var_ref))
+                w_ref = @spawnat(proc, fetch(V)(fetch(model)))
+                @spawnat(proc, JuMP.set_name(fetch(w_ref),
+                                             "W_" * JuMP.name(fetch(var_ref))))
                 phd.W_ref[var_id] = w_ref
                 
-                xhat_ref = V(model)
-                JuMP.set_name(xhat_ref, "Xhat_" * JuMP.name(var_ref))
+                xhat_ref = @spawnat(proc, fetch(V)(fetch(model)))
+                @spawnat(proc, JuMP.set_name(fetch(xhat_ref),
+                                             "Xhat_" * JuMP.name(fetch(var_ref))))
                 if !(xhat_id in keys(phd.Xhat_ref))
-                    phd.Xhat_ref[xhat_id] = Set{V}()
+                    phd.Xhat_ref[xhat_id] = Dict{ScenarioID, Future}()
                 end
-                push!(phd.Xhat_ref[xhat_id], xhat_ref)
+                phd.Xhat_ref[xhat_id][s] = xhat_ref
 
-                JuMP.add_to_expression!(obj,
-                                        (var_ref * w_ref +
-                                         0.5*phd.r*(var_ref - xhat_ref)^2)
-                                        )
+                @spawnat(proc,
+                         JuMP.add_to_expression!(fetch(obj),
+                                                 (fetch(var_ref) * fetch(w_ref) +
+                                                  0.5*phd.r*(fetch(var_ref) -
+                                                             fetch(xhat_ref))^2)
+                                                 )
+                         )
             end
 
-            JuMP.set_objective_function(model, obj)
+            @spawnat(proc, JuMP.set_objective_function(fetch(model), fetch(obj)))
         end
     end
     
@@ -373,14 +493,21 @@ end
 function initialize(root_model::StructJuMP.StructuredModel, r::N,
                     optimizer_factory::JuMP.OptimizerFactory, ::Type{M}
                     ) where {N <: Number, M <: JuMP.AbstractModel}
+
     (scen_tree, probs) = build_scenario_tree(root_model)
-    (submodels, var_map, name_map) = convert_to_submodels(root_model,
-                                                          optimizer_factory,
-                                                          scen_tree,
-                                                          M)
-    ph_data = PHData(r, scen_tree, probs, submodels, var_map, name_map)
+
+    (submodels, scen_proc_map, var_map, name_map
+     ) = convert_to_submodels(root_model,
+                              optimizer_factory,
+                              scen_tree,
+                              M)
+
+    ph_data = PHData(r, scen_tree, scen_proc_map, probs, submodels,
+                     var_map, name_map)
+
     compute_start_points(ph_data)
     compute_and_save_xhat(ph_data)
     augment_objectives(ph_data)
+
     return ph_data
 end
