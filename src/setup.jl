@@ -507,6 +507,7 @@ function initialize(root_model::StructJuMP.StructuredModel, r::N,
 
     compute_start_points(ph_data)
     compute_and_save_xhat(ph_data)
+    compute_and_save_w(ph_data)
     augment_objectives(ph_data)
 
     return ph_data
