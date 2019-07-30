@@ -120,13 +120,14 @@ end
 
 function fix_xhat(phd::PHData)::Nothing
 
-    # for (xhat_id, value) in phd.Xhat
-    #     for xhat_ref in phd.Xhat_ref[xhat_id]
-    #         JuMP.fix(xhat_ref, value, force=true)
-    #     end
-    # end
+    last = last_stage(phd.scenario_tree)
 
     @sync for (xhat_id, value) in phd.Xhat
+
+        if stage_id(xhat_id, phd) == last
+            continue
+        end
+
         for (scid, xhat_ref) in phd.Xhat_ref[xhat_id]
             @spawnat(phd.scen_proc_map[scid],
                      JuMP.fix(fetch(xhat_ref), value, force=true))
@@ -138,7 +139,14 @@ end
 
 function fix_w(phd::PHData)::Nothing
 
+    last = last_stage(phd.scenario_tree)
+
     @sync for (w_id, value) in phd.W
+
+        if w_id.stage == last
+            continue
+        end
+
         s = w_id.scenario
         ref = phd.W_ref[w_id]
         @spawnat(phd.scen_proc_map[s], JuMP.fix(fetch(ref), value, force=true))
@@ -186,7 +194,9 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
         
         # Set initial values, fix cross model values (W and Xhat) and
         # solve the subproblems
-        set_start_values(ph_data)
+
+        # Setting start values causes issues with some solvers
+        # set_start_values(ph_data)
         fix_ph_variables(ph_data)
         solve_subproblems(ph_data)
 

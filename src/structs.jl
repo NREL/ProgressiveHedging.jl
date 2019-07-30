@@ -81,8 +81,8 @@ end
 function Base.isless(a::VariableID, b::VariableID)
     return (a.stage < b.stage ||
             (a.stage == b.stage &&
-             (a.scenario < b.scenario) ||
-             (a.scenario == b.scenario && a.index < b.index)))
+             (a.scenario < b.scenario ||
+              (a.scenario == b.scenario && a.index < b.index))))
 end
 
 struct XhatID
@@ -178,6 +178,19 @@ function ScenarioTree(root_model::StructJuMP.StructuredModel)
     trans = SJPHTranslator()
     add_pair(trans, root_model, sn)
     return ScenarioTree(sn, gen, trans)
+end
+
+function last_stage(tree::ScenarioTree)
+    return maximum(keys(tree.stage_map))
+end
+
+function is_leaf(tree::ScenarioTree, node::ScenarioNode)
+    last = last_stage(tree)
+    return last == node.stage
+end
+
+function is_leaf(tree::ScenarioTree, nid::NodeID)
+    return is_leaf(tree, tree.tree_map[nid])
 end
 
 function _add_node(tree::ScenarioTree, node::ScenarioNode)

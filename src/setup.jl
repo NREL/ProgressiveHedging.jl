@@ -50,10 +50,19 @@ function add_variables_extensive(model::Future,
 
     for (id, var) in sj_model.variables
         vi = var.info
+        # info = JuMP.VariableInfo(vi.has_lb, vi.lower_bound,
+        #                          vi.has_ub, vi.upper_bound,
+        #                          vi.has_fix, vi.fixed_value,
+        #                          vi.has_start, vi.start,
+        #                          vi.binary, vi.integer)
+
+        # Some solvers currently have issues with starting values,
+        # especially when only some have starting values set as
+        # seems to be the case when using PowerSimulations models
         info = JuMP.VariableInfo(vi.has_lb, vi.lower_bound,
                                  vi.has_ub, vi.upper_bound,
                                  vi.has_fix, vi.fixed_value,
-                                 vi.has_start, vi.start,
+                                 false, vi.start,
                                  vi.binary, vi.integer)
 
         idx = _increment(idx)
@@ -165,10 +174,20 @@ function add_variables(submodels::Dict{ScenarioID, Future},
     vdict = Dict{Int,Index}()
     for id in sort!(collect(keys(sj_model.variables)))
         vi = sj_model.variables[id].info
+
+        # info = JuMP.VariableInfo(vi.has_lb, vi.lower_bound,
+        #                          vi.has_ub, vi.upper_bound,
+        #                          vi.has_fix, vi.fixed_value,
+        #                          vi.has_start, vi.start,
+        #                          vi.binary, vi.integer)
+
+        # Some solvers currently have issues with starting values,
+        # especially when only some have starting values set as
+        # seems to be the case when using PowerSimulations models
         info = JuMP.VariableInfo(vi.has_lb, vi.lower_bound,
                                  vi.has_ub, vi.upper_bound,
                                  vi.has_fix, vi.fixed_value,
-                                 vi.has_start, vi.start,
+                                 false, vi.start,
                                  vi.binary, vi.integer)
         name = sj_model.varnames[id]
         idx = next_index(node)
@@ -182,8 +201,7 @@ function add_variables(submodels::Dict{ScenarioID, Future},
             
             ref = @spawnat(proc,
                            JuMP.add_variable(fetch(model),
-                                             JuMP.build_variable(_error, info),
-                                             name))
+                                             JuMP.build_variable(_error, info)))
             var_map[ph_vid] = VariableInfo(ref)
             name_map[ph_vid] = name
         end
@@ -310,14 +328,13 @@ function copy_constraints(model::Future, sj_model::StructJuMP.StructuredModel,
                           scen::ScenarioID,
                           proc::Int)
 
-    @sync for (id, con) in sj_model.constraints
+    for (id, con) in sj_model.constraints
         new_con_expr = convert_expression(model,
                                           JuMP.jump_function(con),
                                           scen_tree, var_translator,
                                           scen, proc, var_map)
         new_con = make_constraint(new_con_expr, con, proc)
-        @spawnat(proc, JuMP.add_constraint(fetch(model), fetch(new_con),
-                                           sj_model.connames[id]))
+        @spawnat(proc, JuMP.add_constraint(fetch(model), fetch(new_con)))
     end
 
     return
@@ -331,7 +348,7 @@ function add_constraints(submodels::Dict{ScenarioID, Future},
                          var_translator::Dict{NodeID, Dict{Int, Index}},
                          var_map::Dict{VariableID, VariableInfo})
 
-    for s in node.scenario_bundle
+    @sync for s in node.scenario_bundle
         model = submodels[s]
         proc = scen_proc_map[s]
         copy_constraints(model, sj_model, scen_tree, var_translator,
@@ -440,8 +457,14 @@ function compute_start_points(phd::PHData)
 end
 
 function augment_objectives(phd::PHData)
+
+    last = last_stage(phd.scenario_tree)
     
     @sync for (nid, node) in pairs(phd.scenario_tree.tree_map)
+
+        if node.stage == last
+            continue
+        end
 
         for s in node.scenario_bundle
 
@@ -462,13 +485,9 @@ function augment_objectives(phd::PHData)
                 var_ref = phd.variable_map[var_id].ref
                 
                 w_ref = @spawnat(proc, fetch(V)(fetch(model)))
-                @spawnat(proc, JuMP.set_name(fetch(w_ref),
-                                             "W_" * JuMP.name(fetch(var_ref))))
                 phd.W_ref[var_id] = w_ref
                 
                 xhat_ref = @spawnat(proc, fetch(V)(fetch(model)))
-                @spawnat(proc, JuMP.set_name(fetch(xhat_ref),
-                                             "Xhat_" * JuMP.name(fetch(var_ref))))
                 if !(xhat_id in keys(phd.Xhat_ref))
                     phd.Xhat_ref[xhat_id] = Dict{ScenarioID, Future}()
                 end

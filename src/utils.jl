@@ -107,14 +107,11 @@ function retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
     scenario = Vector{SCENARIO_ID}()
     index = Vector{INDEX}()
     
-    @sync for vid in sort!(collect(keys(phd.variable_map)))
+    for vid in sort!(collect(keys(phd.variable_map)))
         ref = phd.variable_map[vid].ref
         val = @spawnat(phd.scen_proc_map[vid.scenario],
                        JuMP.value(fetch(ref)))
-        name = @spawnat(phd.scen_proc_map[vid.scenario],
-                        JuMP.name(fetch(ref)))
-
-        push!(vars, fetch(name))
+        push!(vars, phd.name[vid])
         push!(vals, fetch(val))
         push!(stage, _value(vid.stage))
         push!(scenario, _value(vid.scenario))
@@ -133,11 +130,19 @@ function retrieve_w(phd::PHData)::DataFrames.DataFrame
     stage = Vector{STAGE_ID}()
     scenario = Vector{SCENARIO_ID}()
     index = Vector{INDEX}()
+
+    last = last_stage(phd.scenario_tree)
     
-    @sync for vid in sort!(collect(keys(phd.W)))
+    for vid in sort!(collect(keys(phd.W)))
+
+        if vid.stage == last
+            continue
+        end
+
         wref = phd.W_ref[vid]
         proc = phd.scen_proc_map[vid.scenario]
-        push!(vars, @fetchfrom(1, JuMP.name(fetch(wref))))
+        push!(vars, "W_" * phd.name[vid])
+
         push!(vals, phd.W[vid])
         push!(stage, _value(vid.stage))
         push!(scenario, _value(vid.scenario))
