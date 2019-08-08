@@ -72,7 +72,7 @@ function initialize(scen_tree::ScenarioTree,
                                      R <: Real,
                                      M <: JuMP.AbstractModel}
 
-    println("...setting up submodels...")
+    println("...building submodels...")
     (submodels, scen_proc_map, var_map
      ) = build_submodels(scen_tree, model_constructor, variable_dict,
                          optimizer_factory, M)
@@ -80,7 +80,7 @@ function initialize(scen_tree::ScenarioTree,
     ph_data = PHData(r, scen_tree, scen_proc_map, scen_tree.prob_map,
                      submodels, var_map)
 
-    println("...computing start points...")
+    println("...computing starting values...")
     compute_start_points(ph_data)
     println("...finishing setup...")
     retrieve_values(ph_data)

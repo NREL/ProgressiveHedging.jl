@@ -1,14 +1,17 @@
 
-function retrieve_values(phd::PHData)::Nothing
-    for (vid, vinfo) in pairs(phd.variable_map)
-        if vid.stage != last
-            vinfo.value = _fetch_variable_value(phd, vid.scenario, vinfo)
-        end
-    end
-    return
-end
+# function retrieve_values(phd::PHData)::Nothing
+#     temp = Dict{VariableID,Future}()
+#     for (vid, vinfo) in pairs(phd.variable_map)
+#         temp[vid] = _fetch_variable_value_async(phd, vid.scenario, vinfo)
+#     end
+#     for (vid, vinfo) in pairs(phd.variable_map)
+#         vinfo.value = fetch(temp[vid])
+#     end
+#     return
+# end
 
 # function retrieve_values(phd::PHData)::Nothing
+#     last = last_stage(phd.scenario_tree)
 #     for (vid, vinfo) in pairs(phd.variable_map)
 #         if vid.stage != last
 #             vinfo.value = _fetch_variable_value(phd, vid.scenario, vinfo)
@@ -17,15 +20,12 @@ end
 #     return
 # end
 
-# function retrieve_leaf_values(phd::PHData)::Nothing
-#     last = last_stage(phd.scenario_tree)
-#     for (vid, vinfo) in pairs(phd.variable_map)
-#         if vid.stage == last
-#             vinfo.value = _fetch_variable_value(phd, vid.scenario, vinfo)
-#         end
-#     end
-#     return
-# end
+function retrieve_values(phd::PHData)::Nothing
+    for (vid, vinfo) in pairs(phd.variable_map)
+        vinfo.value = _fetch_variable_value(phd, vid.scenario, vinfo)
+    end
+    return
+end
 
 function compute_and_save_xhat(phd::PHData)::Float64
 
@@ -107,6 +107,13 @@ function compute_and_save_w(phd::PHData)::Nothing
         end
     end
 
+    return
+end
+
+function update_ph_variables(phd::PHData)::Nothing
+    retrieve_values(ph_data)
+    xhat_residual = compute_and_save_xhat(ph_data)
+    compute_and_save_w(ph_data)
     return
 end
 
@@ -226,21 +233,21 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
 
         # Setting start values causes issues with some solvers
         # set_start_values(ph_data)
-        println("......fixing PH variable values......")
+        println("...fixing ph variable...")
         @time fix_ph_variables(ph_data)
-        println("......solving subproblems......")
+        println("...solving subproblems...")
         @time solve_subproblems(ph_data)
 
         # Update X (no hat) values
-        println("......retrieving variable values......")
+        println("...retrieving values...")
         @time retrieve_values(ph_data)
 
         # Update Xhat values
-        println("......updating xhat values......")
+        println("...computing xhat values...")
         xhat_residual = @time compute_and_save_xhat(ph_data)
 
         # Update W values
-        println("......updating w values......")
+        println("...computing w values...")
         @time compute_and_save_w(ph_data)
 
         # Update stopping criteria -- xhat_residual measures the movement of
@@ -248,7 +255,7 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
         # x_residual measures the disagreement between the x variables and
         # its corresponding xhat variable (so lack of consensus amongst the
         # subproblems or violation of the nonanticipativity constraint)
-        println("......computing residual......")
+        println("...computing residual...")
         x_residual = @time compute_x_residual(ph_data)
         residual = sqrt(xhat_residual + x_residual)
         
@@ -259,8 +266,6 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
             println("Iter: $niter   Xhat_res: $xhat_residual   X_res: $x_residual    Obj: $obj")
         end
     end
-
-    # @time retrieve_leaf_values(ph_data)
 
     if niter >= max_iter
         @warn("Performed $niter iterations without convergence. " *

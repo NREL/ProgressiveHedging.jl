@@ -4,6 +4,12 @@ function _fetch_variable_value(phd::PHData, scid::ScenarioID,
     return @fetchfrom(phd.scen_proc_map[scid], JuMP.value(fetch(ref)))
 end
 
+function _fetch_variable_value_async(phd::PHData, scid::ScenarioID,
+                                     vi::VariableInfo)::Future
+    ref = vi.ref
+    return @spawnat(phd.scen_proc_map[scid], JuMP.value(fetch(ref)))
+end
+
 function value(phd::PHData, vid::VariableID)::Float64
     return phd.variable_map[vid].value
 end

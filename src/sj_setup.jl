@@ -409,7 +409,6 @@ function initialize(root_model::StructJuMP.StructuredModel, r::R,
                     optimizer_factory::JuMP.OptimizerFactory, ::Type{M}
                     )::PHData where {R <: Real, M <: JuMP.AbstractModel}
 
-    println("...setting up submodels...")
     scen_tree = build_scenario_tree(root_model)
 
     (submodels, scen_proc_map, var_map
@@ -421,9 +420,7 @@ function initialize(root_model::StructJuMP.StructuredModel, r::R,
     ph_data = PHData(r, scen_tree, scen_proc_map, scen_tree.prob_map,
                      submodels, var_map)
 
-    println("...computing start points...")
     compute_start_points(ph_data)
-    println("...finishing setup...")
     retrieve_values(ph_data)
     compute_and_save_xhat(ph_data)
     compute_and_save_w(ph_data)
