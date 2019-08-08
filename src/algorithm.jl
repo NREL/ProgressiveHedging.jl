@@ -174,7 +174,8 @@ function solve_subproblems(phd::PHData)
         # MOI refers to the MathOptInterface package. Apparently this is made
         # accessible by JuMP since it is not imported here
         sts = fetch(@spawnat(proc, JuMP.termination_status(fetch(model))))
-        if sts != MOI.OPTIMAL && sts != MOI.LOCALLY_SOLVED
+        if sts != MOI.OPTIMAL && sts != MOI.LOCALLY_SOLVED &&
+            sts != MOI.ALMOST_LOCALLY_SOLVED
             @error("Scenario $scen subproblem returned $sts.")
         end
     end
@@ -183,7 +184,7 @@ end
 function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
     niter = 0
     residual = atol + 1.0e10
-    report_interval = Int(floor(max_iter / 10))
+    report_interval = Int(floor(max_iter / max_iter))
 
     if report
         x_residual = compute_x_residual(ph_data)
@@ -197,21 +198,26 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
 
         # Setting start values causes issues with some solvers
         # set_start_values(ph_data)
-        fix_ph_variables(ph_data)
-        solve_subproblems(ph_data)
+        println("......fixing PH variable values......")
+        @time fix_ph_variables(ph_data)
+        println("......solving subproblems......")
+        @time solve_subproblems(ph_data)
 
         # Update Xhat values
-        xhat_residual = compute_and_save_xhat(ph_data)
+        println("......updating xhat values......")
+        xhat_residual = @time compute_and_save_xhat(ph_data)
 
         # Update W values
-        compute_and_save_w(ph_data)
+        println("......updating w values......")
+        @time compute_and_save_w(ph_data)
 
         # Update stopping criteria -- xhat_residual measures the movement of
         # xhat values from k^th iteration to the (k+1)^th iteration while
         # x_residual measures the disagreement between the x variables and
         # its corresponding xhat variable (so lack of consensus amongst the
         # subproblems or violation of the nonanticipativity constraint)
-        x_residual = compute_x_residual(ph_data)
+        println("......computing residual......")
+        x_residual = @time compute_x_residual(ph_data)
         residual = sqrt(xhat_residual + x_residual)
         
         niter += 1

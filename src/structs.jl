@@ -34,6 +34,7 @@ struct StageID
     value::STAGE_ID
 end
 _value(sid::StageID)::STAGE_ID = sid.value
+_increment(sid::StageID)::StageID = StageID(_value(sid) + one(STAGE_ID))
 Base.isless(a::StageID, b::StageID) = _value(a) < _value(b)
 
 const DUMMY_STAGE_ID = StageID(-1)
@@ -61,12 +62,6 @@ function _generate_node_id(gen::Generator)::NodeID
     return id
 end
 
-# function _generate_stage_id(gen::Generator)
-#     id = StageID(gen.next_stage_id)
-#     gen.next_stage_id += 1
-#     return id
-# end
-
 function _generate_scenario_id(gen::Generator)::ScenarioID
     id = ScenarioID(gen.next_scenario_id)
     gen.next_scenario_id += 1
@@ -78,6 +73,7 @@ struct VariableID
     stage::StageID # stage to which this variable belongs
     index::Index # coordinate in vector
 end
+
 function Base.isless(a::VariableID, b::VariableID)
     return (a.stage < b.stage ||
             (a.stage == b.stage &&
@@ -89,6 +85,7 @@ struct XhatID
     node::NodeID
     index::Index
 end
+
 function Base.isless(a::XhatID, b::XhatID)
     return (a.node < b.node ||
             (a.node == b.node && a.index < b.index))
@@ -96,6 +93,7 @@ end
 
 struct VariableInfo
     ref::Future
+    name::String
 end
 
 struct Translator{A,B}
@@ -130,16 +128,24 @@ struct ScenarioNode
     stage::StageID # stage of this node
     scenario_bundle::Set{ScenarioID} # scenarios that are indistiguishable
     variable_indices::Set{Index} # var indices
-    num_variables::Int
-    # parent::Union{Nothing, ScenarioNode}
-    # children::Dict{NodeID, ScenarioNode}
+    parent::Union{Nothing, ScenarioNode}
+    children::Set{ScenarioNode}
 end
 
-function _create_node(gen::Generator, stage::StageID,
-                      sjm::StructJuMP.StructuredModel)
+function _add_child(parent::ScenarioNode, child::ScenarioNode)
+    push!(parent.children, child)
+    return
+end
+
+function _create_node(gen::Generator, parent::Union{Nothing, ScenarioNode})
     nid = _generate_node_id(gen)
-    nvar = length(keys(sjm.variables))
-    sn = ScenarioNode(nid, stage, Set{ScenarioID}(), Set{Index}(), nvar)
+    stage = (parent==nothing ? StageID(1) : _increment(parent.stage))
+    sn = ScenarioNode(nid, stage,
+                      Set{ScenarioID}(), Set{Index}(),
+                      parent, Set{ScenarioNode}())
+    if parent != nothing
+        _add_child(parent, sn)
+    end
     return sn
 end
 
@@ -151,33 +157,41 @@ function next_index(node::ScenarioNode)
 end
 
 const SJPHTranslator = Translator{StructJuMP.StructuredModel, ScenarioNode}
-# const VarRefTranslator = Translator{StructJuMP.StructuredVariableRef,
-#                                     V} where {V <: JuMP.AbstractVariableRef}
 
 struct ScenarioTree
     root::ScenarioNode
     tree_map::Dict{NodeID, ScenarioNode} # map from NodeID to tree node
     stage_map::Dict{StageID, Set{NodeID}} # nodes in each stage
+    prob_map::Dict{ScenarioID, Float64}
     id_gen::Generator
     sj_ph_translator::SJPHTranslator
 end
 
-function ScenarioTree(root_node::ScenarioNode, gen::Generator,
-                      trans::SJPHTranslator)
+function ScenarioTree(root_node::ScenarioNode, gen::Generator)
     tree_map = Dict{NodeID, ScenarioNode}()
     stage_map = Dict{StageID, Set{NodeID}}()
-    st = ScenarioTree(root_node, tree_map, stage_map, gen,
-                      trans)
+    prob_map = Dict{ScenarioID, Float64}()
+    trans = SJPHTranslator()
+    st = ScenarioTree(root_node,
+                      tree_map, stage_map, prob_map,
+                      gen, trans)
     _add_node(st, root_node)
     return st
 end
 
 function ScenarioTree(root_model::StructJuMP.StructuredModel)
     gen = Generator()
-    sn = _create_node(gen, StageID(1), root_model)
-    trans = SJPHTranslator()
-    add_pair(trans, root_model, sn)
-    return ScenarioTree(sn, gen, trans)
+    sn = _create_node(gen, nothing)
+    st = ScenarioTree(sn, gen)
+    add_pair(st.sj_ph_translator, root_model, sn)
+    return st
+end
+
+function ScenarioTree()
+    gen = Generator()
+    rn = _create_node(gen, nothing)
+    st = ScenarioTree(rn, gen)
+    return st
 end
 
 function last_stage(tree::ScenarioTree)
@@ -203,10 +217,16 @@ function _add_node(tree::ScenarioTree, node::ScenarioNode)
     return
 end
 
-function add_node(tree::ScenarioTree, model::StructJuMP.StructuredModel,
-                  stage::StageID)
-    new_node = _create_node(tree.id_gen, stage, model)
+function add_node(tree::ScenarioTree, model::StructJuMP.StructuredModel)
+    parent_node = translate(tree, model.parent)
+    new_node = _create_node(tree.id_gen, parent_node)
     add_pair(tree.sj_ph_translator, model, new_node)
+    _add_node(tree, new_node)
+    return new_node
+end
+
+function add_node(tree::ScenarioTree, parent::ScenarioNode)
+    new_node = _create_node(tree.id_gen, parent)
     _add_node(tree, new_node)
     return new_node
 end
@@ -224,6 +244,21 @@ function add_scenario(tree::ScenarioTree,
         nid = translate(tree, model).id
         add_scenario(tree, nid, scid)
         model = StructJuMP.getparent(model)
+    end
+    return scid
+end
+
+function add_leaf(tree::ScenarioTree, parent::ScenarioNode, probability::Real
+                  ) where R <: Real
+    leaf = add_node(tree, parent)
+    scid = assign_scenario_id(tree)
+    tree.prob_map[scid] = probability
+
+    node = leaf
+    while node != nothing
+        id = node.id
+        add_scenario(tree, id, scid)
+        node = node.parent
     end
     return scid
 end
@@ -252,7 +287,6 @@ struct PHData
     probabilities::Dict{ScenarioID, Float64}
     submodels::Dict{ScenarioID, Future}
     variable_map::Dict{VariableID, VariableInfo}
-    name::Dict{VariableID, String}
     W::Dict{VariableID, Float64}
     W_ref::Dict{VariableID, Future}
     Xhat::Dict{XhatID, Float64}
@@ -264,7 +298,6 @@ function PHData(r::N, tree::ScenarioTree,
                 probs::Dict{ScenarioID, Float64},
                 submodels::Dict{ScenarioID, Future},
                 var_map::Dict{VariableID, VariableInfo},
-                name_map::Dict{VariableID, String}
                 ) where {N <: Number}
 
     w_dict = Dict{VariableID, Float64}(vid => 0.0 for vid in keys(var_map))
@@ -283,7 +316,6 @@ function PHData(r::N, tree::ScenarioTree,
                   probs,
                   submodels,
                   var_map,
-                  name_map,
                   w_dict,
                   Dict{VariableID, Future}(),
                   xhat_dict,

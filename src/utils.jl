@@ -59,7 +59,7 @@ function retrieve_soln(phd::PHData)::DataFrames.DataFrame
 
     for xhat_id in sort!(collect(keys(phd.Xhat)))
         var_id = convert_to_variable_id(xhat_id, phd)
-        push!(vars, phd.name[var_id])
+        push!(vars, phd.variable_map[var_id].name)
         push!(vals, phd.Xhat[xhat_id])
         push!(stages, _value(stage_id(xhat_id, phd)))
         push!(scens, stringify(_value.(scenario_bundle(xhat_id, phd))))
@@ -111,7 +111,7 @@ function retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
         ref = phd.variable_map[vid].ref
         val = @spawnat(phd.scen_proc_map[vid.scenario],
                        JuMP.value(fetch(ref)))
-        push!(vars, phd.name[vid])
+        push!(vars, phd.variable_map[vid].name)
         push!(vals, fetch(val))
         push!(stage, _value(vid.stage))
         push!(scenario, _value(vid.scenario))
@@ -141,7 +141,7 @@ function retrieve_w(phd::PHData)::DataFrames.DataFrame
 
         wref = phd.W_ref[vid]
         proc = phd.scen_proc_map[vid.scenario]
-        push!(vars, "W_" * phd.name[vid])
+        push!(vars, "W_" * phd.variable_map[vid].name)
 
         push!(vals, phd.W[vid])
         push!(stage, _value(vid.stage))
