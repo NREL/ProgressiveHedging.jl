@@ -91,10 +91,13 @@ function Base.isless(a::XhatID, b::XhatID)
             (a.node == b.node && a.index < b.index))
 end
 
-struct VariableInfo
+mutable struct VariableInfo
     ref::Future
     name::String
+    value::Float64
 end
+
+VariableInfo(ref::Future, name::String) = VariableInfo(ref, name, 0.0)
 
 struct Translator{A,B}
     a_to_b::Dict{A,B}

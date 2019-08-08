@@ -1,4 +1,32 @@
 
+function retrieve_values(phd::PHData)::Nothing
+    for (vid, vinfo) in pairs(phd.variable_map)
+        if vid.stage != last
+            vinfo.value = _fetch_variable_value(phd, vid.scenario, vinfo)
+        end
+    end
+    return
+end
+
+# function retrieve_values(phd::PHData)::Nothing
+#     for (vid, vinfo) in pairs(phd.variable_map)
+#         if vid.stage != last
+#             vinfo.value = _fetch_variable_value(phd, vid.scenario, vinfo)
+#         end
+#     end
+#     return
+# end
+
+# function retrieve_leaf_values(phd::PHData)::Nothing
+#     last = last_stage(phd.scenario_tree)
+#     for (vid, vinfo) in pairs(phd.variable_map)
+#         if vid.stage == last
+#             vinfo.value = _fetch_variable_value(phd, vid.scenario, vinfo)
+#         end
+#     end
+#     return
+# end
+
 function compute_and_save_xhat(phd::PHData)::Float64
 
     xhat_res = 0.0
@@ -203,6 +231,10 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
         println("......solving subproblems......")
         @time solve_subproblems(ph_data)
 
+        # Update X (no hat) values
+        println("......retrieving variable values......")
+        @time retrieve_values(ph_data)
+
         # Update Xhat values
         println("......updating xhat values......")
         xhat_residual = @time compute_and_save_xhat(ph_data)
@@ -227,6 +259,8 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
             println("Iter: $niter   Xhat_res: $xhat_residual   X_res: $x_residual    Obj: $obj")
         end
     end
+
+    # @time retrieve_leaf_values(ph_data)
 
     if niter >= max_iter
         @warn("Performed $niter iterations without convergence. " *

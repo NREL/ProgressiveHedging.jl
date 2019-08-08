@@ -5,12 +5,12 @@ function _fetch_variable_value(phd::PHData, scid::ScenarioID,
 end
 
 function value(phd::PHData, vid::VariableID)::Float64
-    return _fetch_variable_value(phd, vid.scenario, phd.variable_map[vid])
+    return phd.variable_map[vid].value
 end
 
 function value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
     vid = VariableID(scen, stage, idx)
-    return _fetch_variable_value(phd, scen, phd.variable_map[vid])
+    return phd.variable_map[vid].value
 end
 
 function value(phd::PHData, xhat_id::XhatID)::Float64
@@ -108,11 +108,11 @@ function retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
     index = Vector{INDEX}()
     
     for vid in sort!(collect(keys(phd.variable_map)))
-        ref = phd.variable_map[vid].ref
-        val = @spawnat(phd.scen_proc_map[vid.scenario],
-                       JuMP.value(fetch(ref)))
+        # ref = phd.variable_map[vid].ref
+        # val = @spawnat(phd.scen_proc_map[vid.scenario],
+        #                JuMP.value(fetch(ref)))
         push!(vars, phd.variable_map[vid].name)
-        push!(vals, fetch(val))
+        push!(vals, phd.variable_map[vid].value)
         push!(stage, _value(vid.stage))
         push!(scenario, _value(vid.scenario))
         push!(index, _value(vid.index))
