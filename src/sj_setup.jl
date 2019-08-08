@@ -421,9 +421,7 @@ function initialize(root_model::StructJuMP.StructuredModel, r::R,
                      submodels, var_map)
 
     compute_start_points(ph_data)
-    retrieve_values(ph_data)
-    compute_and_save_xhat(ph_data)
-    compute_and_save_w(ph_data)
+    update_ph_variables(ph_data)
     augment_objectives(ph_data)
 
     return ph_data

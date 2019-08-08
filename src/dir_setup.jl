@@ -83,9 +83,7 @@ function initialize(scen_tree::ScenarioTree,
     println("...computing starting values...")
     compute_start_points(ph_data)
     println("...finishing setup...")
-    retrieve_values(ph_data)
-    compute_and_save_xhat(ph_data)
-    compute_and_save_w(ph_data)
+    update_ph_variables(ph_data)
     augment_objectives(ph_data)
     
     return ph_data

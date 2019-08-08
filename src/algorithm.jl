@@ -1,24 +1,24 @@
 
-# function retrieve_values(phd::PHData)::Nothing
-#     temp = Dict{VariableID,Future}()
-#     for (vid, vinfo) in pairs(phd.variable_map)
-#         temp[vid] = _fetch_variable_value_async(phd, vid.scenario, vinfo)
-#     end
-#     for (vid, vinfo) in pairs(phd.variable_map)
-#         vinfo.value = fetch(temp[vid])
-#     end
-#     return
-# end
+function retrieve_values3(phd::PHData)::Nothing
+    temp = Dict{VariableID,Future}()
+    for (vid, vinfo) in pairs(phd.variable_map)
+        temp[vid] = _fetch_variable_value_async(phd, vid.scenario, vinfo)
+    end
+    for (vid, vinfo) in pairs(phd.variable_map)
+        vinfo.value = fetch(temp[vid])
+    end
+    return
+end
 
-# function retrieve_values(phd::PHData)::Nothing
-#     last = last_stage(phd.scenario_tree)
-#     for (vid, vinfo) in pairs(phd.variable_map)
-#         if vid.stage != last
-#             vinfo.value = _fetch_variable_value(phd, vid.scenario, vinfo)
-#         end
-#     end
-#     return
-# end
+function retrieve_values2(phd::PHData)::Nothing
+    last = last_stage(phd.scenario_tree)
+    for (vid, vinfo) in pairs(phd.variable_map)
+        if vid.stage != last
+            vinfo.value = _fetch_variable_value(phd, vid.scenario, vinfo)
+        end
+    end
+    return
+end
 
 function retrieve_values(phd::PHData)::Nothing
     for (vid, vinfo) in pairs(phd.variable_map)
@@ -93,7 +93,6 @@ function compute_and_save_w(phd::PHData)::Nothing
                 kx = value(phd, var_id) - xhat
                 phd.W[var_id] += phd.r * kx
 
-                # TODO: Decide whether to keep this or not...
                 p = phd.probabilities[s]
                 exp += p * phd.W[var_id]
                 norm += p
