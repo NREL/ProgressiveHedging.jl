@@ -26,17 +26,46 @@ function solve(root_model::StructJuMP.StructuredModel,
                optimizer_factory::JuMP.OptimizerFactory,
                r::T; model_type::Type{M}=JuMP.Model, max_iter=100, atol=1e-8,
                report=false
-               ) where {T <: Number, M <: JuMP.AbstractModel}
+               ) where {T <: Real, M <: JuMP.AbstractModel}
     # Initialization
-    ph_data = initialize(root_model, r, optimizer_factory, M)
-    
+    println("Initializing...")
+    ph_data = @time initialize(root_model, r, optimizer_factory, M)
+    println("Done.")
+
     # Solution
-    (niter, residual) = hedge(ph_data, max_iter, atol, report)
+    println("Solving...")
+    (niter, residual) = @time hedge(ph_data, max_iter, atol, report)
+    println("Done.")
 
     # Post Processing
     soln_df = retrieve_soln(ph_data)
     obj = retrieve_obj_value(ph_data)
-    
+
+    # return (niter, residual, soln_df, cost_dict, ph_data)
+    return (niter, residual, obj, soln_df, ph_data)
+end
+
+function solve(tree::ScenarioTree, model_constructor::Function,
+               variable_dict::Dict{SCENARIO_ID,Vector{String}},
+               optimizer_factory::JuMP.OptimizerFactory,
+               r::T; model_type::Type{M}=JuMP.Model, max_iter=100, atol=1e-8,
+               report=false
+               ) where {S <: AbstractString, T <: Real, M <: JuMP.AbstractModel}
+    # Initialization
+    println("Initializing...")
+    ph_data = @time initialize(tree, model_constructor, variable_dict,
+                               r, optimizer_factory, M)
+    println("Done.")
+
+    # Solution
+    println("Solving...")
+    (niter, residual) = @time hedge(ph_data, max_iter, atol, report)
+    println("Done.")
+
+    # Post Processing
+    soln_df = retrieve_soln(ph_data)
+    obj = retrieve_obj_value(ph_data)
+
     # return (niter, residual, soln_df, cost_dict, ph_data)
     return (niter, residual, obj, soln_df, ph_data)
 end

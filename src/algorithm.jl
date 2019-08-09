@@ -1,10 +1,25 @@
 
-function compute_and_save_xhat(phd::PHData)::Float64
+function retrieve_values(phd::PHData, leaf::Bool)::Nothing
+    last = last_stage(phd.scenario_tree)
+    for (vid, vinfo) in pairs(phd.variable_map)
+        if xor(vid.stage != last, leaf)
+            vinfo.value = _fetch_variable_value(phd, vid.scenario, vinfo)
+        end
+    end
+    return
+end
+
+function compute_and_save_xhat(phd::PHData, leaf::Bool)::Float64
 
     xhat_res = 0.0
     # xhat_olds = Dict{XhatID,Float64}()
+    last = last_stage(phd.scenario_tree)
 
     for (node_id, node) in pairs(phd.scenario_tree.tree_map)
+
+        if xor(node.stage == last, leaf)
+            continue
+        end
 
         for i in node.variable_indices
 
@@ -50,9 +65,16 @@ function compute_and_save_xhat(phd::PHData)::Float64
     return xhat_res
 end
 
-function compute_and_save_w(phd::PHData)::Nothing
+function compute_and_save_w(phd::PHData, leaf::Bool)::Nothing
+
+    last = last_stage(phd.scenario_tree)
 
     for (node_id, node) in pairs(phd.scenario_tree.tree_map)
+
+        if xor(node.stage == last, leaf)
+            continue
+        end
+
         for i in node.variable_indices
 
             xhat = phd.Xhat[XhatID(node_id,i)]
@@ -65,7 +87,6 @@ function compute_and_save_w(phd::PHData)::Nothing
                 kx = value(phd, var_id) - xhat
                 phd.W[var_id] += phd.r * kx
 
-                # TODO: Decide whether to keep this or not...
                 p = phd.probabilities[s]
                 exp += p * phd.W[var_id]
                 norm += p
@@ -79,6 +100,20 @@ function compute_and_save_w(phd::PHData)::Nothing
         end
     end
 
+    return
+end
+
+function update_ph_variables(phd::PHData)::Float64
+    retrieve_values(phd, false)
+    xhat_residual = compute_and_save_xhat(phd, false)
+    compute_and_save_w(phd, false)
+    return xhat_residual
+end
+
+function update_ph_leaf_variables(phd::PHData)::Nothing
+    retrieve_values(phd, true)
+    compute_and_save_xhat(phd, true)
+    compute_and_save_w(phd, true)
     return
 end
 
@@ -174,7 +209,8 @@ function solve_subproblems(phd::PHData)
         # MOI refers to the MathOptInterface package. Apparently this is made
         # accessible by JuMP since it is not imported here
         sts = fetch(@spawnat(proc, JuMP.termination_status(fetch(model))))
-        if sts != MOI.OPTIMAL && sts != MOI.LOCALLY_SOLVED
+        if sts != MOI.OPTIMAL && sts != MOI.LOCALLY_SOLVED &&
+            sts != MOI.ALMOST_LOCALLY_SOLVED
             @error("Scenario $scen subproblem returned $sts.")
         end
     end
@@ -183,7 +219,7 @@ end
 function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
     niter = 0
     residual = atol + 1.0e10
-    report_interval = Int(floor(max_iter / 10))
+    report_interval = Int(floor(max_iter / max_iter))
 
     if report
         x_residual = compute_x_residual(ph_data)
@@ -198,13 +234,11 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
         # Setting start values causes issues with some solvers
         # set_start_values(ph_data)
         fix_ph_variables(ph_data)
+
         solve_subproblems(ph_data)
 
-        # Update Xhat values
-        xhat_residual = compute_and_save_xhat(ph_data)
-
-        # Update W values
-        compute_and_save_w(ph_data)
+        # Update xhat and w
+        xhat_residual = update_ph_variables(ph_data)
 
         # Update stopping criteria -- xhat_residual measures the movement of
         # xhat values from k^th iteration to the (k+1)^th iteration while
@@ -217,10 +251,14 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
         niter += 1
 
         if report && niter % report_interval == 0 && niter != max_iter
-            obj = retrieve_obj_value(ph_data)
-            println("Iter: $niter   Xhat_res: $xhat_residual   X_res: $x_residual    Obj: $obj")
+            # retrieve_values(ph_data, true)
+            # obj = retrieve_obj_value(ph_data)
+            # println("Iter: $niter   Xhat_res^2: $xhat_residual   X_res^2: $x_residual    Obj: $obj")
+            println("Iter: $niter   Xhat_res^2: $xhat_residual   X_res^2: $x_residual")
         end
     end
+
+    update_ph_leaf_variables(ph_data)
 
     if niter >= max_iter
         @warn("Performed $niter iterations without convergence. " *
