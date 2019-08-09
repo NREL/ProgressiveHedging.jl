@@ -4,12 +4,6 @@ function _fetch_variable_value(phd::PHData, scid::ScenarioID,
     return @fetchfrom(phd.scen_proc_map[scid], JuMP.value(fetch(ref)))
 end
 
-function _fetch_variable_value_async(phd::PHData, scid::ScenarioID,
-                                     vi::VariableInfo)::Future
-    ref = vi.ref
-    return @spawnat(phd.scen_proc_map[scid], JuMP.value(fetch(ref)))
-end
-
 function value(phd::PHData, vid::VariableID)::Float64
     return phd.variable_map[vid].value
 end
@@ -79,8 +73,8 @@ end
 
 function retrieve_obj_value(phd::PHData)::Float64
 
-    # This is just the average of the various objective functions -- includes the
-    # augmented terms
+    # This is just the average of the various objective functions --
+    # includes the augmented terms
     obj_value = 0.0
     for (scid, model) in pairs(phd.submodels)
         obj = @spawnat(phd.scen_proc_map[scid], JuMP.objective_value(fetch(model)))
@@ -88,7 +82,11 @@ function retrieve_obj_value(phd::PHData)::Float64
     end
 
     # Remove extra terms
+    last = last_stage(phd.scenario_tree)
     for (vid, var) in pairs(phd.variable_map)
+        if vid.stage == last
+            continue
+        end
         w_val = w_value(phd, vid)
         xhat_val = xhat_value(phd, vid)
         x_val = value(phd, vid)
