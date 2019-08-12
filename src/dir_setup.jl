@@ -1,7 +1,10 @@
-function build_submodels(scen_tree::ScenarioTree, model_constructor::Function,
+function build_submodels(scen_tree::ScenarioTree,
+                         model_constructor::Function,
+                         model_constructor_args::Tuple,
                          variable_dict::Dict{SCENARIO_ID,Vector{String}},
                          optimizer_factory::JuMP.OptimizerFactory,
-                         model_type::Type{M}
+                         model_type::Type{M};
+                         kwargs...
                          ) where {M <: JuMP.AbstractModel}
 
     submodels = Dict{ScenarioID,Future}()
@@ -38,7 +41,11 @@ function build_submodels(scen_tree::ScenarioTree, model_constructor::Function,
         sint = _value(s)
         submodels[s] = @spawnat(proc,
                                 model_constructor(sint,
-                                                  M(optimizer_factory)))
+                                                  M(optimizer_factory),
+                                                  model_constructor_args...;
+                                                  kwargs...
+                                                  )
+                                )
     end
 
     @sync for (nid, node) in pairs(scen_tree.tree_map)
@@ -67,18 +74,28 @@ function initialize(scen_tree::ScenarioTree,
                     variable_dict::Dict{SCENARIO_ID,Vector{String}},
                     r::R,
                     optimizer_factory::JuMP.OptimizerFactory,
-                    model_type::Type{M}
+                    model_type::Type{M},
+                    constructor_args::Tuple;
+                    kwargs...
                     )::PHData where {S <: AbstractString,
                                      R <: Real,
                                      M <: JuMP.AbstractModel}
 
     println("...building submodels...")
-    (submodels, scen_proc_map, var_map
-     ) = build_submodels(scen_tree, model_constructor, variable_dict,
-                         optimizer_factory, M)
+    (submodels, scen_proc_map, var_map) = build_submodels(scen_tree,
+                                                          model_constructor,
+                                                          constructor_args,
+                                                          variable_dict,
+                                                          optimizer_factory,
+                                                          M;
+                                                          kwargs...)
 
-    ph_data = PHData(r, scen_tree, scen_proc_map, scen_tree.prob_map,
-                     submodels, var_map)
+    ph_data = PHData(r,
+                     scen_tree,
+                     scen_proc_map,
+                     scen_tree.prob_map,
+                     submodels,
+                     var_map)
 
     println("...computing starting values...")
     compute_start_points(ph_data)

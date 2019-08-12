@@ -45,16 +45,28 @@ function solve(root_model::StructJuMP.StructuredModel,
     return (niter, residual, obj, soln_df, ph_data)
 end
 
-function solve(tree::ScenarioTree, model_constructor::Function,
+function solve(tree::ScenarioTree,
+               model_constructor::Function,
                variable_dict::Dict{SCENARIO_ID,Vector{String}},
                optimizer_factory::JuMP.OptimizerFactory,
-               r::T; model_type::Type{M}=JuMP.Model, max_iter=100, atol=1e-8,
-               report=false
+               r::T,
+               other_args...;
+               model_type::Type{M}=JuMP.Model,
+               max_iter=100,
+               atol=1e-8,
+               report=false,
+               args::Tuple=(), kwargs...
                ) where {S <: AbstractString, T <: Real, M <: JuMP.AbstractModel}
     # Initialization
     println("Initializing...")
-    ph_data = @time initialize(tree, model_constructor, variable_dict,
-                               r, optimizer_factory, M)
+    ph_data = @time initialize(tree,
+                               model_constructor,
+                               variable_dict,
+                               r,
+                               optimizer_factory,
+                               M,
+                               Tuple([other_args...,args...]);
+                               kwargs...)
     println("Done.")
 
     # Solution
