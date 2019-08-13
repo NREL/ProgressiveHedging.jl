@@ -120,29 +120,31 @@ function augment_objective(model::M,
     return (w_refs, xhat_refs)
 end
 
-function copy_subset(vdict::Dict{VariableID,VariableInfo},
-                     scen::ScenarioID,
-                     last::StageID)
-    thecopy = Dict{VariableID,VariableInfo}()
+function sort_by_scenario(vdict::Dict{VariableID,VariableInfo},
+                          last::StageID)
+    buckets = Dict{ScenarioID,Dict{VariableID,VariableInfo}}()
     for (vid,vinfo) in pairs(vdict)
-        if vid.scenario == scen && vid.stage != last
-            thecopy[vid] = vinfo
+        if vid.stage != last
+            if !haskey(buckets, vid.scenario)
+                buckets[vid.scenario] = Dict{VariableID,VariableInfo}()
+            end
+            buckets[vid.scenario][vid]=vinfo
         end
     end
-    return thecopy
+    return buckets
 end
 
 function order_augment(phd::PHData)::Dict{ScenarioID,Future}
     last = last_stage(phd.scenario_tree)
 
     ref_map = Dict{ScenarioID, Future}()
+    scen_buckets = sort_by_scenario(phd.variable_map, last)
 
     # Create variables and augment objectives
     @sync for (scid, model) in pairs(phd.submodels)
         proc = phd.scen_proc_map[scid]
 
-        var_map = copy_subset(phd.variable_map, scid, last)
-
+        var_map = scen_buckets[scid]
         ref_map[scid] = @spawnat(proc,
                                  augment_objective(fetch(model),
                                                    phd.r,
