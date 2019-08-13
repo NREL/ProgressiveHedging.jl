@@ -233,19 +233,23 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
 
         # Setting start values causes issues with some solvers
         # set_start_values(ph_data)
-        fix_ph_variables(ph_data)
+        println("...fixing PH variables...")
+        @time fix_ph_variables(ph_data)
 
-        solve_subproblems(ph_data)
+        println("...solving subproblems...")
+        @time solve_subproblems(ph_data)
 
         # Update xhat and w
-        xhat_residual = update_ph_variables(ph_data)
+        println("...updating ph variables...")
+        xhat_residual = @time update_ph_variables(ph_data)
 
         # Update stopping criteria -- xhat_residual measures the movement of
         # xhat values from k^th iteration to the (k+1)^th iteration while
         # x_residual measures the disagreement between the x variables and
         # its corresponding xhat variable (so lack of consensus amongst the
         # subproblems or violation of the nonanticipativity constraint)
-        x_residual = compute_x_residual(ph_data)
+        println("...computing residual...")
+        x_residual = @time compute_x_residual(ph_data)
         residual = sqrt(xhat_residual + x_residual)
         
         niter += 1
@@ -258,7 +262,8 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
         end
     end
 
-    update_ph_leaf_variables(ph_data)
+    println("...updating leaf PH variables...")
+    @time update_ph_leaf_variables(ph_data)
 
     if niter >= max_iter
         @warn("Performed $niter iterations without convergence. " *
