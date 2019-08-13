@@ -114,8 +114,9 @@ function initialize(scen_tree::ScenarioTree,
 
     println("...computing starting values...")
     @time compute_start_points(ph_data)
-    println("...finishing setup...")
+    println("...updating ph variables...")
     @time update_ph_variables(ph_data)
+    println("...augmenting objectives...")
     @time augment_objectives(ph_data)
     
     return ph_data

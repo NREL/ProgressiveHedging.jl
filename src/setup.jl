@@ -108,6 +108,18 @@ function augment_objective_xhat(model::M,
     return xhat_dict
 end
 
+function augment_objective(model::M,
+                           r::R,
+                           scen::ScenarioID,
+                           last_stage::StageID,
+                           var_dict::Dict{VariableID,VariableInfo}
+                           ) where {M <: JuMP.AbstractModel,
+                                    R <: Real}
+    w_refs = augment_objective_w(model, scen, last_stage, var_dict)
+    xhat_refs = augment_objective_xhat(model, r, scen, last_stage, var_dict)
+    return (w_refs, xhat_refs)
+end
+
 function copy_subset(vdict::Dict{VariableID,VariableInfo},
                      scen::ScenarioID,
                      last::StageID)
@@ -120,33 +132,32 @@ function copy_subset(vdict::Dict{VariableID,VariableInfo},
     return thecopy
 end
 
-function augment_objectives(phd::PHData)::Nothing
-
+function order_augment(phd::PHData)::Dict{ScenarioID,Future}
     last = last_stage(phd.scenario_tree)
 
-    w_ref_map = Dict{ScenarioID, Future}()
-    xhat_ref_map = Dict{ScenarioID, Future}()
+    ref_map = Dict{ScenarioID, Future}()
 
     # Create variables and augment objectives
     @sync for (scid, model) in pairs(phd.submodels)
         proc = phd.scen_proc_map[scid]
 
         var_map = copy_subset(phd.variable_map, scid, last)
-        
-        w_ref_map[scid] = @spawnat(proc,
-                                   augment_objective_w(fetch(model),
-                                                       scid,
-                                                       last,
-                                                       var_map))
-        xhat_ref_map[scid] = @spawnat(proc,
-                                      augment_objective_xhat(fetch(model),
-                                                             phd.r,
-                                                             scid,
-                                                             last,
-                                                             var_map))
+
+        ref_map[scid] = @spawnat(proc,
+                                 augment_objective(fetch(model),
+                                                   phd.r,
+                                                   scid,
+                                                   last,
+                                                   var_map))
     end
 
-    # Retrieve references for all the new PH variables
+    return ref_map
+end
+
+function retrieve_ph_refs(phd::PHData,
+                          ref_map::Dict{ScenarioID, Future})::Nothing
+    last = last_stage(phd.scenario_tree)
+
     @sync for (nid, node) in pairs(phd.scenario_tree.tree_map)
 
         if node.stage == last
@@ -156,25 +167,35 @@ function augment_objectives(phd::PHData)::Nothing
         for scid in node.scenario_bundle
 
             proc = phd.scen_proc_map[scid]
-            w_refs = w_ref_map[scid]
-            xhat_refs = xhat_ref_map[scid]
+            vrefs = ref_map[scid]
 
             for i in node.variable_indices
 
                 vid = VariableID(scid, node.stage, i)
-                phd.W_ref[vid] = @spawnat(proc, get(fetch(w_refs),vid,nothing))
+                phd.W_ref[vid] = @spawnat(proc, get(fetch(vrefs)[1],vid,nothing))
 
                 xid = XhatID(nid, i)
                 if !(xid in keys(phd.Xhat_ref))
                     phd.Xhat_ref[xid] = Dict{ScenarioID, Future}()
                 end
-                phd.Xhat_ref[xid][scid] = @spawnat(proc, get(fetch(xhat_refs),
+                phd.Xhat_ref[xid][scid] = @spawnat(proc, get(fetch(vrefs)[2],
                                                              vid,
                                                              nothing))
 
             end
         end
     end
+
+    return
+end
+
+function augment_objectives(phd::PHData)::Nothing
+
+    # Tell the processes to augment their objective functions
+    ref_map = @time order_augment(phd)
+
+    # Retrieve references for all the new PH variables
+    @time retrieve_ph_refs(phd, ref_map)
 
     return
 end
