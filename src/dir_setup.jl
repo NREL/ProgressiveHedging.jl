@@ -1,41 +1,14 @@
-function build_submodels(scen_tree::ScenarioTree,
-                         model_constructor::Function,
-                         model_constructor_args::Tuple,
-                         variable_dict::Dict{SCENARIO_ID,Vector{String}},
-                         optimizer_factory::JuMP.OptimizerFactory,
-                         model_type::Type{M};
-                         kwargs...
-                         ) where {M <: JuMP.AbstractModel}
+function create_models(scen_tree::ScenarioTree,
+                       model_constructor::Function,
+                       model_constructor_args::Tuple,
+                       scen_proc_map::Dict{ScenarioID, Int},
+                       optimizer_factory::JuMP.OptimizerFactory,
+                       model_type::Type{M};
+                       kwargs...
+                       ) where {M <: JuMP.AbstractModel}
 
     submodels = Dict{ScenarioID,Future}()
-    scen_proc_map = assign_scenarios_to_procs(scen_tree)
-    var_map = Dict{VariableID,VariableInfo}()
 
-    # Construct the models
-
-    # # The below stuff is so model construction executes serially on processes
-    # # when assigned more than one scenario.  This means the user can do things
-    # # like read files and not have it get messed up.
-
-    # proc_scen_map = Dict{Int, Set{ScenarioID}}()
-    # for (s,p) in pairs(scen_proc_map)
-    #     if p in keys(proc_scen_map)
-    #         push!(proc_scen_map[p], s)
-    #     else
-    #         proc_scen_map[p] = Set{ScenarioID}([s])
-    #     end
-    # end
-
-    # scens = copy(scenarios(scen_tree))
-    # while !isempty(scens)
-    #     @sync for (p, scen_set) in pairs(proc_scen_map)
-    #         s = pop!(scen_set)
-    #         sint = _value(s)
-    #         delete!(scens, s)
-    #         submodels[s] = @spawnat(p, model_constructor(sint, M(optimizer_factory)))
-    #     end
-    # end
-    
     @sync for s in scenarios(scen_tree)
         proc = scen_proc_map[s]
         sint = _value(s)
@@ -47,6 +20,18 @@ function build_submodels(scen_tree::ScenarioTree,
                                                   )
                                 )
     end
+
+    return submodels
+
+end
+
+function collect_variable_refs(scen_tree::ScenarioTree,
+                               scen_proc_map::Dict{ScenarioID, Int},
+                               submodels::Dict{ScenarioID, Future},
+                               variable_dict::Dict{SCENARIO_ID,Vector{String}},
+                               ) where {M <: JuMP.AbstractModel}
+
+    var_map = Dict{VariableID,VariableInfo}()
 
     @sync for (nid, node) in pairs(scen_tree.tree_map)
 
@@ -66,6 +51,36 @@ function build_submodels(scen_tree::ScenarioTree,
         end
     end
 
+    return var_map
+end 
+
+function build_submodels(scen_tree::ScenarioTree,
+                         model_constructor::Function,
+                         model_constructor_args::Tuple,
+                         variable_dict::Dict{SCENARIO_ID,Vector{String}},
+                         optimizer_factory::JuMP.OptimizerFactory,
+                         model_type::Type{M};
+                         kwargs...
+                         ) where {M <: JuMP.AbstractModel}
+
+    # Assign each subproblem to a particular juila process
+    scen_proc_map = assign_scenarios_to_procs(scen_tree)
+
+    # Construct the models
+    submodels = @time create_models(scen_tree,
+                              model_constructor,
+                              model_constructor_args,
+                              scen_proc_map,
+                              optimizer_factory,
+                              model_type;
+                              kwargs...)
+
+    # Store variable references and other info
+    var_map = @time collect_variable_refs(scen_tree,
+                                    scen_proc_map,
+                                    submodels,
+                                    variable_dict)
+
     return (submodels, scen_proc_map, var_map)
 end
 
@@ -82,7 +97,7 @@ function initialize(scen_tree::ScenarioTree,
                                      M <: JuMP.AbstractModel}
 
     println("...building submodels...")
-    (submodels, scen_proc_map, var_map) = build_submodels(scen_tree,
+    (submodels, scen_proc_map, var_map) = @time build_submodels(scen_tree,
                                                           model_constructor,
                                                           constructor_args,
                                                           variable_dict,
@@ -98,11 +113,11 @@ function initialize(scen_tree::ScenarioTree,
                      var_map)
 
     println("...computing starting values...")
-    compute_start_points(ph_data)
-    println("...finishing setup...")
-    update_ph_variables(ph_data)
-    augment_objectives(ph_data)
+    @time compute_start_points(ph_data)
+    println("...updating ph variables...")
+    @time update_ph_variables(ph_data)
+    println("...augmenting objectives...")
+    @time augment_objectives(ph_data)
     
     return ph_data
 end
-
