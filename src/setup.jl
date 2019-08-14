@@ -143,11 +143,12 @@ function order_augment(phd::PHData)::Dict{ScenarioID,Future}
     # Create variables and augment objectives
     @sync for (scid, model) in pairs(phd.submodels)
         proc = phd.scen_proc_map[scid]
-
         var_map = scen_buckets[scid]
+        r = phd.r
+
         ref_map[scid] = @spawnat(proc,
                                  augment_objective(fetch(model),
-                                                   phd.r,
+                                                   r,
                                                    scid,
                                                    last,
                                                    var_map))
