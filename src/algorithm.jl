@@ -153,46 +153,72 @@ function compute_x_residual(phd::PHData)::Float64
     return kxsq
 end
 
-function fix_xhat(phd::PHData)::Nothing
+function fix_values(ref_val_dict::Dict{Future, Float64})::Nothing
 
-    last = last_stage(phd.scenario_tree)
-
-    @sync for (xhat_id, value) in phd.Xhat
-
-        if stage_id(xhat_id, phd) == last
-            continue
-        end
-
-        for (scid, xhat_ref) in phd.Xhat_ref[xhat_id]
-            @spawnat(phd.scen_proc_map[scid],
-                     JuMP.fix(fetch(xhat_ref), value, force=true))
-        end
+    for (fref, val) in pairs(ref_val_dict)
+        JuMP.fix(fetch(fref), val, force=true)
     end
-    
+
     return
 end
 
-function fix_w(phd::PHData)::Nothing
+function sort_w_by_scenario(phd::PHData)::Dict{ScenarioID,Dict{Future,Float64}}
+    rv_dict = Dict{ScenarioID,Dict{Future,Float64}}()
 
     last = last_stage(phd.scenario_tree)
-
-    @sync for (w_id, value) in phd.W
-
+    for (w_id, value) in phd.W
         if w_id.stage == last
             continue
         end
 
         s = w_id.scenario
-        ref = phd.W_ref[w_id]
-        @spawnat(phd.scen_proc_map[s], JuMP.fix(fetch(ref), value, force=true))
+        if !haskey(rv_dict, s)
+            rv_dict[s] = Dict{Future,Float64}()
+        end
+
+        rv_dict[s][phd.W_ref[w_id]] = value
     end
     
-    return
+    return rv_dict
+end
+
+function sort_xhat_by_scenario(phd::PHData)::Dict{ScenarioID,Dict{Future,Float64}}
+
+    rv_dict = Dict{ScenarioID,Dict{Future,Float64}}()
+    last = last_stage(phd.scenario_tree)
+
+    for (xhat_id, scen_bundle) in pairs(phd.Xhat_ref)
+
+        if stage_id(xhat_id, phd) == last
+            continue
+        end
+
+        value = phd.Xhat[xhat_id]
+
+        for (s, ref) in pairs(scen_bundle)
+            if !haskey(rv_dict, s)
+                rv_dict[s] = Dict{Future,Float64}()
+            end
+
+            rv_dict[s][ref] = value
+        end
+    end
+    
+    return rv_dict
 end
 
 function fix_ph_variables(phd::PHData)::Nothing
-    fix_w(phd)
-    fix_xhat(phd)
+    w_scen_dict = sort_w_by_scenario(phd)
+    xhat_scen_dict = sort_xhat_by_scenario(phd)
+
+    @sync for (scid, model) in pairs(phd.submodels)
+        w_dict = w_scen_dict[scid]
+        xhat_dict = xhat_scen_dict[scid]
+
+        @spawnat(phd.scen_proc_map[scid], fix_values(w_dict))
+        @spawnat(phd.scen_proc_map[scid], fix_values(xhat_dict))
+    end
+
     return
 end
 
