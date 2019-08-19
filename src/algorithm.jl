@@ -1,23 +1,21 @@
 
-function retrieve_values(phd::PHData, leaf::Bool)::Nothing
-    last = last_stage(phd.scenario_tree)
+function retrieve_values(phd::PHData, leaf_mode::Bool)::Nothing
     for (vid, vinfo) in pairs(phd.variable_map)
-        if xor(vid.stage != last, leaf)
+        if xor(!is_leaf(phd.scenario_tree, vinfo.node_id), leaf_mode)
             vinfo.value = _fetch_variable_value(phd, vid.scenario, vinfo)
         end
     end
     return
 end
 
-function compute_and_save_xhat(phd::PHData, leaf::Bool)::Float64
+function compute_and_save_xhat(phd::PHData, leaf_mode::Bool)::Float64
 
     xhat_res = 0.0
     # xhat_olds = Dict{XhatID,Float64}()
-    last = last_stage(phd.scenario_tree)
 
     for (node_id, node) in pairs(phd.scenario_tree.tree_map)
 
-        if xor(node.stage == last, leaf)
+        if xor(is_leaf(node), leaf_mode)
             continue
         end
 
@@ -67,11 +65,9 @@ end
 
 function compute_and_save_w(phd::PHData, leaf::Bool)::Nothing
 
-    last = last_stage(phd.scenario_tree)
-
     for (node_id, node) in pairs(phd.scenario_tree.tree_map)
 
-        if xor(node.stage == last, leaf)
+        if xor(is_leaf(node), leaf)
             continue
         end
 
@@ -163,19 +159,19 @@ function fix_values(ref_val_dict::Dict{Future, Float64})::Nothing
 end
 
 function sort_w_by_scenario(phd::PHData)::Dict{ScenarioID,Dict{Future,Float64}}
-    rv_dict = Dict{ScenarioID,Dict{Future,Float64}}()
 
-    last = last_stage(phd.scenario_tree)
+    rv_dict = Dict{ScenarioID,Dict{Future,Float64}}()
+    for s in scenarios(phd.scenario_tree)
+        rv_dict[s] = Dict{Future,Float64}()
+    end
+
     for (w_id, value) in phd.W
-        if w_id.stage == last
+
+        if is_leaf(phd.scenario_tree, phd.variable_map[w_id].node_id)
             continue
         end
 
         s = w_id.scenario
-        if !haskey(rv_dict, s)
-            rv_dict[s] = Dict{Future,Float64}()
-        end
-
         rv_dict[s][phd.W_ref[w_id]] = value
     end
     
@@ -185,21 +181,19 @@ end
 function sort_xhat_by_scenario(phd::PHData)::Dict{ScenarioID,Dict{Future,Float64}}
 
     rv_dict = Dict{ScenarioID,Dict{Future,Float64}}()
-    last = last_stage(phd.scenario_tree)
+    for s in scenarios(phd.scenario_tree)
+        rv_dict[s] = Dict{Future,Float64}()
+    end
 
     for (xhat_id, scen_bundle) in pairs(phd.Xhat_ref)
 
-        if stage_id(xhat_id, phd) == last
+        if is_leaf(phd.scenario_tree, xhat_id.node)
             continue
         end
 
         value = phd.Xhat[xhat_id]
 
         for (s, ref) in pairs(scen_bundle)
-            if !haskey(rv_dict, s)
-                rv_dict[s] = Dict{Future,Float64}()
-            end
-
             rv_dict[s][ref] = value
         end
     end

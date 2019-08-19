@@ -94,10 +94,12 @@ end
 mutable struct VariableInfo
     ref::Future
     name::String
+    node_id::NodeID
     value::Float64
 end
 
-VariableInfo(ref::Future, name::String) = VariableInfo(ref, name, 0.0)
+VariableInfo(ref::Future, name::String, nid::NodeID) = VariableInfo(ref, name,
+                                                                    nid, 0.0)
 
 struct Translator{A,B}
     a_to_b::Dict{A,B}
@@ -201,13 +203,13 @@ function last_stage(tree::ScenarioTree)
     return maximum(keys(tree.stage_map))
 end
 
-function is_leaf(tree::ScenarioTree, node::ScenarioNode)
-    last = last_stage(tree)
-    return last == node.stage
+function is_leaf(node::ScenarioNode)
+    return length(node.children) == 0 ||
+        (length(node.children) == 1 && is_leaf(first(node.children)))
 end
 
 function is_leaf(tree::ScenarioTree, nid::NodeID)
-    return is_leaf(tree, tree.tree_map[nid])
+    return is_leaf(tree.tree_map[nid])
 end
 
 function _add_node(tree::ScenarioTree, node::ScenarioNode)
@@ -354,13 +356,6 @@ function convert_to_variable_id(xid::XhatID, phd::PHData)::VariableID
 end
 
 function convert_to_xhat_id(vid::VariableID, phd::PHData)::XhatID
-    nodes = phd.scenario_tree.stage_map[vid.stage]
-    node_id = -1
-    for nid in nodes
-        if vid.scenario in phd.scenario_tree.tree_map[nid].scenario_bundle
-            node_id = nid
-            break
-        end
-    end
-    return XhatID(node_id, vid.index)
+    nid = phd.variable_map[vid].node_id
+    return XhatID(nid, vid.index)
 end

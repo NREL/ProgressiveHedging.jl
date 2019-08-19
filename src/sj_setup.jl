@@ -27,7 +27,7 @@ function build_scenario_tree(root_model::StructJuMP.StructuredModel)::ScenarioTr
 
     if abs(sum(values(scen_tree.prob_map)) - 1.0) > 1e-10
         @warn("Probabilities of all scenarios do not sum to 1 but to " *
-              string(sum(values(probs))))
+              string(sum(values(scen_tree.prob_map))))
     end
 
     return scen_tree
@@ -72,7 +72,7 @@ function add_variables_extensive(model::Future,
                                          JuMP.build_variable(_error, info),
                                          name)
                        )
-        var_map[ph_vid] = VariableInfo(ref, name)
+        var_map[ph_vid] = VariableInfo(ref, name, node.id)
     end
 
     return scid
@@ -180,7 +180,7 @@ function add_variables(submodels::Dict{ScenarioID, Future},
             ref = @spawnat(proc,
                            JuMP.add_variable(fetch(model),
                                              JuMP.build_variable(_error, info)))
-            var_map[ph_vid] = VariableInfo(ref, name)
+            var_map[ph_vid] = VariableInfo(ref, name, node.id)
         end
     end
     
