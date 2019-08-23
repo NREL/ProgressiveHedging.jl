@@ -46,7 +46,7 @@ function collect_variable_refs(scen_tree::ScenarioTree,
                 model = submodels[s]
 
                 ref = @spawnat(proc, JuMP.variable_by_name(fetch(model), var_name))
-                var_map[vid] = VariableInfo(ref, var_name)
+                var_map[vid] = VariableInfo(ref, var_name, nid)
             end
         end
     end

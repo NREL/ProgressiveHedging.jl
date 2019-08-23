@@ -50,7 +50,6 @@ end
 
 function augment_objective_w(model::M,
                              scen::ScenarioID,
-                             last_stage::StageID,
                              var_dict::Dict{VariableID,VariableInfo},
                              ) where M <: JuMP.AbstractModel
 
@@ -63,13 +62,11 @@ function augment_objective_w(model::M,
                             false, false) # binary, integer
 
     for (vid, vinfo) in pairs(var_dict)
-        if vid.scenario == scen && vid.stage != last_stage
-            w_ref = JuMP.add_variable(model,
-                                      JuMP.build_variable(_error, jvi))
-            w_dict[vid] = w_ref
-            x_ref = fetch(vinfo.ref)
-            JuMP.add_to_expression!(obj, w_ref*x_ref)
-        end
+        w_ref = JuMP.add_variable(model,
+                                  JuMP.build_variable(_error, jvi))
+        w_dict[vid] = w_ref
+        x_ref = fetch(vinfo.ref)
+        JuMP.add_to_expression!(obj, w_ref*x_ref)
     end
 
     JuMP.set_objective_function(model, obj)
@@ -80,7 +77,6 @@ end
 function augment_objective_xhat(model::M,
                                 r::R,
                                 scen::ScenarioID,
-                                last_stage::StageID,
                                 var_dict::Dict{VariableID,VariableInfo},
                                 ) where {M <: JuMP.AbstractModel,
                                          R <: Real}
@@ -94,13 +90,11 @@ function augment_objective_xhat(model::M,
                             false, false) # binary, integer
 
     for (vid, vinfo) in pairs(var_dict)
-        if vid.scenario == scen && vid.stage != last_stage
-            xhat_ref = JuMP.add_variable(model,
-                                         JuMP.build_variable(_error, jvi))
-            xhat_dict[vid] = xhat_ref
-            x_ref = fetch(vinfo.ref)
-            JuMP.add_to_expression!(obj, 0.5 * r * (x_ref - xhat_ref)^2)
-        end
+        xhat_ref = JuMP.add_variable(model,
+                                     JuMP.build_variable(_error, jvi))
+        xhat_dict[vid] = xhat_ref
+        x_ref = fetch(vinfo.ref)
+        JuMP.add_to_expression!(obj, 0.5 * r * (x_ref - xhat_ref)^2)
     end
 
     JuMP.set_objective_function(model, obj)
@@ -111,23 +105,23 @@ end
 function augment_objective(model::M,
                            r::R,
                            scen::ScenarioID,
-                           last_stage::StageID,
                            var_dict::Dict{VariableID,VariableInfo}
                            ) where {M <: JuMP.AbstractModel,
                                     R <: Real}
-    w_refs = augment_objective_w(model, scen, last_stage, var_dict)
-    xhat_refs = augment_objective_xhat(model, r, scen, last_stage, var_dict)
+    w_refs = augment_objective_w(model, scen, var_dict)
+    xhat_refs = augment_objective_xhat(model, r, scen, var_dict)
     return (w_refs, xhat_refs)
 end
 
 function sort_by_scenario(vdict::Dict{VariableID,VariableInfo},
-                          last::StageID)
+                          scen_tree::ScenarioTree)
     buckets = Dict{ScenarioID,Dict{VariableID,VariableInfo}}()
+    for s in scenarios(scen_tree)
+        buckets[s] = Dict{VariableID,VariableInfo}()
+    end
+
     for (vid,vinfo) in pairs(vdict)
-        if vid.stage != last
-            if !haskey(buckets, vid.scenario)
-                buckets[vid.scenario] = Dict{VariableID,VariableInfo}()
-            end
+        if !is_leaf(scen_tree, vinfo.node_id)
             buckets[vid.scenario][vid]=vinfo
         end
     end
@@ -135,10 +129,9 @@ function sort_by_scenario(vdict::Dict{VariableID,VariableInfo},
 end
 
 function order_augment(phd::PHData)::Dict{ScenarioID,Future}
-    last = last_stage(phd.scenario_tree)
 
     ref_map = Dict{ScenarioID, Future}()
-    scen_buckets = sort_by_scenario(phd.variable_map, last)
+    scen_buckets = sort_by_scenario(phd.variable_map, phd.scenario_tree)
 
     # Create variables and augment objectives
     @sync for (scid, model) in pairs(phd.submodels)
@@ -150,7 +143,6 @@ function order_augment(phd::PHData)::Dict{ScenarioID,Future}
                                  augment_objective(fetch(model),
                                                    r,
                                                    scid,
-                                                   last,
                                                    var_map))
     end
 
@@ -159,11 +151,10 @@ end
 
 function retrieve_ph_refs(phd::PHData,
                           ref_map::Dict{ScenarioID, Future})::Nothing
-    last = last_stage(phd.scenario_tree)
 
     @sync for (nid, node) in pairs(phd.scenario_tree.tree_map)
 
-        if node.stage == last
+        if is_leaf(node)
             continue
         end
         

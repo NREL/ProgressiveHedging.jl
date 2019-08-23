@@ -82,11 +82,12 @@ function retrieve_obj_value(phd::PHData)::Float64
     end
 
     # Remove extra terms
-    last = last_stage(phd.scenario_tree)
     for (vid, var) in pairs(phd.variable_map)
-        if vid.stage == last
+
+        if is_leaf(phd.scenario_tree, var.node_id)
             continue
         end
+
         w_val = w_value(phd, vid)
         xhat_val = xhat_value(phd, vid)
         x_val = value(phd, vid)
@@ -135,11 +136,9 @@ function retrieve_w(phd::PHData)::DataFrames.DataFrame
     scenario = Vector{SCENARIO_ID}()
     index = Vector{INDEX}()
 
-    last = last_stage(phd.scenario_tree)
-    
     for vid in sort!(collect(keys(phd.W)))
 
-        if vid.stage == last
+        if is_leaf(phd.scenario_tree, phd.variable_map[vid].node_id)
             continue
         end
 
