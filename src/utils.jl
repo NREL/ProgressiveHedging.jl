@@ -4,6 +4,21 @@ function _fetch_variable_value(phd::PHData, scid::ScenarioID,
     return @fetchfrom(phd.scen_proc_map[scid], JuMP.value(fetch(ref)))
 end
 
+function _sort_by_scenario(vdict::Dict{VariableID,VariableInfo},
+                          scen_tree::ScenarioTree)
+    buckets = Dict{ScenarioID,Dict{VariableID,VariableInfo}}()
+    for s in scenarios(scen_tree)
+        buckets[s] = Dict{VariableID,VariableInfo}()
+    end
+
+    for (vid,vinfo) in pairs(vdict)
+        if !is_leaf(scen_tree, vinfo.node_id)
+            buckets[vid.scenario][vid]=vinfo
+        end
+    end
+    return buckets
+end
+
 function value(phd::PHData, vid::VariableID)::Float64
     return phd.variable_map[vid].value
 end
@@ -142,10 +157,7 @@ function retrieve_w(phd::PHData)::DataFrames.DataFrame
             continue
         end
 
-        wref = phd.W_ref[vid]
-        proc = phd.scen_proc_map[vid.scenario]
         push!(vars, "W_" * phd.variable_map[vid].name)
-
         push!(vals, phd.W[vid])
         push!(stage, _value(vid.stage))
         push!(scenario, _value(vid.scenario))

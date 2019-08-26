@@ -1,10 +1,39 @@
 
+# function retrieve_values(phd::PHData, leaf_mode::Bool)::Nothing
+#     for (vid, vinfo) in pairs(phd.variable_map)
+#         if xor(!is_leaf(phd.scenario_tree, vinfo.node_id), leaf_mode)
+#             vinfo.value = _fetch_variable_value(phd, vid.scenario, vinfo)
+#         end
+#     end
+#     return
+# end
+
+function _report_values(var_dict::Dict{VariableID, VariableInfo}
+                        )::Dict{VariableID, Float64}
+    val_dict = Dict{VariableID, Float64}()
+    for (vid, vinfo) in pairs(var_dict)
+        val_dict[vid] = JuMP.value(fetch(vinfo.ref))
+    end
+    return val_dict
+end
+
 function retrieve_values(phd::PHData, leaf_mode::Bool)::Nothing
-    for (vid, vinfo) in pairs(phd.variable_map)
-        if xor(!is_leaf(phd.scenario_tree, vinfo.node_id), leaf_mode)
-            vinfo.value = _fetch_variable_value(phd, vid.scenario, vinfo)
+
+    scen_buckets = _sort_by_scenario(phd.variable_map, phd.scenario_tree)
+
+    val_dict = Dict{ScenarioID,Future}()
+    for (s,p) in pairs(phd.scen_proc_map)
+        var_dict = scen_buckets[s]
+        val_dict[s] = @spawnat(p, _report_values(var_dict))
+    end
+
+    for (s,fv) in pairs(val_dict)
+        var_values = fetch(fv)
+        for (vid, value) in pairs(var_values)
+            phd.variable_map[vid].value = value
         end
     end
+
     return
 end
 

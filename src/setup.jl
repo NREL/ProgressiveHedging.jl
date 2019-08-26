@@ -113,25 +113,10 @@ function augment_objective(model::M,
     return (w_refs, xhat_refs)
 end
 
-function sort_by_scenario(vdict::Dict{VariableID,VariableInfo},
-                          scen_tree::ScenarioTree)
-    buckets = Dict{ScenarioID,Dict{VariableID,VariableInfo}}()
-    for s in scenarios(scen_tree)
-        buckets[s] = Dict{VariableID,VariableInfo}()
-    end
-
-    for (vid,vinfo) in pairs(vdict)
-        if !is_leaf(scen_tree, vinfo.node_id)
-            buckets[vid.scenario][vid]=vinfo
-        end
-    end
-    return buckets
-end
-
 function order_augment(phd::PHData)::Dict{ScenarioID,Future}
 
     ref_map = Dict{ScenarioID, Future}()
-    scen_buckets = sort_by_scenario(phd.variable_map, phd.scenario_tree)
+    scen_buckets = _sort_by_scenario(phd.variable_map, phd.scenario_tree)
 
     # Create variables and augment objectives
     @sync for (scid, model) in pairs(phd.submodels)
