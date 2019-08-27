@@ -5,14 +5,15 @@ function _fetch_variable_value(phd::PHData, scid::ScenarioID,
 end
 
 function _sort_by_scenario(vdict::Dict{VariableID,VariableInfo},
-                          scen_tree::ScenarioTree)
+                           scen_tree::ScenarioTree,
+                           leaf_mode::Bool=false)
     buckets = Dict{ScenarioID,Dict{VariableID,VariableInfo}}()
     for s in scenarios(scen_tree)
         buckets[s] = Dict{VariableID,VariableInfo}()
     end
 
     for (vid,vinfo) in pairs(vdict)
-        if !is_leaf(scen_tree, vinfo.node_id)
+        if xor(!is_leaf(scen_tree, vinfo.node_id), leaf_mode)
             buckets[vid.scenario][vid]=vinfo
         end
     end

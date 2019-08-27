@@ -19,7 +19,9 @@ end
 
 function retrieve_values(phd::PHData, leaf_mode::Bool)::Nothing
 
-    scen_buckets = _sort_by_scenario(phd.variable_map, phd.scenario_tree)
+    scen_buckets = _sort_by_scenario(phd.variable_map,
+                                     phd.scenario_tree,
+                                     leaf_mode)
 
     val_dict = Dict{ScenarioID,Future}()
     for (s,p) in pairs(phd.scen_proc_map)
