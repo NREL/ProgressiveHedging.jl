@@ -15,27 +15,27 @@ function assign_scenarios_to_procs(scen_tree::ScenarioTree)::Dict{ScenarioID,Int
     return sp_map
 end
 
-function compute_start_points(phd::PHData)::Nothing
-    
-    @sync for (scen, model) in pairs(phd.submodels)
-        proc = phd.scen_proc_map[scen]
-        @spawnat(proc, JuMP.optimize!(fetch(model)))
-    end
+# function compute_start_points(phd::PHData)::Nothing
 
-    for (scen, model) in pairs(phd.submodels)
-        proc = phd.scen_proc_map[scen]
-        # MOI refers to the MathOptInterface package. Apparently this is made
-        # accessible by JuMP since it is not imported here
-        sts = fetch(@spawnat(proc, JuMP.termination_status(fetch(model))))
-        if sts != MOI.OPTIMAL && sts != MOI.LOCALLY_SOLVED &&
-            sts != MOI.ALMOST_LOCALLY_SOLVED
-            @error("Initialization solve for scenario $scen on process $proc " *
-                   "returned $sts.")
-        end
-    end
+#     @sync for (scen, model) in pairs(phd.submodels)
+#         proc = phd.scen_proc_map[scen]
+#         @spawnat(proc, JuMP.optimize!(fetch(model)))
+#     end
+
+#     for (scen, model) in pairs(phd.submodels)
+#         proc = phd.scen_proc_map[scen]
+#         # MOI refers to the MathOptInterface package. Apparently this is made
+#         # accessible by JuMP since it is not imported here
+#         sts = fetch(@spawnat(proc, JuMP.termination_status(fetch(model))))
+#         if sts != MOI.OPTIMAL && sts != MOI.LOCALLY_SOLVED &&
+#             sts != MOI.ALMOST_LOCALLY_SOLVED
+#             @error("Initialization solve for scenario $scen on process $proc " *
+#                    "returned $sts.")
+#         end
+#     end
     
-    return
-end
+#     return
+# end
 
 function get_objective_as_quadratic(model::M) where M <: JuMP.AbstractModel
     model_obj = JuMP.objective_function(model)
@@ -49,7 +49,6 @@ function get_objective_as_quadratic(model::M) where M <: JuMP.AbstractModel
 end
 
 function augment_objective_w(model::M,
-                             scen::ScenarioID,
                              var_dict::Dict{VariableID,VariableInfo},
                              ) where M <: JuMP.AbstractModel
 
@@ -76,7 +75,6 @@ end
 
 function augment_objective_xhat(model::M,
                                 r::R,
-                                scen::ScenarioID,
                                 var_dict::Dict{VariableID,VariableInfo},
                                 ) where {M <: JuMP.AbstractModel,
                                          R <: Real}
@@ -104,30 +102,27 @@ end
 
 function augment_objective(model::M,
                            r::R,
-                           scen::ScenarioID,
                            var_dict::Dict{VariableID,VariableInfo}
                            ) where {M <: JuMP.AbstractModel,
                                     R <: Real}
-    w_refs = augment_objective_w(model, scen, var_dict)
-    xhat_refs = augment_objective_xhat(model, r, scen, var_dict)
+    w_refs = augment_objective_w(model, var_dict)
+    xhat_refs = augment_objective_xhat(model, r, var_dict)
     return (w_refs, xhat_refs)
 end
 
 function order_augment(phd::PHData)::Dict{ScenarioID,Future}
 
     ref_map = Dict{ScenarioID, Future}()
-    scen_buckets = _sort_by_scenario(phd.variable_map, phd.scenario_tree)
 
     # Create variables and augment objectives
-    @sync for (scid, model) in pairs(phd.submodels)
-        proc = phd.scen_proc_map[scid]
-        var_map = scen_buckets[scid]
+    @sync for (scid, sinfo) in pairs(phd.scenario_map)
         r = phd.r
+        model = sinfo.model
+        var_map = sinfo.branch_map
 
-        ref_map[scid] = @spawnat(proc,
+        ref_map[scid] = @spawnat(sinfo.proc,
                                  augment_objective(fetch(model),
                                                    r,
-                                                   scid,
                                                    var_map))
     end
 
@@ -145,21 +140,18 @@ function retrieve_ph_refs(phd::PHData,
         
         for scid in node.scenario_bundle
 
-            proc = phd.scen_proc_map[scid]
+            sinfo = phd.scenario_map[scid]
             vrefs = ref_map[scid]
 
             for i in node.variable_indices
 
-                vid = VariableID(scid, node.stage, i)
-                phd.W_ref[vid] = @spawnat(proc, get(fetch(vrefs)[1],vid,nothing))
+                vid = VariableID(node.stage, i)
+                sinfo.W[vid].ref = @spawnat(sinfo.proc,
+                                            get(fetch(vrefs)[1], vid, nothing))
 
                 xid = XhatID(nid, i)
-                if !(xid in keys(phd.Xhat_ref))
-                    phd.Xhat_ref[xid] = Dict{ScenarioID, Future}()
-                end
-                phd.Xhat_ref[xid][scid] = @spawnat(proc, get(fetch(vrefs)[2],
-                                                             vid,
-                                                             nothing))
+                sinfo.Xhat[xid].ref = @spawnat(sinfo.proc,
+                                               get(fetch(vrefs)[2], vid, nothing))
 
             end
         end

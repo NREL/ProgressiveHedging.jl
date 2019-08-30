@@ -34,13 +34,17 @@ function build_scenario_tree(root_model::StructJuMP.StructuredModel)::ScenarioTr
 end
 
 function add_variables_extensive(model::Future,
-                                 var_map::Dict{VariableID, VariableInfo},
+                                 var_map::Dict{ScenarioID,
+                                               Dict{VariableID, VariableInfo}},
                                  scen_tree::ScenarioTree,
                                  var_translator::Dict{NodeID,Dict{Int,Index}},
                                  sj_model::StructJuMP.StructuredModel,
                                  last_used::Index)::typeof(DUMMY_SCENARIO_ID)
     idx = last_used
     scid = DUMMY_SCENARIO_ID
+    if !haskey(var_map, scid)
+        var_map[scid] = Dict{VariableID, VariableInfo}()
+    end
 
     for (id, var) in sj_model.variables
         vi = var.info
@@ -61,7 +65,7 @@ function add_variables_extensive(model::Future,
 
         idx = _increment(idx)
         node = translate(scen_tree, sj_model)
-        ph_vid = VariableID(scid, node.stage, idx)
+        ph_vid = VariableID(node.stage, idx)
 
         name = sj_model.varnames[id]
         var_translator[node.id][id] = idx
@@ -72,7 +76,7 @@ function add_variables_extensive(model::Future,
                                          JuMP.build_variable(_error, info),
                                          name)
                        )
-        var_map[ph_vid] = VariableInfo(ref, name, node.id)
+        var_map[scid][ph_vid] = VariableInfo(ref, name, node.id)
     end
 
     return scid
@@ -87,7 +91,7 @@ function build_extensive_form(root_model::StructJuMP.StructuredModel,
     obj = JuMP.GenericAffExpr{Float64, JuMP.variable_type(fetch(model))}()
 
     last_used = Index(0)
-    var_map = Dict{VariableID, VariableInfo}()
+    var_map = Dict{ScenarioID, Dict{VariableID, VariableInfo}}()
     var_translator = Dict{NodeID, Dict{Int,Index}}()
 
     while !isempty(sj_models)
@@ -144,7 +148,7 @@ end
 
 function add_variables(submodels::Dict{ScenarioID, Future},
                        scen_proc_map::Dict{ScenarioID, Int},
-                       var_map::Dict{VariableID, VariableInfo},
+                       var_map::Dict{ScenarioID, Dict{VariableID, VariableInfo}},
                        var_translator::Dict{NodeID, Dict{Int,Index}},
                        node::ScenarioNode,
                        sj_model::StructJuMP.StructuredModel)::Nothing
@@ -172,15 +176,18 @@ function add_variables(submodels::Dict{ScenarioID, Future},
         vdict[id] = idx
 
         @sync for s in node.scenario_bundle
-            model = submodels[s]
-            proc = scen_proc_map[s]
+            if !haskey(var_map, s)
+                var_map[s] = Dict{VariableID, VariableInfo}()
+            end
 
-            ph_vid = VariableID(s, node.stage, idx)
+            model = submodels[s]
             
-            ref = @spawnat(proc,
+            ref = @spawnat(scen_proc_map[s],
                            JuMP.add_variable(fetch(model),
                                              JuMP.build_variable(_error, info)))
-            var_map[ph_vid] = VariableInfo(ref, name, node.id)
+
+            ph_vid = VariableID(node.stage, idx)
+            var_map[s][ph_vid] = VariableInfo(ref, name, node.id)
         end
     end
     
@@ -193,11 +200,13 @@ function translate_variable_ref(sj_ref::StructJuMP.StructuredVariableRef,
                                 scen_tree::ScenarioTree,
                                 var_node_trans::Dict{NodeID,Dict{Int,Index}},
                                 scen::ScenarioID,
-                                var_map::Dict{VariableID, VariableInfo})
+                                var_map::Dict{ScenarioID,
+                                              Dict{VariableID, VariableInfo}}
+                                )
     node = translate(scen_tree, sj_ref.model)
     vtrans = var_node_trans[node.id]
-    vid = VariableID(scen, node.stage, vtrans[sj_ref.idx])
-    return var_map[vid].ref
+    vid = VariableID(node.stage, vtrans[sj_ref.idx])
+    return var_map[scen][vid].ref
 end
 
 function convert_expression(model::Future,
@@ -206,7 +215,8 @@ function convert_expression(model::Future,
                             vtrans::Dict{NodeID,Dict{Int,Index}},
                             scen::ScenarioID,
                             proc::Int,
-                            var_map::Dict{VariableID, VariableInfo})
+                            var_map::Dict{ScenarioID, Dict{VariableID, VariableInfo}}
+                            )
 
     V = @spawnat(proc, JuMP.variable_type(fetch(model)))
     new_expr = @spawnat(proc, JuMP.GenericAffExpr{Float64, fetch(V)}())
@@ -229,7 +239,8 @@ function convert_expression(model::Future,
                             vtrans::Dict{NodeID,Dict{Int, Index}},
                             scen::ScenarioID,
                             proc::Int,
-                            var_map::Dict{VariableID, VariableInfo})
+                            var_map::Dict{ScenarioID, Dict{VariableID, VariableInfo}}
+                            )
 
     V = @spawnat(proc, JuMP.variable_type(fetch(model)))
     new_expr = @spawnat(proc, JuMP.GenericQuadExpr{Float64, fetch(V)}())
@@ -266,7 +277,7 @@ function convert_expression(model::Future,
                             vtrans::Dict{NodeID,Dict{Int,Index}},
                             scen::ScenarioID,
                             proc::Int,
-                            var_map::Dict{VariableID, VariableInfo}
+                            var_map::Dict{ScenarioID, Dict{VariableID, VariableInfo}}
                             ) where {V <: JuMP.AbstractVariableRef,
                                      S <: JuMP.AbstractJuMPScalar}
     @error("Unrecognized expression type: " * string(S))
@@ -296,7 +307,7 @@ end
 function copy_constraints(model::Future, sj_model::StructJuMP.StructuredModel,
                           scen_tree::ScenarioTree,
                           var_translator::Dict{NodeID, Dict{Int,Index}},
-                          var_map::Dict{VariableID, VariableInfo},
+                          var_map::Dict{ScenarioID, Dict{VariableID, VariableInfo}},
                           scen::ScenarioID,
                           proc::Int)
 
@@ -318,7 +329,7 @@ function add_constraints(submodels::Dict{ScenarioID, Future},
                          scen_tree::ScenarioTree,
                          scen_proc_map::Dict{ScenarioID, Int},
                          var_translator::Dict{NodeID, Dict{Int, Index}},
-                         var_map::Dict{VariableID, VariableInfo})
+                         var_map::Dict{ScenarioID, Dict{VariableID, VariableInfo}})
 
     @sync for s in node.scenario_bundle
         model = submodels[s]
@@ -336,7 +347,7 @@ function add_objectives(submodels::Dict{ScenarioID,Future},
                         scen_tree::ScenarioTree,
                         scen_proc_map::Dict{ScenarioID, Int},
                         var_translator::Dict{NodeID, Dict{Int,Index}},
-                        var_map::Dict{VariableID, VariableInfo})
+                        var_map::Dict{ScenarioID, Dict{VariableID, VariableInfo}})
     
     @sync for s in node.scenario_bundle
         model = submodels[s]
@@ -361,7 +372,7 @@ function add_objectives(submodels::Dict{ScenarioID,Future},
 end
 
 function add_attributes(submodels::Dict{ScenarioID, Future},
-                        var_map::Dict{VariableID, VariableInfo},
+                        var_map::Dict{ScenarioID, Dict{VariableID, VariableInfo}},
                         sj_model::StructJuMP.StructuredModel,
                         node::ScenarioNode,
                         scen_tree::ScenarioTree,
@@ -387,7 +398,8 @@ function convert_to_submodels(root_model::StructJuMP.StructuredModel,
     scen_proc_map = assign_scenarios_to_procs(scen_tree)
     submodels = create_submodels(scen_tree, scen_proc_map, opt_factory, M)
     
-    var_map = Dict{VariableID, VariableInfo}()
+    var_map = Dict{ScenarioID, Dict{VariableID,VariableInfo}}(
+        scid => Dict{VariableID,VariableInfo}() for scid in scenarios(scen_tree))
     var_translator = Dict{NodeID, Dict{Int,Index}}()
 
     sj_models = [root_model]
@@ -423,7 +435,7 @@ function initialize(root_model::StructJuMP.StructuredModel, r::R,
                      submodels, var_map)
 
     println("Computing start points...")
-    @time compute_start_points(ph_data)
+    @time solve_subproblems(ph_data)
     println("Initializing PH variables...")
     @time update_ph_variables(ph_data)
     println("Adding PH terms to objectives...")
