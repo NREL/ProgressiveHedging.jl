@@ -31,11 +31,10 @@ function collect_variable_refs(scen_tree::ScenarioTree,
                                variable_dict::Dict{SCENARIO_ID,Vector{String}},
                                ) where {M <: JuMP.AbstractModel}
 
-    var_map = Dict{ScenarioID,
-                   Dict{VariableID,VariableInfo}
-                   }(scid =>
-                     Dict{VariableID,VariableInfo}()
-                     for scid in scenarios(scen_tree))
+    var_map = Dict{ScenarioID, Dict{VariableID,VariableInfo}}()
+    for scid in scenarios(scen_tree)
+        var_map[scid] = Dict{VariableID, VariableInfo}()
+    end
 
     @sync for (nid, node) in pairs(scen_tree.tree_map)
 

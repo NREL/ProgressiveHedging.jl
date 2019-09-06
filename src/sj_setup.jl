@@ -398,8 +398,11 @@ function convert_to_submodels(root_model::StructJuMP.StructuredModel,
     scen_proc_map = assign_scenarios_to_procs(scen_tree)
     submodels = create_submodels(scen_tree, scen_proc_map, opt_factory, M)
     
-    var_map = Dict{ScenarioID, Dict{VariableID,VariableInfo}}(
-        scid => Dict{VariableID,VariableInfo}() for scid in scenarios(scen_tree))
+    var_map = Dict{ScenarioID, Dict{VariableID,VariableInfo}}()
+    for scid in scenarios(scen_tree)
+        var_map[scid] = Dict{VariableID, VariableInfo}()
+    end
+
     var_translator = Dict{NodeID, Dict{Int,Index}}()
 
     sj_models = [root_model]
