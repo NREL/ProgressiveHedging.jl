@@ -1,16 +1,4 @@
 
-# struct ModelInfo{K}
-#     id::String
-#     stage::Int
-#     scen_bundle::Set{K}
-# end
-
-# struct PHInitInfo{K}
-#     scenarios::Set{K}
-#     leaves::Dict{K,StructJuMP.StructuredModel}
-#     node_map::Dict{StructJuMP.StructuredModel, ModelInfo{K}}
-# end
-
 const NODE_ID = Int
 const SCENARIO_ID = Int
 const STAGE_ID = Int
@@ -69,16 +57,31 @@ function _generate_scenario_id(gen::Generator)::ScenarioID
 end
 
 struct VariableID
-    scenario::ScenarioID # scenario to which this variable belongs
+    # scenario::ScenarioID # scenario to which this variable belongs
     stage::StageID # stage to which this variable belongs
     index::Index # coordinate in vector
 end
 
 function Base.isless(a::VariableID, b::VariableID)
     return (a.stage < b.stage ||
+            (a.stage == b.stage && a.index < b.index))
+end
+
+struct UniqueVariableID
+    scenario::ScenarioID # scenario to which this variable belongs
+    stage::StageID # stage to which this variable belongs
+    index::Index # coordinate in vector
+end
+
+function Base.isless(a::UniqueVariableID, b::UniqueVariableID)
+    return (a.stage < b.stage ||
             (a.stage == b.stage &&
              (a.scenario < b.scenario ||
               (a.scenario == b.scenario && a.index < b.index))))
+end
+
+function UniqueVariableID(s::ScenarioID, vid::VariableID)
+    return UniqueVariableID(s, vid.stage, vid.index)
 end
 
 struct XhatID
@@ -90,16 +93,6 @@ function Base.isless(a::XhatID, b::XhatID)
     return (a.node < b.node ||
             (a.node == b.node && a.index < b.index))
 end
-
-mutable struct VariableInfo
-    ref::Future
-    name::String
-    node_id::NodeID
-    value::Float64
-end
-
-VariableInfo(ref::Future, name::String, nid::NodeID) = VariableInfo(ref, name,
-                                                                    nid, 0.0)
 
 struct Translator{A,B}
     a_to_b::Dict{A,B}
@@ -270,6 +263,14 @@ end
 
 assign_scenario_id(tree::ScenarioTree)::ScenarioID = _generate_scenario_id(tree.id_gen)
 
+function scenario_bundle(node::ScenarioNode)::Set{ScenarioID}
+    return node.scenario_bundle
+end
+
+function scenario_bundle(tree::ScenarioTree, nid::NodeID)::Set{ScenarioID}
+    return scenario_bundle(tree.tree_map[nid])
+end
+
 scenarios(tree::ScenarioTree) = tree.root.scenario_bundle
 
 function translate(tree::ScenarioTree, sjm::StructJuMP.StructuredModel)
@@ -285,77 +286,137 @@ function translate(tree::ScenarioTree, nid::NodeID)
     return translate(tree, node)
 end
 
+mutable struct VariableInfo
+    ref::Future
+    name::String
+    node_id::NodeID
+    value::Float64
+end
+
+VariableInfo(ref::Future, name::String, nid::NodeID) = VariableInfo(ref, name,
+                                                                    nid, 0.0)
+
+mutable struct PHVariable
+    ref::Union{Future,Nothing}
+    value::Float64
+end
+
+PHVariable() = PHVariable(nothing, 0.0)
+
+mutable struct PHHatVariable
+    # scenarios::Set{ScenarioID}
+    value::Float64
+end
+
+# PHHatVariable() = PHHatVariable(Set{ScenarioID}(), 0.0)
+PHHatVariable() = PHHatVariable(0.0)
+
+struct ScenarioInfo
+    proc::Int
+    prob::Float64
+    model::Future
+    branch_map::Dict{VariableID, VariableInfo}
+    leaf_map::Dict{VariableID, VariableInfo}
+    W::Dict{VariableID, PHVariable}
+    Xhat::Dict{XhatID, PHVariable}
+end
+
+function ScenarioInfo(proc::Int, prob::Float64, submodel::Future,
+                      branch_map::Dict{VariableID, VariableInfo},
+                      leaf_map::Dict{VariableID, VariableInfo})
+
+    w_dict = Dict{VariableID, PHVariable}(vid => PHVariable()
+                                          for vid in keys(branch_map))
+
+    x_dict = Dict{XhatID, PHVariable}()
+    for (vid,vinfo) in pairs(branch_map)
+        x_dict[XhatID(vinfo.node_id, vid.index)] = PHVariable()
+    end
+
+    return ScenarioInfo(proc,
+                        prob,
+                        submodel,
+                        branch_map,
+                        leaf_map,
+                        w_dict,
+                        x_dict)
+end
+
+function retrieve_variable(sinfo::ScenarioInfo, vid::VariableID)::VariableInfo
+    if haskey(sinfo.branch_map, vid)
+        vi = sinfo.branch_map[vid]
+    else
+        vi = sinfo.leaf_map[vid]
+    end
+    return vi
+end
+
 struct PHData
     r::Float64
     scenario_tree::ScenarioTree
-    scen_proc_map::Dict{ScenarioID, Int}
-    probabilities::Dict{ScenarioID, Float64}
-    submodels::Dict{ScenarioID, Future}
-    variable_map::Dict{VariableID, VariableInfo}
-    W::Dict{VariableID, Float64}
-    W_ref::Dict{VariableID, Future}
-    Xhat::Dict{XhatID, Float64}
-    Xhat_ref::Dict{XhatID, Dict{ScenarioID, Future}}
+    scenario_map::Dict{ScenarioID, ScenarioInfo}
+    Xhat::Dict{XhatID, PHHatVariable}
 end
 
 function PHData(r::N, tree::ScenarioTree,
                 scen_proc_map::Dict{ScenarioID, Int},
                 probs::Dict{ScenarioID, Float64},
                 submodels::Dict{ScenarioID, Future},
-                var_map::Dict{VariableID, VariableInfo},
+                var_map::Dict{ScenarioID, Dict{VariableID, VariableInfo}},
                 ) where {N <: Number}
 
-    w_dict = Dict{VariableID, Float64}(vid => 0.0 for vid in keys(var_map))
-    xhat_dict = Dict{XhatID, Float64}()
+    xhat_dict = Dict{XhatID, PHHatVariable}()
 
-    for (nid, ninfo) in pairs(tree.tree_map)
-        for i in ninfo.variable_indices
-            xhat_id = XhatID(nid, i)
-            xhat_dict[xhat_id] = 0.0
+    scenario_map = Dict{ScenarioID, ScenarioInfo}()
+    for (scid, model) in pairs(submodels)
+
+        leaf_map = Dict{VariableID, VariableInfo}()
+        branch_map = Dict{VariableID, VariableInfo}()
+        for (vid, vinfo) in var_map[scid]
+
+            if is_leaf(tree, vinfo.node_id)
+                leaf_map[vid] = vinfo
+            else
+                branch_map[vid] = vinfo
+            end
+
+            xid = XhatID(vinfo.node_id, vid.index)
+            if !haskey(xhat_dict, xid)
+                xhat_dict[xid] = PHHatVariable()
+            end
         end
+
+        scenario_map[scid] = ScenarioInfo(scen_proc_map[scid],
+                                          probs[scid],
+                                          model,
+                                          branch_map,
+                                          leaf_map,
+                                          )
+
     end
 
     return PHData(float(r),
                   tree,
-                  scen_proc_map,
-                  probs,
-                  submodels,
-                  var_map,
-                  w_dict,
-                  Dict{VariableID, Future}(),
-                  xhat_dict,
-                  Dict{XhatID, Dict{ScenarioID, Future}}())
+                  scenario_map,
+                  xhat_dict)
 end
 
-function stage_id(xid::XhatID, phd::PHData)::StageID
+function stage_id(phd::PHData, xid::XhatID)::StageID
     return phd.scenario_tree.tree_map[xid.node].stage
 end
 
-function scenario_bundle(xid::XhatID, phd::PHData)::Set{ScenarioID}
-    return phd.scenario_tree.tree_map[xid.node].scenario_bundle
+function scenario_bundle(phd::PHData, xid::XhatID)::Set{ScenarioID}
+    return scenario_bundle(phd.scenario_tree, xid.node)
 end
 
-function convert_to_variable_set(xid::XhatID, phd::PHData)::Set{VariableID}
+function convert_to_variable_id(phd::PHData, xid::XhatID)
     idx = xid.index
-    stage = stage_id(xid, phd)
-    scens = scenario_bundle(xid, phd)
-    
-    vset = Set{VariableID}()
-    for s in scens
-        push!(vset, VariableID(s, stage, idx))
-    end
-    
-    return vset
+    stage = stage_id(phd, xid)
+    scen = first(scenario_bundle(phd, xid))
+    return (scen, VariableID(stage, idx))
 end
 
-function convert_to_variable_id(xid::XhatID, phd::PHData)::VariableID
-    idx = xid.index
-    stage = stage_id(xid, phd)
-    scen = first(scenario_bundle(xid, phd))
-    return VariableID(scen, stage, idx)
-end
-
-function convert_to_xhat_id(vid::VariableID, phd::PHData)::XhatID
-    nid = phd.variable_map[vid].node_id
-    return XhatID(nid, vid.index)
+function convert_to_xhat_id(phd::PHData, scid::ScenarioID, vid::VariableID)::XhatID
+    vinfo = retrieve_variable(phd.scenario_map[scid], vid)
+    return XhatID(vinfo.node_id, vid.index)
 end

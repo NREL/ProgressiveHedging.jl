@@ -31,7 +31,10 @@ function collect_variable_refs(scen_tree::ScenarioTree,
                                variable_dict::Dict{SCENARIO_ID,Vector{String}},
                                ) where {M <: JuMP.AbstractModel}
 
-    var_map = Dict{VariableID,VariableInfo}()
+    var_map = Dict{ScenarioID, Dict{VariableID,VariableInfo}}()
+    for scid in scenarios(scen_tree)
+        var_map[scid] = Dict{VariableID, VariableInfo}()
+    end
 
     @sync for (nid, node) in pairs(scen_tree.tree_map)
 
@@ -41,12 +44,14 @@ function collect_variable_refs(scen_tree::ScenarioTree,
             idx = next_index(node)
 
             for s in node.scenario_bundle
-                vid = VariableID(s, node.stage, idx)
+
+                vid = VariableID(node.stage, idx)
                 proc = scen_proc_map[s]
                 model = submodels[s]
 
                 ref = @spawnat(proc, JuMP.variable_by_name(fetch(model), var_name))
-                var_map[vid] = VariableInfo(ref, var_name, nid)
+                var_map[s][vid] = VariableInfo(ref, var_name, nid)
+
             end
         end
     end
@@ -68,18 +73,17 @@ function build_submodels(scen_tree::ScenarioTree,
 
     # Construct the models
     submodels = @time create_models(scen_tree,
-                              model_constructor,
-                              model_constructor_args,
-                              scen_proc_map,
-                              optimizer_factory,
-                              model_type;
-                              kwargs...)
-
+                                    model_constructor,
+                                    model_constructor_args,
+                                    scen_proc_map,
+                                    optimizer_factory,
+                                    model_type;
+                                    kwargs...)
     # Store variable references and other info
     var_map = @time collect_variable_refs(scen_tree,
                                     scen_proc_map,
                                     submodels,
-                                    variable_dict)
+                                          variable_dict)
 
     return (submodels, scen_proc_map, var_map)
 end
@@ -113,7 +117,7 @@ function initialize(scen_tree::ScenarioTree,
                      var_map)
 
     println("...computing starting values...")
-    @time compute_start_points(ph_data)
+    @time solve_subproblems(ph_data)
     println("...updating ph variables...")
     @time update_ph_variables(ph_data)
     println("...augmenting objectives...")

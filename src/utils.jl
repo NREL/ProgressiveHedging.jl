@@ -1,37 +1,54 @@
-function _fetch_variable_value(phd::PHData, scid::ScenarioID,
-                               vi::VariableInfo)::Float64
-    ref = vi.ref
-    return @fetchfrom(phd.scen_proc_map[scid], JuMP.value(fetch(ref)))
+function name(phd::PHData, scen::ScenarioID, vid::VariableID)::String
+    vinfo = retrieve_variable(phd.scenario_map[scen], vid)
+    return vinfo.name
 end
 
-function value(phd::PHData, vid::VariableID)::Float64
-    return phd.variable_map[vid].value
+function value(phd::PHData, scen::ScenarioID, vid::VariableID)::Float64
+    vinfo = retrieve_variable(phd.scenario_map[scen], vid)
+    return vinfo.value
 end
 
 function value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
-    vid = VariableID(scen, stage, idx)
-    return phd.variable_map[vid].value
+    vid = VariableID(stage, idx)
+    return value(phd, scen, vid)
 end
 
-function value(phd::PHData, xhat_id::XhatID)::Float64
-    return phd.Xhat[xhat_id]
+function branch_value(phd::PHData, scen::ScenarioID, vid::VariableID)::Float64
+    return phd.scenario_map[scen].branch_map[vid].value
 end
 
-function value(phd::PHData, node::NodeID, idx::Index)::Float64
-    xhatid = XhatID(node, idx)
-    return value(phd, xhatid)
+branch_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64 = branch_value(phd, scen, VariableID(stage, idx))
+
+function leaf_value(phd::PHData, scen::ScenarioID, vid::VariableID)::Float64
+    return phd.scenario_map[scen].leaf_map[vid].value
 end
 
-function w_value(phd::PHData, vid::VariableID)::Float64
-    return phd.W[vid]
+leaf_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64 = leaf_value(phd, scen, VariableID(stage, idx))
+
+
+function w_value(phd::PHData, scen::ScenarioID, vid::VariableID)::Float64
+    return phd.scenario_map[scen].W[vid].value
+end
+
+function w_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+    vid = VariableID(stage, idx)
+    return w_value(phd, scen, vid)
 end
 
 function xhat_value(phd::PHData, xhat_id::XhatID)::Float64
-    return phd.Xhat[xhat_id]
+    return phd.Xhat[xhat_id].value
 end
 
-function xhat_value(phd::PHData, vid::VariableID)::Float64
-    return xhat_value(phd, convert_to_xhat_id(vid, phd))
+function xhat_value(phd::PHData, scen::ScenarioID, vid::VariableID)::Float64
+    return xhat_value(phd, convert_to_xhat_id(phd, scen, vid))
+end
+
+function xhat_value(phd::PHData, scen::ScenarioID,
+                    stage::StageID, idx::Index)::Float64
+    return xhat_value(phd,
+                      convert_to_xhat_id(phd, scen,
+                                         VariableID(stage, idx))
+                      )
 end
 
 function stringify(set::Set{K})::String where K
@@ -57,12 +74,15 @@ function retrieve_soln(phd::PHData)::DataFrames.DataFrame
     stages = Vector{STAGE_ID}()
     scens = Vector{String}()
 
-    for xhat_id in sort!(collect(keys(phd.Xhat)))
-        var_id = convert_to_variable_id(xhat_id, phd)
-        push!(vars, phd.variable_map[var_id].name)
-        push!(vals, phd.Xhat[xhat_id])
-        push!(stages, _value(stage_id(xhat_id, phd)))
-        push!(scens, stringify(_value.(scenario_bundle(xhat_id, phd))))
+    for xid in sort!(collect(keys(phd.Xhat)))
+
+        scid, vid = convert_to_variable_id(phd, xid)
+
+        push!(vars, name(phd, scid, vid))
+        push!(vals, phd.Xhat[xid].value)
+        push!(stages, _value(stage_id(phd, xid)))
+        push!(scens, stringify(_value.(scenario_bundle(phd, xid))))
+
     end
 
     soln_df = DataFrames.DataFrame(variable=vars, value=vals, stage=stages,
@@ -73,27 +93,22 @@ end
 
 function retrieve_obj_value(phd::PHData)::Float64
 
-    # This is just the average of the various objective functions --
-    # includes the augmented terms
     obj_value = 0.0
-    for (scid, model) in pairs(phd.submodels)
-        obj = @spawnat(phd.scen_proc_map[scid], JuMP.objective_value(fetch(model)))
-        obj_value += phd.probabilities[scid] * fetch(obj)
-    end
+    for (scid, sinfo) in pairs(phd.scenario_map)
+        model = sinfo.model
+        obj = @spawnat(sinfo.proc, JuMP.objective_value(fetch(model)))
+        obj_value += sinfo.prob * fetch(obj)
 
-    # Remove extra terms
-    for (vid, var) in pairs(phd.variable_map)
+        # Remove PH terms
+        for (vid, var) in pairs(sinfo.branch_map)
+            x_val = var.value
+            w_val = sinfo.W[vid].value
+            xhat_val = xhat_value(phd, scid, vid)
+            p = sinfo.prob
+            r = phd.r
 
-        if is_leaf(phd.scenario_tree, var.node_id)
-            continue
+            obj_value -= p * (w_val * x_val + 0.5 * r * (x_val - xhat_val)^2)
         end
-
-        w_val = w_value(phd, vid)
-        xhat_val = xhat_value(phd, vid)
-        x_val = value(phd, vid)
-        p = phd.probabilities[vid.scenario]
-
-        obj_value -= p*(w_val * x_val + 0.5 * phd.r * (x_val - xhat_val)^2)
     end
 
     return obj_value
@@ -111,16 +126,21 @@ function retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
     stage = Vector{STAGE_ID}()
     scenario = Vector{SCENARIO_ID}()
     index = Vector{INDEX}()
-    
-    for vid in sort!(collect(keys(phd.variable_map)))
-        # ref = phd.variable_map[vid].ref
-        # val = @spawnat(phd.scen_proc_map[vid.scenario],
-        #                JuMP.value(fetch(ref)))
-        push!(vars, phd.variable_map[vid].name)
-        push!(vals, phd.variable_map[vid].value)
-        push!(stage, _value(vid.stage))
-        push!(scenario, _value(vid.scenario))
-        push!(index, _value(vid.index))
+
+    variable_map = Dict{UniqueVariableID, VariableInfo}()
+    for (scid,sinfo) in phd.scenario_map
+        for (vid,vinfo) in merge(sinfo.branch_map, sinfo.leaf_map)
+            uvid = UniqueVariableID(scid, vid)
+            variable_map[uvid] = vinfo
+        end
+    end
+
+    for uvid in sort!(collect(keys(variable_map)))
+        push!(vars, variable_map[uvid].name)
+        push!(vals, variable_map[uvid].value)
+        push!(stage, _value(uvid.stage))
+        push!(scenario, _value(uvid.scenario))
+        push!(index, _value(uvid.index))
     end
 
     soln_df = DataFrames.DataFrame(variable=vars, value=vals, stage=stage,
@@ -136,20 +156,23 @@ function retrieve_w(phd::PHData)::DataFrames.DataFrame
     scenario = Vector{SCENARIO_ID}()
     index = Vector{INDEX}()
 
-    for vid in sort!(collect(keys(phd.W)))
-
-        if is_leaf(phd.scenario_tree, phd.variable_map[vid].node_id)
-            continue
+    variable_map = Dict{UniqueVariableID, PHVariable}()
+    for (scid,sinfo) in phd.scenario_map
+        for (vid,w_var) in sinfo.W
+            uvid = UniqueVariableID(scid, vid)
+            variable_map[uvid] = w_var
         end
+    end
 
-        wref = phd.W_ref[vid]
-        proc = phd.scen_proc_map[vid.scenario]
-        push!(vars, "W_" * phd.variable_map[vid].name)
+    for uvid in sort!(collect(keys(variable_map)))
 
-        push!(vals, phd.W[vid])
-        push!(stage, _value(vid.stage))
-        push!(scenario, _value(vid.scenario))
-        push!(index, _value(vid.index))
+        vid = VariableID(uvid.stage, uvid.index)
+        push!(vars, "W_" * phd.scenario_map[uvid.scenario].branch_map[vid].name)
+        push!(vals, variable_map[uvid].value)
+        push!(stage, _value(uvid.stage))
+        push!(scenario, _value(uvid.scenario))
+        push!(index, _value(uvid.index))
+
     end
 
     soln_df = DataFrames.DataFrame(variable=vars, value=vals, stage=stage,
