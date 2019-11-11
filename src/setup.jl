@@ -37,23 +37,13 @@ end
 #     return
 # end
 
-function get_objective_as_quadratic(model::M) where M <: JuMP.AbstractModel
-    model_obj = JuMP.objective_function(model)
-    if typeof(model_obj) <: JuMP.GenericQuadExpr
-        obj = model_obj
-    else
-        obj = zero(JuMP.GenericQuadExpr{Float64, JuMP.variable_type(model)})
-        JuMP.add_to_expression!(obj, model_obj)
-    end
-    return obj
-end
-
-function augment_objective_w(model::M,
-                             var_dict::Dict{VariableID,VariableInfo},
-                             ) where M <: JuMP.AbstractModel
+function _augment_objective_w(obj::JuMP.GenericQuadExpr{Float64,V},
+                              model::M,
+                              var_dict::Dict{VariableID,VariableInfo},
+                              ) where {V <: JuMP.AbstractVariableRef,
+                                       M <: JuMP.AbstractModel}
 
     w_dict = Dict{VariableID,JuMP.variable_type(model)}()
-    obj = get_objective_as_quadratic(model)
     jvi = JuMP.VariableInfo(false, NaN,   # lower_bound
                             false, NaN,   # upper_bound
                             true, 0.0,    # fixed
@@ -67,20 +57,19 @@ function augment_objective_w(model::M,
         x_ref = fetch(vinfo.ref)
         JuMP.add_to_expression!(obj, w_ref*x_ref)
     end
-
-    JuMP.set_objective_function(model, obj)
     
     return w_dict
 end
 
-function augment_objective_xhat(model::M,
-                                r::R,
-                                var_dict::Dict{VariableID,VariableInfo},
-                                ) where {M <: JuMP.AbstractModel,
-                                         R <: Real}
+function _augment_objective_xhat(obj::JuMP.GenericQuadExpr{Float64,V},
+                                 model::M,
+                                 r::R,
+                                 var_dict::Dict{VariableID,VariableInfo},
+                                 ) where {V <: JuMP.AbstractVariableRef,
+                                          M <: JuMP.AbstractModel,
+                                          R <: Real}
 
     xhat_dict = Dict{VariableID,JuMP.variable_type(model)}()
-    obj = get_objective_as_quadratic(model)
     jvi = JuMP.VariableInfo(false, NaN,   # lower_bound
                             false, NaN,   # upper_bound
                             true, 0.0,    # fixed
@@ -95,18 +84,24 @@ function augment_objective_xhat(model::M,
         JuMP.add_to_expression!(obj, 0.5 * r * (x_ref - xhat_ref)^2)
     end
 
-    JuMP.set_objective_function(model, obj)
-    
     return xhat_dict
 end
 
-function augment_objective(model::M,
+function _augment_objective(model::M,
                            r::R,
                            var_dict::Dict{VariableID,VariableInfo}
                            ) where {M <: JuMP.AbstractModel,
                                     R <: Real}
-    w_refs = augment_objective_w(model, var_dict)
-    xhat_refs = augment_objective_xhat(model, r, var_dict)
+    obj = JuMP.objective_function(model,
+                                  JuMP.GenericQuadExpr{Float64,
+                                                       JuMP.variable_type(model)})
+    JuMP.set_objective_function(model, 0.0)
+
+    w_refs = _augment_objective_w(obj, model, var_dict)
+    xhat_refs = _augment_objective_xhat(obj, model, r, var_dict)
+
+    JuMP.set_objective_function(model, obj)
+
     return (w_refs, xhat_refs)
 end
 
@@ -121,9 +116,9 @@ function order_augment(phd::PHData)::Dict{ScenarioID,Future}
         var_map = sinfo.branch_map
 
         ref_map[scid] = @spawnat(sinfo.proc,
-                                 augment_objective(fetch(model),
-                                                   r,
-                                                   var_map))
+                                 _augment_objective(fetch(model),
+                                                    r,
+                                                    var_map))
     end
 
     return ref_map
