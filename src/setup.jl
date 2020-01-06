@@ -158,10 +158,10 @@ end
 function augment_objectives(phd::PHData)::Nothing
 
     # Tell the processes to augment their objective functions
-    ref_map = @time order_augment(phd)
+    ref_map = @timeit(phd.time_info, "Add penalty term", order_augment(phd))
 
     # Retrieve references for all the new PH variables
-    @time retrieve_ph_refs(phd, ref_map)
+    @timeit(phd.time_info, "Retrieve variable references", retrieve_ph_refs(phd, ref_map))
 
     return
 end

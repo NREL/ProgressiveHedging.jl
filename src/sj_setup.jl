@@ -420,29 +420,43 @@ function convert_to_submodels(root_model::StructJuMP.StructuredModel,
     return (submodels, scen_proc_map, var_map)
 end
 
-function initialize(root_model::StructJuMP.StructuredModel, r::R,
-                    optimizer_factory::JuMP.OptimizerFactory, ::Type{M}
+function initialize(root_model::StructJuMP.StructuredModel,
+                    r::R,
+                    optimizer_factory::JuMP.OptimizerFactory,
+                    ::Type{M},
+                    timo::TimerOutputs.TimerOutput,
+                    report::Bool
                     )::PHData where {R <: Real, M <: JuMP.AbstractModel}
 
     println("Building scenario tree...")
-    scen_tree = @time build_scenario_tree(root_model)
+    scen_tree = @timeit(timo, "Build scenario tree",
+                        build_scenario_tree(root_model))
 
     println("Constructing submodels...")
     (submodels, scen_proc_map, var_map
-     ) = @time convert_to_submodels(root_model,
-                              optimizer_factory,
-                              scen_tree,
-                              M)
+     ) = @timeit(timo, "Submodel construction",
+                 convert_to_submodels(root_model,
+                                      optimizer_factory,
+                                      scen_tree,
+                                      M))
 
     ph_data = PHData(r, scen_tree, scen_proc_map, scen_tree.prob_map,
-                     submodels, var_map)
+                     submodels, var_map, timo)
 
-    println("Computing start points...")
-    @time solve_subproblems(ph_data)
-    println("Initializing PH variables...")
-    @time update_ph_variables(ph_data)
-    println("Adding PH terms to objectives...")
-    @time augment_objectives(ph_data)
+    if report
+        println("...computing start points...")
+    end
+    @timeit(timo, "Compute start values", solve_subproblems(ph_data))
+
+    if report
+        println("...initializing PH variables...")
+    end
+    @timeit(timo, "Initialize PH variables", update_ph_variables(ph_data))
+
+    if report
+        println("...augmenting objectives...")
+    end
+    @timeit(timo, "Augment objectives", augment_objectives(ph_data))
 
     return ph_data
 end

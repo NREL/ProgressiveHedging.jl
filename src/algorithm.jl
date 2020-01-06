@@ -253,37 +253,35 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
 
         # Setting start values causes issues with some solvers
         # set_start_values(ph_data)
-        println("...fixing PH variables...")
-        @time fix_ph_variables(ph_data)
+        @timeit(ph_data.time_info, "Fix PH variables",
+                fix_ph_variables(ph_data))
 
-        println("...solving subproblems...")
-        @time solve_subproblems(ph_data)
+        @timeit(ph_data.time_info, "Solve subproblems",
+                solve_subproblems(ph_data))
 
         # Update xhat and w
-        println("...updating ph variables...")
-        xhat_residual = @time update_ph_variables(ph_data)
+        xhat_residual = @timeit(ph_data.time_info, "Update PH Vars",
+                                update_ph_variables(ph_data))
 
         # Update stopping criteria -- xhat_residual measures the movement of
         # xhat values from k^th iteration to the (k+1)^th iteration while
         # x_residual measures the disagreement between the x variables and
         # its corresponding xhat variable (so lack of consensus amongst the
         # subproblems or violation of the nonanticipativity constraint)
-        println("...computing residual...")
-        x_residual = @time compute_x_residual(ph_data)
+        x_residual = @timeit(ph_data.time_info, "Compute residual",
+                             compute_x_residual(ph_data))
         residual = sqrt(xhat_residual + x_residual)
         
         niter += 1
 
         if report && niter % report_interval == 0 && niter != max_iter
-            # retrieve_values(ph_data, true)
-            # obj = retrieve_obj_value(ph_data)
-            # println("Iter: $niter   Xhat_res^2: $xhat_residual   X_res^2: $x_residual    Obj: $obj")
             println("Iter: $niter   Xhat_res^2: $xhat_residual   X_res^2: $x_residual")
         end
+
     end
 
-    println("...updating leaf PH variables...")
-    @time update_ph_leaf_variables(ph_data)
+    @timeit(ph_data.time_info, "Update PH leaf variables",
+            update_ph_leaf_variables(ph_data))
 
     if niter >= max_iter
         @warn("Performed $niter iterations without convergence. " *

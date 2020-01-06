@@ -64,7 +64,8 @@ function build_submodels(scen_tree::ScenarioTree,
                          model_constructor_args::Tuple,
                          variable_dict::Dict{SCENARIO_ID,Vector{String}},
                          optimizer_factory::JuMP.OptimizerFactory,
-                         model_type::Type{M};
+                         model_type::Type{M},
+                         timo::TimerOutputs.TimerOutput;
                          kwargs...
                          ) where {M <: JuMP.AbstractModel}
 
@@ -72,18 +73,22 @@ function build_submodels(scen_tree::ScenarioTree,
     scen_proc_map = assign_scenarios_to_procs(scen_tree)
 
     # Construct the models
-    submodels = @time create_models(scen_tree,
-                                    model_constructor,
-                                    model_constructor_args,
-                                    scen_proc_map,
-                                    optimizer_factory,
-                                    model_type;
-                                    kwargs...)
+    submodels = @timeit(timo, "Create models",
+                        create_models(scen_tree,
+                                      model_constructor,
+                                      model_constructor_args,
+                                      scen_proc_map,
+                                      optimizer_factory,
+                                      model_type;
+                                      kwargs...)
+                        )
     # Store variable references and other info
-    var_map = @time collect_variable_refs(scen_tree,
-                                    scen_proc_map,
-                                    submodels,
-                                          variable_dict)
+    var_map = @timeit(timo, "Collect variables",
+                      collect_variable_refs(scen_tree,
+                                            scen_proc_map,
+                                            submodels,
+                                            variable_dict)
+                      )
 
     return (submodels, scen_proc_map, var_map)
 end
@@ -94,6 +99,8 @@ function initialize(scen_tree::ScenarioTree,
                     r::R,
                     optimizer_factory::JuMP.OptimizerFactory,
                     model_type::Type{M},
+                    timo::TimerOutputs.TimerOutput,
+                    report::Bool,
                     constructor_args::Tuple;
                     kwargs...
                     )::PHData where {S <: AbstractString,
@@ -101,27 +108,40 @@ function initialize(scen_tree::ScenarioTree,
                                      M <: JuMP.AbstractModel}
 
     println("...building submodels...")
-    (submodels, scen_proc_map, var_map) = @time build_submodels(scen_tree,
-                                                          model_constructor,
-                                                          constructor_args,
-                                                          variable_dict,
-                                                          optimizer_factory,
-                                                          M;
-                                                          kwargs...)
+    (submodels, scen_proc_map, var_map
+     ) = @timeit(timo, "Submodel construction",
+                 build_submodels(scen_tree,
+                                 model_constructor,
+                                 constructor_args,
+                                 variable_dict,
+                                 optimizer_factory,
+                                 M,
+                                 timo;
+                                 kwargs...)
+                 )
 
     ph_data = PHData(r,
                      scen_tree,
                      scen_proc_map,
                      scen_tree.prob_map,
                      submodels,
-                     var_map)
+                     var_map,
+                     timo)
 
-    println("...computing starting values...")
-    @time solve_subproblems(ph_data)
-    println("...updating ph variables...")
-    @time update_ph_variables(ph_data)
-    println("...augmenting objectives...")
-    @time augment_objectives(ph_data)
+    if report
+        println("...computing starting values...")
+    end
+    @timeit(timo, "Compute start values", solve_subproblems(ph_data))
+
+    if report
+        println("...updating ph variables...")
+    end
+    @timeit(timo, "Initialize PH variables", update_ph_variables(ph_data))
+
+    if report
+        println("...augmenting objectives...")
+    end
+    @timeit(timo, "Augment objectives", augment_objectives(ph_data))
     
     return ph_data
 end

@@ -4,6 +4,8 @@ import JuMP
 import StructJuMP
 import DataFrames
 
+using TimerOutputs
+
 import MathOptInterface
 const MOI = MathOptInterface
 
@@ -25,23 +27,41 @@ include("setup.jl")
 function solve(root_model::StructJuMP.StructuredModel,
                optimizer_factory::JuMP.OptimizerFactory,
                r::T; model_type::Type{M}=JuMP.Model, max_iter=100, atol=1e-8,
-               report=false
+               report=false, timing=true
                ) where {T <: Real, M <: JuMP.AbstractModel}
     # Initialization
-    println("Initializing...")
-    ph_data = @time initialize(root_model, r, optimizer_factory, M)
-    println("Done.")
+    timo = TimerOutputs.TimerOutput()
+
+    if report
+        println("Initializing...")
+    end
+
+    ph_data = @timeit(timo, "Initialization",
+                      initialize(root_model, r,
+                                 optimizer_factory, M,
+                                 timo, report)
+                      )
 
     # Solution
-    println("Solving...")
-    (niter, residual) = @time hedge(ph_data, max_iter, atol, report)
-    println("Done.")
+    if report
+        println("Solving...")
+    end
+    (niter, residual) = @timeit(timo, "Solution",
+                                hedge(ph_data, max_iter, atol, report)
+                                )
 
     # Post Processing
+    if report
+        println("Done.")
+    end
+
     soln_df = retrieve_soln(ph_data)
     obj = retrieve_obj_value(ph_data)
 
-    # return (niter, residual, soln_df, cost_dict, ph_data)
+    if timing
+        println(timo)
+    end
+
     return (niter, residual, obj, soln_df, ph_data)
 end
 
@@ -54,29 +74,46 @@ function solve(tree::ScenarioTree,
                model_type::Type{M}=JuMP.Model,
                max_iter=100,
                atol=1e-8,
-               report=false,
+               report=false, timing=true,
                args::Tuple=(), kwargs...
                ) where {S <: AbstractString, T <: Real, M <: JuMP.AbstractModel}
+    timo = TimerOutputs.TimerOutput()
+
     # Initialization
-    println("Initializing...")
-    ph_data = @time initialize(tree,
-                               model_constructor,
-                               variable_dict,
-                               r,
-                               optimizer_factory,
-                               M,
-                               Tuple([other_args...,args...]);
-                               kwargs...)
-    println("Done.")
+    if report
+        println("Initializing...")
+    end
+
+    ph_data = @timeit(timo, "Intialization",
+                      initialize(tree,
+                                 model_constructor,
+                                 variable_dict,
+                                 r,
+                                 optimizer_factory,
+                                 M,
+                                 timo,
+                                 report,
+                                 Tuple([other_args...,args...]);
+                                 kwargs...))
 
     # Solution
-    println("Solving...")
-    (niter, residual) = @time hedge(ph_data, max_iter, atol, report)
-    println("Done.")
+    if report
+        println("Solving...")
+    end
+    (niter, residual) = @timeit(timo, "Solution",
+                                hedge(ph_data, max_iter, atol, report))
 
     # Post Processing
+    if report
+        println("Done.")
+    end
+
     soln_df = retrieve_soln(ph_data)
     obj = retrieve_obj_value(ph_data)
+
+    if timing
+        println(timo)
+    end
 
     # return (niter, residual, soln_df, cost_dict, ph_data)
     return (niter, residual, obj, soln_df, ph_data)

@@ -356,6 +356,7 @@ struct PHData
     scenario_tree::ScenarioTree
     scenario_map::Dict{ScenarioID, ScenarioInfo}
     Xhat::Dict{XhatID, PHHatVariable}
+    time_info::TimerOutputs.TimerOutput
 end
 
 function PHData(r::N, tree::ScenarioTree,
@@ -363,6 +364,7 @@ function PHData(r::N, tree::ScenarioTree,
                 probs::Dict{ScenarioID, Float64},
                 submodels::Dict{ScenarioID, Future},
                 var_map::Dict{ScenarioID, Dict{VariableID, VariableInfo}},
+                time_out::TimerOutputs.TimerOutput
                 ) where {N <: Number}
 
     xhat_dict = Dict{XhatID, PHHatVariable}()
@@ -398,7 +400,8 @@ function PHData(r::N, tree::ScenarioTree,
     return PHData(float(r),
                   tree,
                   scenario_map,
-                  xhat_dict)
+                  xhat_dict,
+                  time_out)
 end
 
 function stage_id(phd::PHData, xid::XhatID)::StageID
