@@ -17,11 +17,10 @@ function build_scenario_tree(root_model::StructJuMP.StructuredModel)::ScenarioTr
             push!(sj_models, tuple(mod, prob * sjm.probability[id]))
         end
 
-        node = add_node(scen_tree, sjm)
+        node = _add_node(scen_tree, sjm)
 
         if isempty(sjm_children)
-            s = add_scenario(scen_tree, sjm)
-            scen_tree.prob_map[s] = prob
+            s = _create_scenario(scen_tree, sjm, prob)
         end
     end
 

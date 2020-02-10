@@ -215,7 +215,7 @@ function _add_node(tree::ScenarioTree, node::ScenarioNode)
     return
 end
 
-function add_node(tree::ScenarioTree, model::StructJuMP.StructuredModel)
+function _add_node(tree::ScenarioTree, model::StructJuMP.StructuredModel)
     parent_node = translate(tree, model.parent)
     new_node = _create_node(tree.id_gen, parent_node)
     add_pair(tree.sj_ph_translator, model, new_node)
@@ -229,39 +229,42 @@ function add_node(tree::ScenarioTree, parent::ScenarioNode)
     return new_node
 end
 
-function add_scenario(tree::ScenarioTree, nid::NodeID, scid::ScenarioID)
+function _add_scenario_to_bundle(tree::ScenarioTree, nid::NodeID, scid::ScenarioID)
     push!(tree.tree_map[nid].scenario_bundle, scid)
     return
 end
 
-function add_scenario(tree::ScenarioTree,
-                      leaf_model::StructJuMP.StructuredModel)
-    scid = assign_scenario_id(tree)
+function _create_scenario(tree::ScenarioTree,
+                         leaf_model::StructJuMP.StructuredModel,
+                         probability::R
+                         ) where {R <: Real}
+    scid = _assign_scenario_id(tree)
+    tree.prob_map[scid] = probability
     model = leaf_model
     while model != nothing
         nid = translate(tree, model).id
-        add_scenario(tree, nid, scid)
+        _add_scenario_to_bundle(tree, nid, scid)
         model = StructJuMP.getparent(model)
     end
     return scid
 end
 
-function add_leaf(tree::ScenarioTree, parent::ScenarioNode, probability::Real
+function add_leaf(tree::ScenarioTree, parent::ScenarioNode, probability::R
                   ) where R <: Real
     leaf = add_node(tree, parent)
-    scid = assign_scenario_id(tree)
+    scid = _assign_scenario_id(tree)
     tree.prob_map[scid] = probability
 
     node = leaf
     while node != nothing
         id = node.id
-        add_scenario(tree, id, scid)
+        _add_scenario_to_bundle(tree, id, scid)
         node = node.parent
     end
     return scid
 end
 
-assign_scenario_id(tree::ScenarioTree)::ScenarioID = _generate_scenario_id(tree.id_gen)
+_assign_scenario_id(tree::ScenarioTree)::ScenarioID = _generate_scenario_id(tree.id_gen)
 
 function scenario_bundle(node::ScenarioNode)::Set{ScenarioID}
     return node.scenario_bundle
