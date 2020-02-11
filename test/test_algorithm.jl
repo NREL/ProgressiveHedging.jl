@@ -107,7 +107,11 @@ end
                                         report=false,
                                         timing=false)
 
-     for row in eachrow(soln)
+    @test err < atol
+    @test isapprox(obj, obj_val)
+    @test n < max_iter
+
+    for row in eachrow(soln)
 
         var = row[:variable]
 
