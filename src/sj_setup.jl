@@ -427,17 +427,25 @@ function initialize(root_model::StructJuMP.StructuredModel,
                     report::Bool
                     )::PHData where {R <: Real, M <: JuMP.AbstractModel}
 
-    println("Building scenario tree...")
+    if report
+        println("Building scenario tree...")
+    end
+
     scen_tree = @timeit(timo, "Build scenario tree",
                         build_scenario_tree(root_model))
 
-    println("Constructing submodels...")
+    if report
+        println("Constructing submodels...")
+    end
+
     (submodels, scen_proc_map, var_map
      ) = @timeit(timo, "Submodel construction",
                  convert_to_submodels(root_model,
                                       optimizer_factory,
                                       scen_tree,
-                                      M))
+                                      M
+                                      )
+                 )
 
     ph_data = PHData(r, scen_tree, scen_proc_map, scen_tree.prob_map,
                      submodels, var_map, timo)

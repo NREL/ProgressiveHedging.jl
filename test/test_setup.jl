@@ -93,7 +93,8 @@ end
     (smods, sp_map, v_map) = PH.convert_to_submodels(sjm,
                                                      optimizer(),
                                                      stree,
-                                                     JuMP.Model)
+                                                     JuMP.Model
+                                                     )
 
     for (scid, mfuture) in pairs(smods)
         model = fetch(mfuture)

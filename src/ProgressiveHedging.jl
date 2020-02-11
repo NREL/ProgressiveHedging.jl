@@ -26,7 +26,9 @@ include("setup.jl")
 
 function solve(root_model::StructJuMP.StructuredModel,
                optimizer_factory::JuMP.OptimizerFactory,
-               r::T; model_type::Type{M}=JuMP.Model, max_iter=100, atol=1e-8,
+               r::T;
+               model_type::Type{M}=JuMP.Model,
+               max_iter=100, atol=1e-8,
                report=false, timing=true
                ) where {T <: Real, M <: JuMP.AbstractModel}
     # Initialization
@@ -38,7 +40,8 @@ function solve(root_model::StructJuMP.StructuredModel,
 
     ph_data = @timeit(timo, "Initialization",
                       initialize(root_model, r,
-                                 optimizer_factory, M,
+                                 optimizer_factory,
+                                 M,
                                  timo, report)
                       )
 

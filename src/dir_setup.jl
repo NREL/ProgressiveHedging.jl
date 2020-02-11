@@ -107,7 +107,10 @@ function initialize(scen_tree::ScenarioTree,
                                      R <: Real,
                                      M <: JuMP.AbstractModel}
 
-    println("...building submodels...")
+    if report
+        println("...building submodels...")
+    end
+
     (submodels, scen_proc_map, var_map
      ) = @timeit(timo, "Submodel construction",
                  build_submodels(scen_tree,
