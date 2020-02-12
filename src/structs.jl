@@ -121,6 +121,9 @@ function translate(t::Translator{A,B}, b::B) where {A,B}
     return t.b_to_a[b]
 end
 
+"""
+Struct representing a node in a scenario tree.
+"""
 struct ScenarioNode
     id::NodeID # id of this node
     stage::StageID # stage of this node
@@ -156,6 +159,17 @@ end
 
 const SJPHTranslator = Translator{StructJuMP.StructuredModel, ScenarioNode}
 
+"""
+Struct representing the scenario structure of a stochastic program.
+
+Can be built up by the user using the functions `add_node` and `add_leaf`.
+
+**Constructor**
+
+ScenarioTree()
+
+Default constructor generates the root node of the tree. Can get the root node with `root`.
+"""
 struct ScenarioTree
     root::ScenarioNode
     tree_map::Dict{NodeID, ScenarioNode} # map from NodeID to tree node
@@ -192,6 +206,15 @@ function ScenarioTree()
     return st
 end
 
+"""
+    root(tree::ScenarioTree)
+
+Return the root node of the given ScenarioTree
+"""
+function root(tree::ScenarioTree)
+    return tree.root
+end
+
 function last_stage(tree::ScenarioTree)
     return maximum(keys(tree.stage_map))
 end
@@ -223,6 +246,11 @@ function _add_node(tree::ScenarioTree, model::StructJuMP.StructuredModel)
     return new_node
 end
 
+"""
+    add_node(tree::ScenarioTree, parent::ScenarioNode)
+
+Add a node to the ScenarioTree `tree` with parent node `parent`. Return the added node. If the node to add is a leaf, use `add_leaf` instead.
+"""
 function add_node(tree::ScenarioTree, parent::ScenarioNode)
     new_node = _create_node(tree.id_gen, parent)
     _add_node(tree, new_node)
@@ -248,7 +276,11 @@ function _create_scenario(tree::ScenarioTree,
     end
     return scid
 end
+"""
+    add_leaf(tree::ScenarioTree, parent::ScenarioNode, probability<:Real)
 
+Add a leaf to the ScenarioTree `tree` with parent node `parent`. The probability of this scenario occuring is given by `probability`. Returns the ScenarioID representing the scenario.
+"""
 function add_leaf(tree::ScenarioTree, parent::ScenarioNode, probability::R
                   ) where R <: Real
     leaf = add_node(tree, parent)
