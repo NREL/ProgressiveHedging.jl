@@ -109,6 +109,7 @@ function initialize(scen_tree::ScenarioTree,
 
     if report
         println("...building submodels...")
+        flush(stdout)
     end
 
     (submodels, scen_proc_map, var_map
@@ -133,16 +134,19 @@ function initialize(scen_tree::ScenarioTree,
 
     if report
         println("...computing starting values...")
+        flush(stdout)
     end
     @timeit(timo, "Compute start values", solve_subproblems(ph_data))
 
     if report
         println("...updating ph variables...")
+        flush(stdout)
     end
     @timeit(timo, "Initialize PH variables", update_ph_variables(ph_data))
 
     if report
         println("...augmenting objectives...")
+        flush(stdout)
     end
     @timeit(timo, "Augment objectives", augment_objectives(ph_data))
     

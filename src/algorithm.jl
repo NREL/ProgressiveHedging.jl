@@ -244,6 +244,7 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
     if report
         x_residual = compute_x_residual(ph_data)
         println("Iter: $niter   Err: $x_residual")
+        flush(stdout)
     end
     
     while niter < max_iter && residual > atol
@@ -276,6 +277,7 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
 
         if report && niter % report_interval == 0 && niter != max_iter
             println("Iter: $niter   Xhat_res^2: $xhat_residual   X_res^2: $x_residual")
+            flush(stdout)
         end
 
     end

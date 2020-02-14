@@ -429,6 +429,7 @@ function initialize(root_model::StructJuMP.StructuredModel,
 
     if report
         println("Building scenario tree...")
+        flush(stdout)
     end
 
     scen_tree = @timeit(timo, "Build scenario tree",
@@ -436,6 +437,7 @@ function initialize(root_model::StructJuMP.StructuredModel,
 
     if report
         println("Constructing submodels...")
+        flush(stdout)
     end
 
     (submodels, scen_proc_map, var_map
@@ -452,16 +454,19 @@ function initialize(root_model::StructJuMP.StructuredModel,
 
     if report
         println("...computing start points...")
+        flush(stdout)
     end
     @timeit(timo, "Compute start values", solve_subproblems(ph_data))
 
     if report
         println("...initializing PH variables...")
+        flush(stdout)
     end
     @timeit(timo, "Initialize PH variables", update_ph_variables(ph_data))
 
     if report
         println("...augmenting objectives...")
+        flush(stdout)
     end
     @timeit(timo, "Augment objectives", augment_objectives(ph_data))
 
