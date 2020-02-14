@@ -10,8 +10,10 @@ function variable_dict()
     return var_dict
 end
 
-@everywhere function create_model(scenario_id::Int, model::M
-        )::M where M <: JuMP.AbstractModel
+@everywhere function create_model(scenario_id::Int,
+                                  opt_factory::JuMP.OptimizerFactory)
+
+    model = JuMP.Model(opt_factory)
     
     c = [1.0, 10.0, 0.01]
     d = 7.0

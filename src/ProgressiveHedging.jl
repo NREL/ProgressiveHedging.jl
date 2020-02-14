@@ -53,7 +53,7 @@ Solve given problem using Progressive Hedging.
 
 * `root_model::StructJuMP.StructuredModel` : First stage model of the StructJuMP tree that describes the problem to be solved.
 * `tree::ScenararioTree` : Scenario tree describing the structure of the problem to be solved.
-* `model_constructor::Function` : User created function to construct a subproblem model.  Should accept an Int argument and return a model of type `model_type`.  Additional arguments may be passed with `other_args` or through `kwargs` (provided they don't collide with the keyword arguments for `solve`.
+* `model_constructor::Function` : User created function to construct a subproblem model.  Should accept an Int (a unique identifier for the scenario) and a `JuMP.OptimizerFactory` and return a model of type `model_type`.  Additional arguments may be passed with `other_args` or through `kwargs` (provided they don't collide with the keyword arguments for `solve`.
 * `variable_dict::Dict{Int,Vector{String}}` : Dictionary specifying the names of variables (value) in a given stage (key).
 * `optimizer_factory::JuMP.OptimizerFactory` : Optimizer to use to solve subproblems. See JuMP.OptimizerFactory and JuMP.with_optimizer for more details.
 * `r<:Real` : Parameter to use on quadratic penalty term.

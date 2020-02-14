@@ -1,3 +1,27 @@
+function _create_model(sint::Int,
+                       model_constructor::Function,
+                       optimizer_factory::JuMP.OptimizerFactory,
+                       model_constructor_args::Tuple,
+                       model_type::Type{M};
+                       kwargs...
+                       ) where {M <: JuMP.AbstractModel}
+
+    model = model_constructor(sint,
+                              optimizer_factory,
+                              model_constructor_args...;
+                              kwargs...)
+
+    if typeof(model) != model_type
+        @error("Model constructor function produced model of type " *
+               typeof(model) * ". " *
+               "Expected model of type $(model_type). " *
+               "Undefined behavior will probably result.")
+    end
+
+    return model
+end
+    
+
 function create_models(scen_tree::ScenarioTree,
                        model_constructor::Function,
                        model_constructor_args::Tuple,
@@ -13,11 +37,13 @@ function create_models(scen_tree::ScenarioTree,
         proc = scen_proc_map[s]
         sint = _value(s)
         submodels[s] = @spawnat(proc,
-                                model_constructor(sint,
-                                                  M(optimizer_factory),
-                                                  model_constructor_args...;
-                                                  kwargs...
-                                                  )
+                                _create_model(sint,
+                                              model_constructor,
+                                              optimizer_factory,
+                                              model_constructor_args,
+                                              model_type;
+                                              kwargs...
+                                              )
                                 )
     end
 
