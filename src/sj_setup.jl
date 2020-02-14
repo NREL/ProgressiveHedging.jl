@@ -137,7 +137,7 @@ function create_submodels(scen_tree::ScenarioTree,
                           )::Dict{ScenarioID,Future} where {M <: JuMP.AbstractModel}
 
     submodels = Dict{ScenarioID, Future}()
-    for s in scenarios(scen_tree)
+    @sync for s in scenarios(scen_tree)
         submodels[s] = @spawnat(scen_proc_map[s],
                                 M(opt_factory))
     end

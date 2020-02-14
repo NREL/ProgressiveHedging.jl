@@ -1,4 +1,6 @@
 
+using Pkg
+
 using ProgressiveHedging
 const PH = ProgressiveHedging
 
@@ -18,3 +20,4 @@ include("common.jl")
 
 include("test_setup.jl")
 include("test_algorithm.jl")
+include("test_distributed.jl")
