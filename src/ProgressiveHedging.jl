@@ -168,6 +168,25 @@ function solve(tree::ScenarioTree,
     return (niter, residual, obj, soln_df, ph_data)
 end
 
+"""
+    solve_extensive_form(root_model::StructJuMP.StructuredModel,
+                         optimizer_factory::JuMP.OptimizerFactory;
+                         model_type<:JuMP.AbstractModel=JuMP.Model,
+                         kwargs...)
+
+Build and solve the extensive form of the given stochastic program.
+
+**Arguments**
+
+* `root_model::StructJuMP.StructuredModel` : StructJuMP representation of the stochastic program
+* `optimizer_factory::JuMP.OptimizerFactory` : Optimizer to solve the extensive form problem with
+
+**Keyword Arguments**
+
+* `model_type<:JuMP.AbstractModel` : Type of model to use to build the extensive form
+* `kwargs` : Any keyword arguments that should be passed to `optimizer_factory`
+
+"""
 function solve_extensive_form(root_model::StructJuMP.StructuredModel,
                               optimizer_factory::JuMP.OptimizerFactory;
                               model_type::Type{M}=JuMP.Model, kwargs...
