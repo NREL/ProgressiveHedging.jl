@@ -236,14 +236,15 @@ function solve_subproblems(phd::PHData)::Nothing
     return
 end
 
-function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
+function hedge(ph_data::PHData, max_iter=100, atol=1e-8,
+               report=false, save_res=false)::Tuple{Int,Float64}
     niter = 0
     residual = atol + 1.0e10
     report_interval = Int(floor(max_iter / max_iter))
 
     if report
         x_residual = compute_x_residual(ph_data)
-        println("Iter: $niter   Err: $x_residual")
+        println("Iter: $(niter)   Res: $(x_residual)")
         flush(stdout)
     end
     
@@ -276,8 +277,12 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
         niter += 1
 
         if report && niter % report_interval == 0 && niter != max_iter
-            println("Iter: $niter   Xhat_res^2: $xhat_residual   X_res^2: $x_residual")
+            println("Iter: $(niter)    Res: $(residual)")
             flush(stdout)
+        end
+
+        if save_res
+            save_residual(ph_data, niter, residual)
         end
 
     end
@@ -285,7 +290,7 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8, report=false)
     @timeit(ph_data.time_info, "Update PH leaf variables",
             update_ph_leaf_variables(ph_data))
 
-    if niter >= max_iter
+    if niter >= max_iter && residual > atol
         @warn("Performed $niter iterations without convergence. " *
               "Consider increasing max_iter from $max_iter.")
     end

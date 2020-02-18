@@ -386,12 +386,36 @@ function retrieve_variable(sinfo::ScenarioInfo, vid::VariableID)::VariableInfo
     return vi
 end
 
+struct PHResidualHistory
+    residuals::Dict{Int,Float64}
+end
+
+function PHResidualHistory()
+    return PHResidualHistory(Dict{Int,Float64}())
+end
+
+function residual_vector(phrh::PHResidualHistory)::Vector{Float64}
+    if length(phrh.residuals) > 0
+        max_iter = maximum(keys(phrh.residuals))
+        return [phrh.residuals[k] for k in sort!(collect(keys(phrh.residuals)))]
+    else
+        return Vector{Float64}()
+    end
+end
+
+function save_residual(phrh::PHResidualHistory, iter::Int, res::Float64)::Nothing
+    @assert(!(iter in keys(phrh.residuals)))
+    phrh.residuals[iter] = res
+    return
+end
+
 struct PHData
     r::Float64
     scenario_tree::ScenarioTree
     scenario_map::Dict{ScenarioID, ScenarioInfo}
     Xhat::Dict{XhatID, PHHatVariable}
     time_info::TimerOutputs.TimerOutput
+    residual_info::PHResidualHistory
 end
 
 function PHData(r::N, tree::ScenarioTree,
@@ -436,7 +460,18 @@ function PHData(r::N, tree::ScenarioTree,
                   tree,
                   scenario_map,
                   xhat_dict,
-                  time_out)
+                  time_out,
+                  PHResidualHistory(),
+                  )
+end
+
+function residuals(phd::PHData)::Vector{Float64}
+    return residual_vector(phd.residual_info)
+end
+
+function save_residual(phd::PHData, iter::Int, res::Float64)::Nothing
+    save_residual(phd.residual_info, iter, res)
+    return
 end
 
 function stage_id(phd::PHData, xid::XhatID)::StageID

@@ -34,10 +34,12 @@ end
     (n, err, obj, soln, phd) = PH.solve(sjm,
                                         optimizer(),
                                         r, atol=atol, max_iter=max_iter,
-                                        report=false, timing=false)
+                                        report=false, timing=false,
+                                        save_residuals=true)
     @test err < atol
     @test isapprox(obj, obj_val)
     @test n < max_iter
+    @test residuals(phd)[end] == err
     for row in eachrow(soln)
         @test isapprox(row[:value], var_vals[row[:variable]], atol=1e-7)
     end
@@ -53,10 +55,12 @@ end
                                         atol=atol,
                                         max_iter=max_iter,
                                         report=false,
-                                        timing=false)
+                                        timing=false,
+                                        save_residuals=false)
     @test err < atol
     @test isapprox(obj, obj_val)
     @test n < max_iter
+    @test length(residuals(phd)) == 0
     for row in eachrow(soln)
 
         var = row[:variable]

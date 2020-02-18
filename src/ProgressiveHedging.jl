@@ -11,7 +11,12 @@ const MOI = MathOptInterface
 
 using Distributed
 
-#export solve
+# Functions for solving the problem
+export solve, solve_extensive_form
+# Functions for building the scenario tree
+export add_node, add_leaf
+# Functions for interacting with the returned PHData struct
+export residuals, retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_w
 
 # TODO: Find a way to return the objective value for each scenario
 
@@ -31,6 +36,7 @@ include("setup.jl")
           max_iter::Int=100,
           atol::Float64=1e-8,
           report::Bool=false,
+          save_residuals::Bool=false,
           timing::Bool=true)
 
     solve(tree::ScenarioTree,
@@ -43,6 +49,7 @@ include("setup.jl")
           max_iter::Int=100,
           atol::Float64=1e-8,
           report::Bool=false,
+          save_residuals::Bool=false,
           timing::Bool=true,
           args::Tuple=(),
           kwargs...)
@@ -65,6 +72,7 @@ Solve given problem using Progressive Hedging.
 * `max_iter::Int` : Maximum number of iterations to perform before returning. Defaults to 100.
 * `atol::Float64` : Absolute error tolerance. If total disagreement amongst variables is less than this in the L^2 sense, then return. Defaults to 1e-8
 * `report::Bool` : Flag indicating whether or not to report information while running. Defaults to false.
+* `save_residuals::Bool` : Flag indicating whether or not to save residuals from all iterations of the algorithm
 * `timing::Bool` : Flag indicating whether or not to record timing information. Defaults to true.
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
 * `kwargs` : Any keyword arguments not specified here that need to be passed to `model_constructor`.  See also `other_args` and `args`.
@@ -74,8 +82,11 @@ function solve(root_model::StructJuMP.StructuredModel,
                optimizer_factory::JuMP.OptimizerFactory,
                r::T;
                model_type::Type{M}=JuMP.Model,
-               max_iter::Int=100, atol::Float64=1e-8,
-               report::Bool=false, timing::Bool=true
+               max_iter::Int=100,
+               atol::Float64=1e-8,
+               report::Bool=false,
+               save_residuals::Bool=false,
+               timing::Bool=true
                ) where {T <: Real, M <: JuMP.AbstractModel}
     # Initialization
     timo = TimerOutputs.TimerOutput()
@@ -96,7 +107,8 @@ function solve(root_model::StructJuMP.StructuredModel,
         println("Solving...")
     end
     (niter, residual) = @timeit(timo, "Solution",
-                                hedge(ph_data, max_iter, atol, report)
+                                hedge(ph_data, max_iter, atol,
+                                      report, save_residuals)
                                 )
 
     # Post Processing
@@ -123,7 +135,9 @@ function solve(tree::ScenarioTree,
                model_type::Type{M}=JuMP.Model,
                max_iter::Int=100,
                atol::Float64=1e-8,
-               report::Bool=false, timing::Bool=true,
+               report::Bool=false,
+               save_residuals::Bool=false,
+               timing::Bool=true,
                args::Tuple=(), kwargs...
                ) where {T <: Real, M <: JuMP.AbstractModel}
     timo = TimerOutputs.TimerOutput()
@@ -150,7 +164,9 @@ function solve(tree::ScenarioTree,
         println("Solving...")
     end
     (niter, residual) = @timeit(timo, "Solution",
-                                hedge(ph_data, max_iter, atol, report))
+                                hedge(ph_data, max_iter, atol,
+                                      report, save_residuals)
+                                )
 
     # Post Processing
     if report
