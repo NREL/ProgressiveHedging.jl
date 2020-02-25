@@ -244,7 +244,7 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8,
 
     if report
         x_residual = compute_x_residual(ph_data)
-        println("Iter: $(niter)   Res: $(x_residual)")
+        println("Iter: $(niter)    Res: $(x_residual)")
         flush(stdout)
     end
     

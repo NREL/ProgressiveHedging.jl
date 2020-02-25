@@ -119,7 +119,7 @@ function build_submodels(scen_tree::ScenarioTree,
     return (submodels, scen_proc_map, var_map)
 end
 
-function initialize(scen_tree::ScenarioTree,
+function initialize(scenario_tree::ScenarioTree,
                     model_constructor::Function,
                     variable_dict::Dict{SCENARIO_ID,Vector{String}},
                     r::R,
@@ -132,6 +132,8 @@ function initialize(scen_tree::ScenarioTree,
                     )::PHData where {S <: AbstractString,
                                      R <: Real,
                                      M <: JuMP.AbstractModel}
+
+    scen_tree = deepcopy(scenario_tree)
 
     if report
         println("...building submodels...")
