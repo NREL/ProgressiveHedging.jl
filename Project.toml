@@ -13,5 +13,5 @@ StructJuMP = "34f15cae-5318-50c9-93d3-9feadd34e321"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 
 [compat]
-JuMP = ">= 0.20"
+JuMP = "~0.20"
 julia = ">= 1.0"
