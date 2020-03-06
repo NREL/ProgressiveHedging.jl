@@ -12,7 +12,6 @@ using Ipopt
 using JuMP
 using MathOptInterface
 const MOI = MathOptInterface
-using StructJuMP
 
 using TimerOutputs
 

@@ -166,5 +166,5 @@ function augment_objectives(phd::PHData)::Nothing
     return
 end
 
-include("sj_setup.jl")
+# include("sj_setup.jl")
 include("dir_setup.jl")

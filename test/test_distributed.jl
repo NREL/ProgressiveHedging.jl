@@ -1,4 +1,24 @@
 
+r = 25.0
+atol = 1e-8
+max_iter = 500
+obj_val = 178.3537498401004
+var_vals = Dict([
+    "x[1]" => 7.5625,
+    "x[2]" => 0.0,
+    "x[3]" => 1.0,
+    "y1" => 1.75,
+    "y2" => 0.0,
+    "z11[1]" => -0.65625,
+    "z11[2]" => -0.65625,
+    "z12[1]" => 2.84375,
+    "z12[2]" => 2.84375,
+    "z21[1]" => -1.78125,
+    "z21[2]" => -1.78125,
+    "z22[1]" => 4.71875,
+    "z22[2]" => 4.71875,
+])
+
 # Setup distributed stuff
 Distributed.addprocs(2)
 @everywhere using Pkg
@@ -12,26 +32,13 @@ include("common.jl")
 
 @testset "Distributed solve" begin
     
-    # Solve the problem with StructJuMP interface
-    sjm = build_sj_model()
-    (n, err, obj, soln, phd) = PH.solve(sjm,
-                                        optimizer(),
-                                        r, atol=atol, max_iter=max_iter,
-                                        report=false, timing=false)
-    @test err < atol
-    @test isapprox(obj, obj_val)
-    @test n < max_iter
-    for row in eachrow(soln)
-        @test isapprox(row[:value], var_vals[row[:variable]], atol=1e-7)
-    end
-
-    # Solve the problem with scenario tree interface
+    # Solve the problem
     (n, err, obj, soln, phd) = PH.solve(build_scen_tree(),
                                         create_model,
                                         variable_dict(),
-                                        optimizer(),
                                         r,
                                         atol=atol,
+                                        opt=optimizer,
                                         max_iter=max_iter,
                                         report=false,
                                         timing=false)

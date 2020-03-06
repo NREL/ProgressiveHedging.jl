@@ -1,13 +1,11 @@
 function _create_model(sint::Int,
                        model_constructor::Function,
-                       optimizer_factory::JuMP.OptimizerFactory,
                        model_constructor_args::Tuple,
                        model_type::Type{M};
                        kwargs...
                        ) where {M <: JuMP.AbstractModel}
 
     model = model_constructor(sint,
-                              optimizer_factory,
                               model_constructor_args...;
                               kwargs...)
 
@@ -26,7 +24,6 @@ function create_models(scen_tree::ScenarioTree,
                        model_constructor::Function,
                        model_constructor_args::Tuple,
                        scen_proc_map::Dict{ScenarioID, Int},
-                       optimizer_factory::JuMP.OptimizerFactory,
                        model_type::Type{M};
                        kwargs...
                        ) where {M <: JuMP.AbstractModel}
@@ -39,7 +36,6 @@ function create_models(scen_tree::ScenarioTree,
         submodels[s] = @spawnat(proc,
                                 _create_model(sint,
                                               model_constructor,
-                                              optimizer_factory,
                                               model_constructor_args,
                                               model_type;
                                               kwargs...
@@ -54,7 +50,7 @@ end
 function collect_variable_refs(scen_tree::ScenarioTree,
                                scen_proc_map::Dict{ScenarioID, Int},
                                submodels::Dict{ScenarioID, Future},
-                               variable_dict::Dict{SCENARIO_ID,Vector{String}},
+                               variable_dict::Dict{STAGE_ID,Vector{String}},
                                ) where {M <: JuMP.AbstractModel}
 
     var_map = Dict{ScenarioID, Dict{VariableID,VariableInfo}}()
@@ -88,8 +84,7 @@ end
 function build_submodels(scen_tree::ScenarioTree,
                          model_constructor::Function,
                          model_constructor_args::Tuple,
-                         variable_dict::Dict{SCENARIO_ID,Vector{String}},
-                         optimizer_factory::JuMP.OptimizerFactory,
+                         variable_dict::Dict{STAGE_ID,Vector{String}},
                          model_type::Type{M},
                          timo::TimerOutputs.TimerOutput;
                          kwargs...
@@ -104,7 +99,6 @@ function build_submodels(scen_tree::ScenarioTree,
                                       model_constructor,
                                       model_constructor_args,
                                       scen_proc_map,
-                                      optimizer_factory,
                                       model_type;
                                       kwargs...)
                         )
@@ -121,9 +115,8 @@ end
 
 function initialize(scenario_tree::ScenarioTree,
                     model_constructor::Function,
-                    variable_dict::Dict{SCENARIO_ID,Vector{String}},
+                    variable_dict::Dict{STAGE_ID,Vector{String}},
                     r::R,
-                    optimizer_factory::JuMP.OptimizerFactory,
                     model_type::Type{M},
                     timo::TimerOutputs.TimerOutput,
                     report::Bool,
@@ -146,7 +139,6 @@ function initialize(scenario_tree::ScenarioTree,
                                  model_constructor,
                                  constructor_args,
                                  variable_dict,
-                                 optimizer_factory,
                                  M,
                                  timo;
                                  kwargs...)
@@ -180,3 +172,66 @@ function initialize(scenario_tree::ScenarioTree,
     
     return ph_data
 end
+
+# function ef_add_variables(model::JuMP.Model,
+#                           smod::M,
+#                           s::ScenarioID,
+#                           node::ScenarioNode,
+#                           variable_dict::Dict{STAGE_ID, Vector{String}}
+#                           )
+    
+
+#     return
+# end
+
+# function ef_copy_model(model::JuMP.Model,
+#                        smod::M,
+#                        s::ScenarioID,
+#                        tree::ScenarioTree,
+#                        variable_dict::Dict{STAGE_ID, Vector{String}},
+#                        processed::Set{NodeID},
+#                        ) where M <: JuMP.AbstractModel
+
+#     stack = [root(tree)]
+#     nodes = Set{NodeID}()
+
+#     while !isempty(stack)
+#         node = pop!(stack)
+
+#         if s in scenario_bundle(node)
+
+#             for c in node.children
+#                 push!(stack, c)
+#             end
+
+#             if !(node.id in processed)
+#                 ef_add_variables(model)
+#                 # ef_add_constraints(model)
+#                 # ef_add_objective(model, smod, s, tree)
+                
+#                 push!(nodes, node.id)
+#             end
+#         end
+#     end
+
+#     return nodes
+# end
+
+# function build_extensive_form(model::JuMP.Model,
+#                               tree::ScenarioTree,
+#                               variable_dict::Dict{STAGE_ID,Vector{String}},
+#                               model_constructor::Function,
+#                               constructor_args::Tuple;
+#                               kwargs...)
+#     processed = Set{NodeID}()
+    
+#     for s in scenarios(tree)
+#         smod = model_constructor(_value(s), constructor_args...; kwargs...)
+
+#         nodes = ef_copy_model(model, smod, s, tree, variable_dict, processed)
+
+#         union!(processed, nodes)
+#     end
+
+#     return model
+# end
