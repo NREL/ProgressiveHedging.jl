@@ -341,65 +341,263 @@ function initialize(scenario_tree::ScenarioTree,
     return ph_data
 end
 
-# function ef_add_variables(model::JuMP.Model,
-#                           smod::M,
-#                           s::ScenarioID,
-#                           node::ScenarioNode,
-#                           variable_dict::Dict{STAGE_ID, Vector{String}}
-#                           )
+function build_var_info(vref::JuMP.VariableRef)
+    hlb = JuMP.has_lower_bound(vref)
+    hub = JuMP.has_upper_bound(vref)
+    hf = JuMP.is_fixed(vref)
+    ib = JuMP.is_binary(vref)
+    ii = JuMP.is_integer(vref)
+
+    return JuMP.VariableInfo(hlb,
+                             hlb ? JuMP.lower_bound(vref) : 0,
+                             hub,
+                             hub ? JuMP.upper_bound(vref) : 0,
+                             hf,
+                             hf ? JuMP.fix_value(vref) : 0,
+                             false, # Some solvers don't accept starting values
+                             0,
+                             ib,
+                             ii)
+end
+
+function ef_add_variables(model::JuMP.Model,
+                          smod::JuMP.Model,
+                          s::ScenarioID,
+                          node::ScenarioNode,
+                          variable_dict::Dict{STAGE_ID, Vector{String}}
+                          )
+
+    var_map = Dict{JuMP.VariableRef, VariableInfo}()
+    new_vars = Set{VariableInfo}()
     
+    for var in variable_dict[_value(node.stage)]
+        vref = JuMP.variable_by_name(smod, var)
+        info = build_var_info(vref)
+        vname = var * "_{" * stringify(_value.(scenario_bundle(node))) * "}"
+        new_vref = JuMP.add_variable(model,
+                                     JuMP.build_variable(_error, info),
+                                     vname)
+        vi = VariableInfo(new_vref, vname, node.id)
+        var_map[vref] = vi
+        push!(new_vars, vi)
+    end
 
-#     return
-# end
+    return (var_map, new_vars)
+end
 
-# function ef_copy_model(model::JuMP.Model,
-#                        smod::M,
-#                        s::ScenarioID,
-#                        tree::ScenarioTree,
-#                        variable_dict::Dict{STAGE_ID, Vector{String}},
-#                        processed::Set{NodeID},
-#                        ) where M <: JuMP.AbstractModel
+function ef_map_variables(smod::JuMP.Model,
+                          variable_dict::Dict{STAGE_ID, Vector{String}},
+                          node::ScenarioNode,
+                          new_vars::Set{VariableInfo},
+                          )
+    var_map = Dict{JuMP.VariableRef, VariableInfo}()
 
-#     stack = [root(tree)]
-#     nodes = Set{NodeID}()
+    for var in variable_dict[_value(node.stage)]
 
-#     while !isempty(stack)
-#         node = pop!(stack)
+        vref = JuMP.variable_by_name(smod, var)
 
-#         if s in scenario_bundle(node)
+        for vinfo in new_vars
 
-#             for c in node.children
-#                 push!(stack, c)
-#             end
+            @assert vinfo.node_id == node.id
 
-#             if !(node.id in processed)
-#                 ef_add_variables(model)
-#                 # ef_add_constraints(model)
-#                 # ef_add_objective(model, smod, s, tree)
-                
-#                 push!(nodes, node.id)
-#             end
-#         end
-#     end
+            if occursin(var, vinfo.name)
+                var_map[vref] = vinfo
+            end
 
-#     return nodes
-# end
+        end
 
-# function build_extensive_form(model::JuMP.Model,
-#                               tree::ScenarioTree,
-#                               variable_dict::Dict{STAGE_ID,Vector{String}},
-#                               model_constructor::Function,
-#                               constructor_args::Tuple;
-#                               kwargs...)
-#     processed = Set{NodeID}()
+    end
+
+    return var_map
+end
+
+function ef_copy_variables(model::JuMP.Model,
+                           smod::JuMP.Model,
+                           s::ScenarioID,
+                           tree::ScenarioTree,
+                           variable_dict::Dict{STAGE_ID, Vector{String}},
+                           node_var_map::Dict{NodeID, Set{VariableInfo}},
+                           )
+
+    # Below for mapping variables in the subproblem model `smod` into variables for
+    # the extensive form model `model`
+    s_var_map = Dict{JuMP.VariableRef, VariableInfo}()
+
+    # For saving updates to node_var_map and passing back up
+    snode_var_map = Dict{NodeID, Set{VariableInfo}}()
+
+    stack = [root(tree)]
+
+    while !isempty(stack)
+
+        node = pop!(stack)
+
+        for c in node.children
+            if s in scenario_bundle(c)
+                push!(stack, c)
+            end
+        end
+
+        # For the given model `smod`, either create extensive variables corresponding
+        # to this node or map them onto existing extensive variables.
+        if !(node.id in keys(node_var_map))
+            (var_map, new_vars) = ef_add_variables(model, smod, s, node,
+                                                   variable_dict)
+            snode_var_map[node.id] = new_vars
+        else
+            var_map = ef_map_variables(smod,
+                                       variable_dict,
+                                       node,
+                                       node_var_map[node.id])
+        end
+
+        @assert(isempty(intersect(keys(s_var_map), keys(var_map))))
+        merge!(s_var_map, var_map)
+    end
+
+    return (snode_var_map, s_var_map)
+end
+
+function ef_convert_and_add_expr(add_to::JuMP.QuadExpr,
+                                 convert::JuMP.AffExpr,
+                                 s_var_map::Dict{JuMP.VariableRef,VariableInfo},
+                                 scalar::R,
+                                 )::Set{NodeID} where R <: Real
+
+    nodes = Set{NodeID}()
     
-#     for s in scenarios(tree)
-#         smod = model_constructor(_value(s), constructor_args...; kwargs...)
+    JuMP.add_to_expression!(add_to, scalar * JuMP.constant(convert))
 
-#         nodes = ef_copy_model(model, smod, s, tree, variable_dict, processed)
+    for (coef, var) in JuMP.linear_terms(convert)
+        vi = s_var_map[var]
+        nvar = vi.ref
+        JuMP.add_to_expression!(add_to, scalar*coef, nvar)
 
-#         union!(processed, nodes)
-#     end
+        push!(nodes, vi.node_id)
+    end
 
-#     return model
-# end
+    return nodes
+end
+
+function ef_convert_and_add_expr(add_to::JuMP.QuadExpr,
+                                 convert::JuMP.QuadExpr,
+                                 s_var_map::Dict{JuMP.VariableRef,VariableInfo},
+                                 scalar::R,
+                                 )::Set{NodeID} where R <: Real
+
+    nodes = ef_convert_and_add_expr(add_to, convert.aff, s_var_map, scalar)
+
+    for (coef, var1, var2) in JuMP.quad_terms(convert)
+        vi1 = s_var_map[var1]
+        vi2 = s_var_map[var2]
+
+        nvar1 = vi1.ref
+        nvar2 = vi2.ref
+        JuMP.add_to_expression!(add_to, scalar*coef, nvar1, nvar2)
+
+        push!(nodes, vi1.node_id)
+        push!(nodes, vi2.node_id)
+    end
+
+    return nodes
+end
+
+function ef_copy_constraints(model::JuMP.Model,
+                             smod::JuMP.Model,
+                             s_var_map::Dict{JuMP.VariableRef,VariableInfo},
+                             processed::Set{NodeID},
+                             )::Nothing
+
+    constraint_list = JuMP.list_of_constraint_types(smod)
+
+    for (func,set) in constraint_list
+
+        if func == JuMP.VariableRef
+            # These constraints are handled by the variable bounds
+            # which are copied during copy variable creation so
+            # we skip them
+            continue
+        end
+
+        for cref in JuMP.all_constraints(smod, func, set)
+
+            cobj = JuMP.constraint_object(cref)
+            expr = zero(JuMP.QuadExpr)
+            nodes = ef_convert_and_add_expr(expr,
+                                            JuMP.jump_function(cobj),
+                                            s_var_map,
+                                            1)
+
+            # If all variables in the expression are from processed nodes,
+            # then this constraint has already been added to the model
+            # and can be skipped.
+            if !issubset(nodes, processed)
+                JuMP.drop_zeros!(expr)
+                JuMP.@constraint(model, expr in JuMP.moi_set(cobj))
+            end
+        end
+    end
+
+    return
+end
+
+function ef_copy_objective(model::JuMP.Model,
+                           smod::JuMP.Model,
+                           s_var_map::Dict{JuMP.VariableRef,VariableInfo},
+                           prob::R
+                           )::Nothing where R <: Real
+
+    add_obj = JuMP.objective_function(smod)
+    obj = JuMP.objective_function(model)
+    ef_convert_and_add_expr(obj, add_obj, s_var_map, prob)
+    JuMP.drop_zeros!(obj)
+    JuMP.set_objective_function(model, obj)
+
+    return
+end
+
+function ef_copy_model(model::JuMP.Model,
+                       smod::JuMP.Model,
+                       s::ScenarioID,
+                       tree::ScenarioTree,
+                       variable_dict::Dict{STAGE_ID, Vector{String}},
+                       node_var_map::Dict{NodeID, Set{VariableInfo}},
+                       )
+
+    (snode_var_map, s_var_map) = ef_copy_variables(model, smod, s, tree,
+                                                   variable_dict, node_var_map)
+    processed = Set(keys(node_var_map))
+    ef_copy_constraints(model, smod, s_var_map, processed)
+    ef_copy_objective(model, smod, s_var_map, tree.prob_map[s])
+
+    return snode_var_map
+end
+
+function build_extensive_form(optimizer::Function,
+                              tree::ScenarioTree,
+                              variable_dict::Dict{STAGE_ID,Vector{String}},
+                              model_constructor::Function,
+                              constructor_args::Tuple;
+                              kwargs...
+                              )::JuMP.Model
+
+    model = JuMP.Model(optimizer)
+    JuMP.set_objective_sense(model, MOI.MIN_SENSE)
+    JuMP.set_objective_function(model, zero(JuMP.QuadExpr))
+
+    # Below for mapping subproblem variables onto existing extensive form variables
+    node_var_map = Dict{NodeID, Set{VariableInfo}}()
+
+    for s in scenarios(tree)
+
+        smod = model_constructor(_value(s), constructor_args...; kwargs...)
+
+        snode_var_map = ef_copy_model(model, smod, s, tree,
+                                      variable_dict, node_var_map)
+
+        @assert(isempty(intersect(keys(node_var_map), keys(snode_var_map))))
+        merge!(node_var_map, snode_var_map)
+    end
+
+    return model
+end

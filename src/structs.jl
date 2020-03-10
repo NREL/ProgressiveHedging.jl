@@ -280,14 +280,17 @@ end
 scenarios(tree::ScenarioTree) = tree.root.scenario_bundle
 
 mutable struct VariableInfo
-    ref::Future
+    ref::Union{Future,JuMP.VariableRef}
     name::String
     node_id::NodeID
     value::Float64
 end
 
-VariableInfo(ref::Future, name::String, nid::NodeID) = VariableInfo(ref, name,
-                                                                    nid, 0.0)
+function VariableInfo(ref::Union{Future,JuMP.VariableRef},
+                      name::String,
+                      nid::NodeID)
+    return VariableInfo(ref, name, nid, 0.0)
+end
 
 mutable struct PHVariable
     ref::Union{Future,Nothing}

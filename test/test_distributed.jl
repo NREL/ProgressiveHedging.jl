@@ -4,19 +4,19 @@ atol = 1e-8
 max_iter = 500
 obj_val = 178.3537498401004
 var_vals = Dict([
-    "x[1]" => 7.5625,
-    "x[2]" => 0.0,
-    "x[3]" => 1.0,
-    "y1" => 1.75,
-    "y2" => 0.0,
-    "z11[1]" => -0.65625,
-    "z11[2]" => -0.65625,
-    "z12[1]" => 2.84375,
-    "z12[2]" => 2.84375,
-    "z21[1]" => -1.78125,
-    "z21[2]" => -1.78125,
-    "z22[1]" => 4.71875,
-    "z22[2]" => 4.71875,
+    "x[1]_{0,1,2,3}" => 7.5625,
+    "x[2]_{0,1,2,3}" => 0.0,
+    "x[3]_{0,1,2,3}" => 1.0,
+    "y_{0,1}" => 1.75,
+    "y_{2,3}" => 0.0,
+    "z[1]_{0}" => -0.65625,
+    "z[2]_{0}" => -0.65625,
+    "z[1]_{1}" => 2.84375,
+    "z[2]_{1}" => 2.84375,
+    "z[1]_{2}" => -1.78125,
+    "z[2]_{2}" => -1.78125,
+    "z[1]_{3}" => 4.71875,
+    "z[2]_{3}" => 4.71875,
 ])
 
 # Setup distributed stuff
@@ -48,40 +48,7 @@ include("common.jl")
     @test n < max_iter
 
     for row in eachrow(soln)
-
-        var = row[:variable]
-
-        if var == "y"
-            if row[:scenarios] == "0, 1"
-                var *= string(1)
-            elseif row[:scenarios] == "2, 3"
-                var *= string(2)
-            else
-                # Nothing--something is wrong, so fall through and trigger
-                # key error in dictionary
-            end
-
-        elseif occursin("z", var)
-
-            scen = parse(Int,row[:scenarios])
-            nstr = split(var,"[")[2]
-
-            if scen == 0
-                var = "z11["
-            elseif scen == 1
-                var = "z12["
-            elseif scen == 2
-                var = "z21["
-            elseif scen == 3
-                var = "z22["
-            else
-                # Nothing--this is an error
-            end
-
-            var *= nstr
-        else
-            # Nothing
-        end
+        var = row[:variable] * "_{" * row[:scenarios] * "}"
         @test isapprox(row[:value], var_vals[var], atol=1e-7)
     end
 

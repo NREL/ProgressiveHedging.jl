@@ -54,7 +54,7 @@ end
 function stringify(set::Set{K})::String where K
     str = ""
     for s in sort!(collect(set))
-        str *= string(s) * ", "
+        str *= string(s) * ","
     end
     return rstrip(str, [',',' '])
 end
@@ -62,7 +62,7 @@ end
 function stringify(array::Vector{K})::String where K
     str = ""
     for s in sort(array)
-        str *= string(s) * ", "
+        str *= string(s) * ","
     end
     return rstrip(str, [',',' '])
 end

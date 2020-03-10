@@ -12,7 +12,7 @@ const MOI = MathOptInterface
 using Distributed
 
 # Functions for solving the problem
-export solve, solve_extensive_form
+export solve, solve_extensive
 # Functions for building the scenario tree
 export add_node, add_leaf, root
 # Functions for interacting with the returned PHData struct
@@ -122,35 +122,6 @@ function solve(tree::ScenarioTree,
     return (niter, residual, obj, soln_df, ph_data)
 end
 
-# """
-#     solve_extensive_form(root_model::StructJuMP.StructuredModel,
-#                          optimizer_factory::JuMP.OptimizerFactory;
-#                          model_type<:JuMP.AbstractModel=JuMP.Model,
-#                          kwargs...)
-
-# Build and solve the extensive form of the given stochastic program.
-
-# **Arguments**
-
-# * `root_model::StructJuMP.StructuredModel` : StructJuMP representation of the stochastic program
-# * `optimizer_factory::JuMP.OptimizerFactory` : Optimizer to solve the extensive form problem with
-
-# **Keyword Arguments**
-
-# * `model_type<:JuMP.AbstractModel` : Type of model to use to build the extensive form
-# * `kwargs` : Any keyword arguments that should be passed to `optimizer_factory`
-
-# """
-# function solve_extensive_form(root_model::StructJuMP.StructuredModel,
-#                               optimizer_factory::JuMP.OptimizerFactory;
-#                               model_type::Type{M}=JuMP.Model, kwargs...
-#                               ) where {M <: JuMP.AbstractModel}
-#     model = @spawnat(1, M(kwargs...)) # Always local
-#     build_extensive_form(root_model, model)
-#     JuMP.optimize!(fetch(model), optimizer_factory)
-#     return fetch(model)
-# end
-
 """
     solve_extensive(tree::ScenarioTree,
           model_constructor::Function,
@@ -177,21 +148,20 @@ Solve given problem using Progressive Hedging.
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
 * `kwargs` : Any keyword arguments not specified here that need to be passed to `model_constructor`.  See also `other_args` and `args`.
 """
-function solve(tree::ScenarioTree,
-               model_constructor::Function,
-               variable_dict::Dict{STAGE_ID,Vector{String}},
-               other_args...;
-               model_type::Type{M}=JuMP.Model,
-               optimizer=()->Ipopt.Optimizer(print_level=0),
-               args::Tuple=(),
-               kwargs...
-               ) where {T <: Real, M <: JuMP.AbstractModel}
+function solve_extensive(tree::ScenarioTree,
+                         model_constructor::Function,
+                         variable_dict::Dict{STAGE_ID,Vector{String}},
+                         other_args...;
+                         model_type::Type{M}=JuMP.Model,
+                         optimizer::Function=()->Ipopt.Optimizer(print_level=0),
+                         args::Tuple=(),
+                         kwargs...
+                         ) where {T <: Real, M <: JuMP.AbstractModel}
 
-    model = JuMP.Model(optimizer)
-
-    build_extensive_form(model, tree, variable_dict, model_constructor,
-                         Tuple([other_args...,args...]);
-                         kwargs...)
+    model = build_extensive_form(optimizer, tree, variable_dict,
+                                 model_constructor,
+                                 Tuple([other_args...,args...]);
+                                 kwargs...)
 
     JuMP.optimize!(model)
 
