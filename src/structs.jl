@@ -94,32 +94,32 @@ function Base.isless(a::XhatID, b::XhatID)
             (a.node == b.node && a.index < b.index))
 end
 
-struct Translator{A,B}
-    a_to_b::Dict{A,B}
-    b_to_a::Dict{B,A}
-end
+# struct Translator{A,B}
+#     a_to_b::Dict{A,B}
+#     b_to_a::Dict{B,A}
+# end
 
-function Translator{A,B}() where {A,B}
-    return Translator(Dict{A,B}(), Dict{B,A}())
-end
+# function Translator{A,B}() where {A,B}
+#     return Translator(Dict{A,B}(), Dict{B,A}())
+# end
 
-function add_pair(t::Translator{A,B}, a::A, b::B) where{A,B}
-    if !(a in keys(t.a_to_b)) && !(b in keys(t.b_to_a))
-        t.a_to_b[a] = b
-        t.b_to_a[b] = a
-    else
-        @error("One of $a or $b already maps to something")
-    end
-    return
-end
+# function add_pair(t::Translator{A,B}, a::A, b::B) where{A,B}
+#     if !(a in keys(t.a_to_b)) && !(b in keys(t.b_to_a))
+#         t.a_to_b[a] = b
+#         t.b_to_a[b] = a
+#     else
+#         @error("One of $a or $b already maps to something")
+#     end
+#     return
+# end
 
-function translate(t::Translator{A,B}, a::A) where {A,B}
-    return t.a_to_b[a]
-end
+# function translate(t::Translator{A,B}, a::A) where {A,B}
+#     return t.a_to_b[a]
+# end
 
-function translate(t::Translator{A,B}, b::B) where {A,B}
-    return t.b_to_a[b]
-end
+# function translate(t::Translator{A,B}, b::B) where {A,B}
+#     return t.b_to_a[b]
+# end
 
 """
 Struct representing a node in a scenario tree.
@@ -157,8 +157,6 @@ function next_index(node::ScenarioNode)
     return idx
 end
 
-const SJPHTranslator = Translator{StructJuMP.StructuredModel, ScenarioNode}
-
 """
 Struct representing the scenario structure of a stochastic program.
 
@@ -176,26 +174,21 @@ struct ScenarioTree
     stage_map::Dict{StageID, Set{NodeID}} # nodes in each stage
     prob_map::Dict{ScenarioID, Float64}
     id_gen::Generator
-    sj_ph_translator::SJPHTranslator
 end
 
 function ScenarioTree(root_node::ScenarioNode, gen::Generator)
+
     tree_map = Dict{NodeID, ScenarioNode}()
     stage_map = Dict{StageID, Set{NodeID}}()
     prob_map = Dict{ScenarioID, Float64}()
-    trans = SJPHTranslator()
-    st = ScenarioTree(root_node,
-                      tree_map, stage_map, prob_map,
-                      gen, trans)
-    _add_node(st, root_node)
-    return st
-end
 
-function ScenarioTree(root_model::StructJuMP.StructuredModel)
-    gen = Generator()
-    sn = _create_node(gen, nothing)
-    st = ScenarioTree(sn, gen)
-    add_pair(st.sj_ph_translator, root_model, sn)
+    st = ScenarioTree(root_node,
+                      tree_map,
+                      stage_map,
+                      prob_map,
+                      gen)
+
+    _add_node(st, root_node)
     return st
 end
 
@@ -238,14 +231,6 @@ function _add_node(tree::ScenarioTree, node::ScenarioNode)
     return
 end
 
-function _add_node(tree::ScenarioTree, model::StructJuMP.StructuredModel)
-    parent_node = translate(tree, model.parent)
-    new_node = _create_node(tree.id_gen, parent_node)
-    add_pair(tree.sj_ph_translator, model, new_node)
-    _add_node(tree, new_node)
-    return new_node
-end
-
 """
     add_node(tree::ScenarioTree, parent::ScenarioNode)
 
@@ -262,20 +247,6 @@ function _add_scenario_to_bundle(tree::ScenarioTree, nid::NodeID, scid::Scenario
     return
 end
 
-function _create_scenario(tree::ScenarioTree,
-                         leaf_model::StructJuMP.StructuredModel,
-                         probability::R
-                         ) where {R <: Real}
-    scid = _assign_scenario_id(tree)
-    tree.prob_map[scid] = probability
-    model = leaf_model
-    while model != nothing
-        nid = translate(tree, model).id
-        _add_scenario_to_bundle(tree, nid, scid)
-        model = StructJuMP.getparent(model)
-    end
-    return scid
-end
 """
     add_leaf(tree::ScenarioTree, parent::ScenarioNode, probability<:Real)
 
@@ -308,28 +279,18 @@ end
 
 scenarios(tree::ScenarioTree) = tree.root.scenario_bundle
 
-function translate(tree::ScenarioTree, sjm::StructJuMP.StructuredModel)
-    return translate(tree.sj_ph_translator, sjm)
-end
-
-function translate(tree::ScenarioTree, node::ScenarioNode)
-    return translate(tree.sj_ph_translator, node)
-end
-
-function translate(tree::ScenarioTree, nid::NodeID)
-    node = tree.tree_map[nid]
-    return translate(tree, node)
-end
-
 mutable struct VariableInfo
-    ref::Future
+    ref::Union{Future,JuMP.VariableRef}
     name::String
     node_id::NodeID
     value::Float64
 end
 
-VariableInfo(ref::Future, name::String, nid::NodeID) = VariableInfo(ref, name,
-                                                                    nid, 0.0)
+function VariableInfo(ref::Union{Future,JuMP.VariableRef},
+                      name::String,
+                      nid::NodeID)
+    return VariableInfo(ref, name, nid, 0.0)
+end
 
 mutable struct PHVariable
     ref::Union{Future,Nothing}

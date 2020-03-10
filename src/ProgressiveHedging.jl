@@ -1,7 +1,7 @@
 module ProgressiveHedging
 
 import JuMP
-import StructJuMP
+# import StructJuMP
 import DataFrames
 
 using TimerOutputs
@@ -12,9 +12,9 @@ const MOI = MathOptInterface
 using Distributed
 
 # Functions for solving the problem
-export solve, solve_extensive_form
+export solve, solve_extensive
 # Functions for building the scenario tree
-export add_node, add_leaf
+export add_node, add_leaf, root
 # Functions for interacting with the returned PHData struct
 export residuals, retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_w
 
@@ -28,21 +28,11 @@ include("utils.jl")
 
 include("algorithm.jl")
 include("setup.jl")
-"""
-    solve(root_model::StructJuMP.StructuredModel,
-          optimizer_factory::JuMP.OptimizerFactory,
-          r<:Real;
-          model_type<:JuMP.AbstractModel=JuMP.Model,
-          max_iter::Int=100,
-          atol::Float64=1e-8,
-          report::Bool=false,
-          save_residuals::Bool=false,
-          timing::Bool=true)
 
+"""
     solve(tree::ScenarioTree,
           model_constructor::Function,
           variable_dict::Dict{Int,Vector{String}},
-          optimizer_factory::JuMP.OptimizerFactory,
           r<:Real,
           other_args...;
           model_type<:JuMP.AbstractModel=JuMP.Model,
@@ -58,11 +48,9 @@ Solve given problem using Progressive Hedging.
 
 **Arguments**
 
-* `root_model::StructJuMP.StructuredModel` : First stage model of the StructJuMP tree that describes the problem to be solved.
 * `tree::ScenararioTree` : Scenario tree describing the structure of the problem to be solved.
-* `model_constructor::Function` : User created function to construct a subproblem model.  Should accept an Int (a unique identifier for the scenario) and a `JuMP.OptimizerFactory` and return a model of type `model_type`.  Additional arguments may be passed with `other_args` or through `kwargs` (provided they don't collide with the keyword arguments for `solve`.
+* `model_constructor::Function` : User created function to construct a subproblem model.  Should accept an Int (a unique identifier for the scenario) and return a model of type `model_type`.  Additional arguments may be passed with `other_args` or through `kwargs` (provided they don't collide with the keyword arguments for `solve`.
 * `variable_dict::Dict{Int,Vector{String}}` : Dictionary specifying the names of variables (value) in a given stage (key).
-* `optimizer_factory::JuMP.OptimizerFactory` : Optimizer to use to solve subproblems. See JuMP.OptimizerFactory and JuMP.with_optimizer for more details.
 * `r<:Real` : Parameter to use on quadratic penalty term.
 * `other_args` : Other arguments that should be passed to `model_constructor`. See also keyword arguments `args` and `kwargs`
 
@@ -76,60 +64,10 @@ Solve given problem using Progressive Hedging.
 * `timing::Bool` : Flag indicating whether or not to record timing information. Defaults to true.
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
 * `kwargs` : Any keyword arguments not specified here that need to be passed to `model_constructor`.  See also `other_args` and `args`.
-
 """
-function solve(root_model::StructJuMP.StructuredModel,
-               optimizer_factory::JuMP.OptimizerFactory,
-               r::T;
-               model_type::Type{M}=JuMP.Model,
-               max_iter::Int=100,
-               atol::Float64=1e-8,
-               report::Bool=false,
-               save_residuals::Bool=false,
-               timing::Bool=true
-               ) where {T <: Real, M <: JuMP.AbstractModel}
-    # Initialization
-    timo = TimerOutputs.TimerOutput()
-
-    if report
-        println("Initializing...")
-    end
-
-    ph_data = @timeit(timo, "Initialization",
-                      initialize(root_model, r,
-                                 optimizer_factory,
-                                 M,
-                                 timo, report)
-                      )
-
-    # Solution
-    if report
-        println("Solving...")
-    end
-    (niter, residual) = @timeit(timo, "Solution",
-                                hedge(ph_data, max_iter, atol,
-                                      report, save_residuals)
-                                )
-
-    # Post Processing
-    if report
-        println("Done.")
-    end
-
-    soln_df = retrieve_soln(ph_data)
-    obj = retrieve_obj_value(ph_data)
-
-    if timing
-        println(timo)
-    end
-
-    return (niter, residual, obj, soln_df, ph_data)
-end
-
 function solve(tree::ScenarioTree,
                model_constructor::Function,
                variable_dict::Dict{STAGE_ID,Vector{String}},
-               optimizer_factory::JuMP.OptimizerFactory,
                r::T,
                other_args...;
                model_type::Type{M}=JuMP.Model,
@@ -138,7 +76,8 @@ function solve(tree::ScenarioTree,
                report::Bool=false,
                save_residuals::Bool=false,
                timing::Bool=true,
-               args::Tuple=(), kwargs...
+               args::Tuple=(),
+               kwargs...
                ) where {T <: Real, M <: JuMP.AbstractModel}
     timo = TimerOutputs.TimerOutput()
 
@@ -152,7 +91,6 @@ function solve(tree::ScenarioTree,
                                  model_constructor,
                                  variable_dict,
                                  r,
-                                 optimizer_factory,
                                  M,
                                  timo,
                                  report,
@@ -185,32 +123,50 @@ function solve(tree::ScenarioTree,
 end
 
 """
-    solve_extensive_form(root_model::StructJuMP.StructuredModel,
-                         optimizer_factory::JuMP.OptimizerFactory;
-                         model_type<:JuMP.AbstractModel=JuMP.Model,
-                         kwargs...)
+    solve_extensive(tree::ScenarioTree,
+          model_constructor::Function,
+          variable_dict::Dict{Int,Vector{String}},
+          other_args...;
+          model_type<:JuMP.AbstractModel=JuMP.Model,
+          atol::Float64=1e-8,
+          args::Tuple=(),
+          kwargs...)
 
-Build and solve the extensive form of the given stochastic program.
+Solve given problem using Progressive Hedging.
 
 **Arguments**
 
-* `root_model::StructJuMP.StructuredModel` : StructJuMP representation of the stochastic program
-* `optimizer_factory::JuMP.OptimizerFactory` : Optimizer to solve the extensive form problem with
+* `tree::ScenararioTree` : Scenario tree describing the structure of the problem to be solved.
+* `model_constructor::Function` : User created function to construct a subproblem model.  Should accept an Int (a unique identifier for the scenario) and return a model of type `model_type`.  Additional arguments may be passed with `other_args` or through `kwargs` (provided they don't collide with the keyword arguments for `solve`.
+* `variable_dict::Dict{Int,Vector{String}}` : Dictionary specifying the names of variables (value) in a given stage (key).
+* `other_args` : Other arguments that should be passed to `model_constructor`. See also keyword arguments `args` and `kwargs`
 
 **Keyword Arguments**
 
-* `model_type<:JuMP.AbstractModel` : Type of model to use to build the extensive form
-* `kwargs` : Any keyword arguments that should be passed to `optimizer_factory`
-
+* `model_type<:JuMP.AbstractModel` : Type of model to create or created by `model_constructor` to represent the subproblems. Defaults to JuMP.Model.
+* `optimizer::Function` : Function which works with `JuMP.set_optimizer`
+* `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
+* `kwargs` : Any keyword arguments not specified here that need to be passed to `model_constructor`.  See also `other_args` and `args`.
 """
-function solve_extensive_form(root_model::StructJuMP.StructuredModel,
-                              optimizer_factory::JuMP.OptimizerFactory;
-                              model_type::Type{M}=JuMP.Model, kwargs...
-                              ) where {M <: JuMP.AbstractModel}
-    model = @spawnat(1, M(kwargs...)) # Always local
-    build_extensive_form(root_model, model)
-    JuMP.optimize!(fetch(model), optimizer_factory)
-    return fetch(model)
+function solve_extensive(tree::ScenarioTree,
+                         model_constructor::Function,
+                         variable_dict::Dict{STAGE_ID,Vector{String}},
+                         other_args...;
+                         model_type::Type{M}=JuMP.Model,
+                         optimizer::Function=()->Ipopt.Optimizer(print_level=0),
+                         args::Tuple=(),
+                         kwargs...
+                         ) where {T <: Real, M <: JuMP.AbstractModel}
+
+    model = build_extensive_form(optimizer, tree, variable_dict,
+                                 model_constructor,
+                                 Tuple([other_args...,args...]);
+                                 kwargs...)
+
+    JuMP.optimize!(model)
+
+    return model
 end
+
 
 end # module
