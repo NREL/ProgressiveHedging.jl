@@ -41,7 +41,8 @@ include("common.jl")
                                         opt=optimizer,
                                         max_iter=max_iter,
                                         report=false,
-                                        timing=false)
+                                        timing=false,
+                                        warm_start=true)
 
     @test err < atol
     @test isapprox(obj, obj_val)

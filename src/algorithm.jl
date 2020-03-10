@@ -142,22 +142,26 @@ function update_ph_leaf_variables(phd::PHData)::Nothing
     return
 end
 
-# Temporarily commented out since some MOI interfaces do not support
-# setting of start values
-# function set_start_values(phd::PHData)::Nothing
+# Some MOI interfaces do not support setting of start values
+function _set_start_values(model::JuMP.Model)::Nothing
+    for var in JuMP.all_variables(model)
+        if !JuMP.is_fixed(var)
+            JuMP.set_start_value(var, JuMP.value(var))
+        end
+    end
+    return
+end
 
-#     @sync for (var_id, var_info) in pairs(phd.variable_map)
+function set_start_values(phd::PHData)::Nothing
 
-#         ref = var_info.ref
+    @sync for (scid, sinfo) in pairs(phd.scenario_map)
+        model = sinfo.model
+        @spawnat(sinfo.proc, _set_start_values(fetch(model)))
+    end
 
-#         @spawnat(phd.scen_proc_map[var_id.scenario],
-#                  JuMP.set_start_value(fetch(ref), JuMP.value(fetch(ref)))
-#                  )
-#     end
+    return
 
-#     return
-
-# end
+end
 
 function compute_x_residual(phd::PHData)::Float64
 
@@ -236,8 +240,13 @@ function solve_subproblems(phd::PHData)::Nothing
     return
 end
 
-function hedge(ph_data::PHData, max_iter=100, atol=1e-8,
-               report=false, save_res=false)::Tuple{Int,Float64}
+function hedge(ph_data::PHData,
+               max_iter::Int,
+               atol::Float64,
+               report::Bool,
+               save_res::Bool,
+               warm_start::Bool,
+               )::Tuple{Int,Float64}
     niter = 0
     residual = atol + 1.0e10
     report_interval = Int(floor(max_iter / max_iter))
@@ -254,7 +263,10 @@ function hedge(ph_data::PHData, max_iter=100, atol=1e-8,
         # solve the subproblems
 
         # Setting start values causes issues with some solvers
-        # set_start_values(ph_data)
+        if warm_start
+            @timeit(ph_data.time_info, "Set start values",
+                    set_start_values(ph_data))
+        end
         @timeit(ph_data.time_info, "Fix PH variables",
                 fix_ph_variables(ph_data))
 

@@ -62,6 +62,7 @@ Solve given problem using Progressive Hedging.
 * `report::Bool` : Flag indicating whether or not to report information while running. Defaults to false.
 * `save_residuals::Bool` : Flag indicating whether or not to save residuals from all iterations of the algorithm
 * `timing::Bool` : Flag indicating whether or not to record timing information. Defaults to true.
+* `warm_start::Bool` : Flag indicating that solver should be "warm started" by using the previous solution as the starting point (not compatible with all solvers)
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
 * `kwargs` : Any keyword arguments not specified here that need to be passed to `model_constructor`.  See also `other_args` and `args`.
 """
@@ -71,11 +72,12 @@ function solve(tree::ScenarioTree,
                r::T,
                other_args...;
                model_type::Type{M}=JuMP.Model,
-               max_iter::Int=100,
+               max_iter::Int=1000,
                atol::Float64=1e-8,
                report::Bool=false,
                save_residuals::Bool=false,
                timing::Bool=true,
+               warm_start::Bool=false,
                args::Tuple=(),
                kwargs...
                ) where {T <: Real, M <: JuMP.AbstractModel}
@@ -103,7 +105,7 @@ function solve(tree::ScenarioTree,
     end
     (niter, residual) = @timeit(timo, "Solution",
                                 hedge(ph_data, max_iter, atol,
-                                      report, save_residuals)
+                                      report, save_residuals, warm_start)
                                 )
 
     # Post Processing

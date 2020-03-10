@@ -51,7 +51,7 @@
 
 end
 
-@testset "Scenario Tree Direct Setup" begin
+@testset "Setup" begin
     st = build_scen_tree()
 
     @test PH.last_stage(st) == PH.StageID(3)

@@ -15,28 +15,6 @@ function assign_scenarios_to_procs(scen_tree::ScenarioTree)::Dict{ScenarioID,Int
     return sp_map
 end
 
-# function compute_start_points(phd::PHData)::Nothing
-
-#     @sync for (scen, model) in pairs(phd.submodels)
-#         proc = phd.scen_proc_map[scen]
-#         @spawnat(proc, JuMP.optimize!(fetch(model)))
-#     end
-
-#     for (scen, model) in pairs(phd.submodels)
-#         proc = phd.scen_proc_map[scen]
-#         # MOI refers to the MathOptInterface package. Apparently this is made
-#         # accessible by JuMP since it is not imported here
-#         sts = fetch(@spawnat(proc, JuMP.termination_status(fetch(model))))
-#         if sts != MOI.OPTIMAL && sts != MOI.LOCALLY_SOLVED &&
-#             sts != MOI.ALMOST_LOCALLY_SOLVED
-#             @error("Initialization solve for scenario $scen on process $proc " *
-#                    "returned $sts.")
-#         end
-#     end
-    
-#     return
-# end
-
 function _augment_objective_w(obj::JuMP.GenericQuadExpr{Float64,V},
                               model::M,
                               var_dict::Dict{VariableID,VariableInfo},
