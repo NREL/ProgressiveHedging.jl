@@ -243,15 +243,15 @@ end
 function hedge(ph_data::PHData,
                max_iter::Int,
                atol::Float64,
-               report::Bool,
+               report::Int,
                save_res::Bool,
                warm_start::Bool,
                )::Tuple{Int,Float64}
     niter = 0
     residual = atol + 1.0e10
-    report_interval = Int(floor(max_iter / max_iter))
+    report_flag = (report > 0)
 
-    if report
+    if report_flag
         x_residual = compute_x_residual(ph_data)
         println("Iter: $(niter)    Res: $(x_residual)")
         flush(stdout)
@@ -288,7 +288,7 @@ function hedge(ph_data::PHData,
         
         niter += 1
 
-        if report && niter % report_interval == 0 && niter != max_iter
+        if report_flag && niter % report == 0
             println("Iter: $(niter)    Res: $(residual)")
             flush(stdout)
         end

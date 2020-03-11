@@ -40,7 +40,7 @@ include("common.jl")
                                         atol=atol,
                                         opt=optimizer,
                                         max_iter=max_iter,
-                                        report=false,
+                                        report=0,
                                         timing=false,
                                         warm_start=true)
 

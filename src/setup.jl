@@ -265,7 +265,7 @@ function initialize(scenario_tree::ScenarioTree,
                     r::R,
                     model_type::Type{M},
                     timo::TimerOutputs.TimerOutput,
-                    report::Bool,
+                    report::Int,
                     constructor_args::Tuple;
                     kwargs...
                     )::PHData where {S <: AbstractString,
@@ -274,7 +274,7 @@ function initialize(scenario_tree::ScenarioTree,
 
     scen_tree = deepcopy(scenario_tree)
 
-    if report
+    if report > 0
         println("...building submodels...")
         flush(stdout)
     end
@@ -298,19 +298,19 @@ function initialize(scenario_tree::ScenarioTree,
                      var_map,
                      timo)
 
-    if report
+    if report > 0
         println("...computing starting values...")
         flush(stdout)
     end
     @timeit(timo, "Compute start values", solve_subproblems(ph_data))
 
-    if report
+    if report > 0
         println("...updating ph variables...")
         flush(stdout)
     end
     @timeit(timo, "Initialize PH variables", update_ph_variables(ph_data))
 
-    if report
+    if report > 0
         println("...augmenting objectives...")
         flush(stdout)
     end

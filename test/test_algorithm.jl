@@ -49,7 +49,7 @@ end
                                         opt=optimizer,
                                         atol=atol,
                                         max_iter=max_iter,
-                                        report=false,
+                                        report=0,
                                         timing=false,
                                         warm_start=false)
 
@@ -72,7 +72,7 @@ end
                                         opt=optimizer,
                                         atol=atol,
                                         max_iter=max_iter,
-                                        report=false,
+                                        report=-5,
                                         timing=false,
                                         warm_start=true)
 
@@ -99,7 +99,7 @@ end
                                                    opt=optimizer,
                                                    atol=atol,
                                                    max_iter=max_iter,
-                                                   report=false,
+                                                   report=0,
                                                    timing=false)
                                           )
     @test n == max_iter

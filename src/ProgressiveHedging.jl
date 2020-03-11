@@ -38,7 +38,7 @@ include("setup.jl")
           model_type<:JuMP.AbstractModel=JuMP.Model,
           max_iter::Int=100,
           atol::Float64=1e-8,
-          report::Bool=false,
+          report::Int=0,
           save_residuals::Bool=false,
           timing::Bool=true,
           args::Tuple=(),
@@ -57,9 +57,9 @@ Solve given problem using Progressive Hedging.
 **Keyword Arguments**
 
 * `model_type<:JuMP.AbstractModel` : Type of model to create or created by `model_constructor` to represent the subproblems. Defaults to JuMP.Model.
-* `max_iter::Int` : Maximum number of iterations to perform before returning. Defaults to 100.
-* `atol::Float64` : Absolute error tolerance. If total disagreement amongst variables is less than this in the L^2 sense, then return. Defaults to 1e-8
-* `report::Bool` : Flag indicating whether or not to report information while running. Defaults to false.
+* `max_iter::Int` : Maximum number of iterations to perform before returning. Defaults to 1000.
+* `atol::Float64` : Absolute error tolerance. If total disagreement amongst variables is less than this in the L^2 sense, then return. Defaults to 1e-8.
+* `report::Int` : Print progress to screen every `report` iterations. Any value <= 0 disables printing. Defaults to 0.
 * `save_residuals::Bool` : Flag indicating whether or not to save residuals from all iterations of the algorithm
 * `timing::Bool` : Flag indicating whether or not to record timing information. Defaults to true.
 * `warm_start::Bool` : Flag indicating that solver should be "warm started" by using the previous solution as the starting point (not compatible with all solvers)
@@ -74,7 +74,7 @@ function solve(tree::ScenarioTree,
                model_type::Type{M}=JuMP.Model,
                max_iter::Int=1000,
                atol::Float64=1e-8,
-               report::Bool=false,
+               report::Int=0,
                save_residuals::Bool=false,
                timing::Bool=true,
                warm_start::Bool=false,
@@ -84,7 +84,7 @@ function solve(tree::ScenarioTree,
     timo = TimerOutputs.TimerOutput()
 
     # Initialization
-    if report
+    if report > 0
         println("Initializing...")
     end
 
@@ -100,7 +100,7 @@ function solve(tree::ScenarioTree,
                                  kwargs...))
 
     # Solution
-    if report
+    if report > 0
         println("Solving...")
     end
     (niter, residual) = @timeit(timo, "Solution",
@@ -109,7 +109,7 @@ function solve(tree::ScenarioTree,
                                 )
 
     # Post Processing
-    if report
+    if report > 0
         println("Done.")
     end
 
