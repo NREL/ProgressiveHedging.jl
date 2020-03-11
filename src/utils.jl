@@ -91,10 +91,25 @@ function retrieve_soln(phd::PHData)::DataFrames.DataFrame
     return soln_df
 end
 
+function retrieve_aug_obj_value(phd::PHData)::Float64
+
+    obj_value = 0.0
+
+    for (scid, sinfo) in pairs(phd.scenario_map)
+        model = sinfo.model
+        obj = @spawnat(sinfo.proc, JuMP.objective_value(fetch(model)))
+        obj_value += sinfo.prob * fetch(obj)
+    end
+
+    return obj_value
+end
+
 function retrieve_obj_value(phd::PHData)::Float64
 
     obj_value = 0.0
+
     for (scid, sinfo) in pairs(phd.scenario_map)
+
         model = sinfo.model
         obj = @spawnat(sinfo.proc, JuMP.objective_value(fetch(model)))
         obj_value += sinfo.prob * fetch(obj)
