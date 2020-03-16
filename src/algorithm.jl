@@ -33,7 +33,6 @@ end
 function compute_and_save_xhat(phd::PHData)::Float64
 
     xhat_res = 0.0
-    # xhat_olds = Dict{XhatID,Float64}()
 
     for (node_id, node) in pairs(phd.scenario_tree.tree_map)
 
@@ -57,35 +56,24 @@ function compute_and_save_xhat(phd::PHData)::Float64
             end
 
             xhat_id = XhatID(node_id,i)
-            # xhat_old = phd.Xhat[xhat_id]
             xhat_new = xhat / norm
 
+            xhat_old = phd.Xhat[xhat_id].value
             phd.Xhat[xhat_id].value = xhat_new
 
-            # xhat_res += norm * (xhat_new - xhat_old)^2
-
-            # xhat_olds[xhat_id] = xhat_old
+            xhat_res += (xhat_new - xhat_old)^2
         end
     end
 
     # This element of the residual was causing convergence issues so
     # leave it as zero for now
 
-    # xhat_res = 0.0
-    # for (xhat_id, xhat) in pairs(phd.Xhat)
-        
-    #     nid = xhat_id.node
-    #     node = phd.scenario_tree.tree_map[nid]
-        
-    #     for s in node.scenario_bundle
-    #         xhat_res += phd.probabilities[s] * (xhat - xhat_olds[xhat_id])^2
-    #     end
-    # end
-
     return xhat_res
 end
 
-function compute_and_save_w(phd::PHData)::Nothing
+function compute_and_save_w(phd::PHData)::Float64
+
+    kxsq = 0.0
 
     for (node_id, node) in pairs(phd.scenario_tree.tree_map)
 
@@ -101,11 +89,14 @@ function compute_and_save_w(phd::PHData)::Nothing
             norm = 0.0
 
             for s in node.scenario_bundle
+                p = phd.scenario_map[s].prob
+
                 var_id = VariableID(node.stage, i)
                 kx = branch_value(phd, s, var_id) - xhat
                 phd.scenario_map[s].W[var_id].value += phd.r * kx
 
-                p = phd.scenario_map[s].prob
+                kxsq += p * kx^2
+
                 exp += p * phd.scenario_map[s].W[var_id].value
                 norm += p
             end
@@ -118,14 +109,14 @@ function compute_and_save_w(phd::PHData)::Nothing
         end
     end
 
-    return
+    return kxsq
 end
 
-function update_ph_variables(phd::PHData)::Float64
+function update_ph_variables(phd::PHData)::Tuple{Float64,Float64}
     retrieve_values(phd, false)
     xhat_residual = compute_and_save_xhat(phd)
-    compute_and_save_w(phd)
-    return xhat_residual
+    x_residual = compute_and_save_w(phd)
+    return (xhat_residual, x_residual)
 end
 
 function update_ph_leaf_variables(phd::PHData)::Nothing
@@ -161,27 +152,6 @@ function set_start_values(phd::PHData)::Nothing
 
     return
 
-end
-
-function compute_x_residual(phd::PHData)::Float64
-
-    kxsq = 0.0
-
-    for (node_id, node) in pairs(phd.scenario_tree.tree_map)
-        for i in node.variable_indices
-            
-            xhat = phd.Xhat[XhatID(node_id, i)].value
-            
-            for s in node.scenario_bundle
-
-                x = value(phd, s, node.stage, i)
-                kxsq += phd.scenario_map[s].prob * (x - xhat)^2
-
-            end
-        end
-    end
-    
-    return kxsq
 end
 
 function _fix_values(ph_vars::Vector{PHVariable})::Nothing
@@ -251,10 +221,18 @@ function hedge(ph_data::PHData,
     residual = atol + 1.0e10
     report_flag = (report > 0)
 
+    (xhat_res_sq, x_res_sq) = @timeit(ph_data.time_info, "Update PH Vars",
+                                      update_ph_variables(ph_data))
+
+    residual = sqrt(xhat_res_sq + x_res_sq)
+
     if report_flag
-        x_residual = compute_x_residual(ph_data)
-        println("Iter: $(niter)    Res: $(x_residual)")
+        println("Iter: $(niter)    Res: $(residual)")
         flush(stdout)
+    end
+
+    if save_res
+        save_residual(ph_data, 0, residual)
     end
     
     while niter < max_iter && residual > atol
@@ -274,17 +252,15 @@ function hedge(ph_data::PHData,
                 solve_subproblems(ph_data))
 
         # Update xhat and w
-        xhat_residual = @timeit(ph_data.time_info, "Update PH Vars",
-                                update_ph_variables(ph_data))
+        (xhat_res_sq, x_res_sq) = @timeit(ph_data.time_info, "Update PH Vars",
+                                          update_ph_variables(ph_data))
 
-        # Update stopping criteria -- xhat_residual measures the movement of
+        # Update stopping criteria -- xhat_res_sq measures the movement of
         # xhat values from k^th iteration to the (k+1)^th iteration while
-        # x_residual measures the disagreement between the x variables and
+        # x_res_sq measures the disagreement between the x variables and
         # its corresponding xhat variable (so lack of consensus amongst the
         # subproblems or violation of the nonanticipativity constraint)
-        x_residual = @timeit(ph_data.time_info, "Compute residual",
-                             compute_x_residual(ph_data))
-        residual = sqrt(xhat_residual + x_residual)
+        residual= sqrt(xhat_res_sq + x_res_sq)
         
         niter += 1
 

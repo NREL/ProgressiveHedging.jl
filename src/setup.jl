@@ -266,7 +266,7 @@ function initialize(scenario_tree::ScenarioTree,
                     model_type::Type{M},
                     timo::TimerOutputs.TimerOutput,
                     report::Int,
-                    constructor_args::Tuple;
+                    constructor_args::Tuple,;
                     kwargs...
                     )::PHData where {S <: AbstractString,
                                      R <: Real,
@@ -303,12 +303,6 @@ function initialize(scenario_tree::ScenarioTree,
         flush(stdout)
     end
     @timeit(timo, "Compute start values", solve_subproblems(ph_data))
-
-    if report > 0
-        println("...updating ph variables...")
-        flush(stdout)
-    end
-    @timeit(timo, "Initialize PH variables", update_ph_variables(ph_data))
 
     if report > 0
         println("...augmenting objectives...")
