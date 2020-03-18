@@ -36,7 +36,7 @@ include("setup.jl")
           r<:Real,
           other_args...;
           model_type<:JuMP.AbstractModel=JuMP.Model,
-          max_iter::Int=100,
+          max_iter::Int=1000,
           atol::Float64=1e-8,
           report::Int=0,
           save_residuals::Bool=false,

@@ -218,16 +218,16 @@ function hedge(ph_data::PHData,
                warm_start::Bool,
                )::Tuple{Int,Float64}
     niter = 0
-    residual = atol + 1.0e10
     report_flag = (report > 0)
 
     (xhat_res_sq, x_res_sq) = @timeit(ph_data.time_info, "Update PH Vars",
                                       update_ph_variables(ph_data))
 
-    residual = sqrt(xhat_res_sq + x_res_sq)
+    nsqrt = sqrt(length(ph_data.Xhat))
+    residual = sqrt(xhat_res_sq + x_res_sq) / nsqrt
 
     if report_flag
-        println("Iter: $(niter)    Res: $(residual)")
+        println("Iter: $(niter)    Xhat: $(sqrt(xhat_res_sq)/nsqrt)    X: $(sqrt(x_res_sq)/nsqrt)    Res: $(residual)")
         flush(stdout)
     end
 
@@ -260,12 +260,12 @@ function hedge(ph_data::PHData,
         # x_res_sq measures the disagreement between the x variables and
         # its corresponding xhat variable (so lack of consensus amongst the
         # subproblems or violation of the nonanticipativity constraint)
-        residual= sqrt(xhat_res_sq + x_res_sq)
+        residual= sqrt(xhat_res_sq + x_res_sq) / nsqrt
         
         niter += 1
 
         if report_flag && niter % report == 0
-            println("Iter: $(niter)    Res: $(residual)")
+            println("Iter: $(niter)    Xhat: $(sqrt(xhat_res_sq)/nsqrt)    X: $(sqrt(x_res_sq)/nsqrt)    Res: $(residual)")
             flush(stdout)
         end
 
