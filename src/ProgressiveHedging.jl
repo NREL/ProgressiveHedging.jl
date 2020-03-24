@@ -1,15 +1,13 @@
 module ProgressiveHedging
 
-import JuMP
-# import StructJuMP
 import DataFrames
-
-using TimerOutputs
-
+import JuMP
 import MathOptInterface
 const MOI = MathOptInterface
 
 using Distributed
+using Printf
+using TimerOutputs
 
 # Functions for solving the problem
 export solve, solve_extensive

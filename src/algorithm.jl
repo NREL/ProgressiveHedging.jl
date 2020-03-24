@@ -65,9 +65,6 @@ function compute_and_save_xhat(phd::PHData)::Float64
         end
     end
 
-    # This element of the residual was causing convergence issues so
-    # leave it as zero for now
-
     return xhat_res
 end
 
@@ -227,7 +224,8 @@ function hedge(ph_data::PHData,
     residual = sqrt(xhat_res_sq + x_res_sq) / nsqrt
 
     if report_flag
-        println("Iter: $(niter)    Xhat: $(sqrt(xhat_res_sq)/nsqrt)    X: $(sqrt(x_res_sq)/nsqrt)    Res: $(residual)")
+        @printf("Iter: %4d    Res: %12.6e    Xhat: %12.6e    X: %12.6e\n",
+                niter, residual, sqrt(xhat_res_sq)/nsqrt, sqrt(x_res_sq)/nsqrt)
         flush(stdout)
     end
 
@@ -265,7 +263,8 @@ function hedge(ph_data::PHData,
         niter += 1
 
         if report_flag && niter % report == 0
-            println("Iter: $(niter)    Xhat: $(sqrt(xhat_res_sq)/nsqrt)    X: $(sqrt(x_res_sq)/nsqrt)    Res: $(residual)")
+            @printf("Iter: %4d    Res: %12.6e    Xhat: %12.6e    X: %12.6e\n",
+                    niter, residual, sqrt(xhat_res_sq)/nsqrt, sqrt(x_res_sq)/nsqrt)
             flush(stdout)
         end
 
