@@ -129,6 +129,18 @@ function retrieve_obj_value(phd::PHData)::Float64
     return obj_value
 end
 
+function two_stage_tree(n::Int;
+                        pdict::Union{Nothing,Dict{Int,R}}=nothing
+                        )::ScenarioTree where R <: Real
+    p = pdict == nothing ? Dict([k => 1.0/n for k in 1:n]) : pdict
+
+    st = ScenarioTree()
+    for k in 1:n
+        add_leaf(st, root(st), p[k])
+    end
+    return st
+end
+
 function visualize_tree(phd::PHData)
     # TODO: Implement this...
     @warn("Not yet implemented")
