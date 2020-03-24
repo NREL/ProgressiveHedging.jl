@@ -94,7 +94,7 @@ function compute_and_save_w(phd::PHData)::Float64
 
                 kxsq += p * kx^2
 
-                exp += p * phd.scenario_map[s].W[var_id].value
+                exp += p * w_value(phd, s, var_id)
                 norm += p
             end
 
@@ -210,6 +210,7 @@ end
 function hedge(ph_data::PHData,
                max_iter::Int,
                atol::Float64,
+               rtol::Float64,
                report::Int,
                save_res::Bool,
                warm_start::Bool,
@@ -221,11 +222,14 @@ function hedge(ph_data::PHData,
                                       update_ph_variables(ph_data))
 
     nsqrt = sqrt(length(ph_data.Xhat))
+    xmax = max(maximum(abs.(value.(values(ph_data.Xhat)))), 1e-12)
     residual = sqrt(xhat_res_sq + x_res_sq) / nsqrt
 
     if report_flag
-        @printf("Iter: %4d    Res: %12.6e    Xhat: %12.6e    X: %12.6e\n",
-                niter, residual, sqrt(xhat_res_sq)/nsqrt, sqrt(x_res_sq)/nsqrt)
+        @printf("Iter: %4d   AbsR: %12.6e   RelR: %12.6e   Xhat: %12.6e   X: %12.6e\n",
+                niter, residual, residual/xmax,
+                sqrt(xhat_res_sq)/nsqrt, sqrt(x_res_sq)/nsqrt
+                )
         flush(stdout)
     end
 
@@ -233,7 +237,7 @@ function hedge(ph_data::PHData,
         save_residual(ph_data, 0, residual)
     end
     
-    while niter < max_iter && residual > atol
+    while niter < max_iter && residual > atol && residual > rtol * xmax
         
         # Set initial values, fix cross model values (W and Xhat) and
         # solve the subproblems
@@ -259,12 +263,15 @@ function hedge(ph_data::PHData,
         # its corresponding xhat variable (so lack of consensus amongst the
         # subproblems or violation of the nonanticipativity constraint)
         residual= sqrt(xhat_res_sq + x_res_sq) / nsqrt
+        xmax = max(maximum(abs.(value.(values(ph_data.Xhat)))), 1e-12)
         
         niter += 1
 
         if report_flag && niter % report == 0
-            @printf("Iter: %4d    Res: %12.6e    Xhat: %12.6e    X: %12.6e\n",
-                    niter, residual, sqrt(xhat_res_sq)/nsqrt, sqrt(x_res_sq)/nsqrt)
+            @printf("Iter: %4d   AbsR: %12.6e   RelR: %12.6e   Xhat: %12.6e   X: %12.6e\n",
+                    niter, residual, residual/xmax,
+                    sqrt(xhat_res_sq)/nsqrt, sqrt(x_res_sq)/nsqrt
+                    )
             flush(stdout)
         end
 

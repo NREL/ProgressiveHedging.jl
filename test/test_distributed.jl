@@ -1,6 +1,7 @@
 
 r = 25.0
 atol = 1e-8
+rtol = 1e-12
 max_iter = 500
 obj_val = 178.3537498401004
 var_vals = Dict([
@@ -38,6 +39,7 @@ include("common.jl")
                                         variable_dict(),
                                         r,
                                         atol=atol,
+                                        rtol=rtol,
                                         opt=optimizer,
                                         max_iter=max_iter,
                                         report=0,

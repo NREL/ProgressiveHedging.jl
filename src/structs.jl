@@ -307,6 +307,10 @@ end
 # PHHatVariable() = PHHatVariable(Set{ScenarioID}(), 0.0)
 PHHatVariable() = PHHatVariable(0.0)
 
+function value(a::PHHatVariable)
+    return a.value
+end
+
 struct ScenarioInfo
     proc::Int
     prob::Float64

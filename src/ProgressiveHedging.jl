@@ -35,7 +35,8 @@ include("setup.jl")
           other_args...;
           model_type<:JuMP.AbstractModel=JuMP.Model,
           max_iter::Int=1000,
-          atol::Float64=1e-8,
+          atol::Float64=1e-6,
+          rtol::Float64=1e-6,
           report::Int=0,
           save_residuals::Bool=false,
           timing::Bool=true,
@@ -56,7 +57,8 @@ Solve given problem using Progressive Hedging.
 
 * `model_type<:JuMP.AbstractModel` : Type of model to create or created by `model_constructor` to represent the subproblems. Defaults to JuMP.Model.
 * `max_iter::Int` : Maximum number of iterations to perform before returning. Defaults to 1000.
-* `atol::Float64` : Absolute error tolerance. If total disagreement amongst variables is less than this in the L^2 sense, then return. Defaults to 1e-8.
+* `atol::Float64` : Absolute error tolerance. Defaults to 1e-6.
+* `rtol::Float64` : Relative error tolerance. Defaults to 1e-6.
 * `report::Int` : Print progress to screen every `report` iterations. Any value <= 0 disables printing. Defaults to 0.
 * `save_residuals::Bool` : Flag indicating whether or not to save residuals from all iterations of the algorithm
 * `timing::Bool` : Flag indicating whether or not to record timing information. Defaults to true.
@@ -71,7 +73,8 @@ function solve(tree::ScenarioTree,
                other_args...;
                model_type::Type{M}=JuMP.Model,
                max_iter::Int=1000,
-               atol::Float64=1e-8,
+               atol::Float64=1e-6,
+               rtol::Float64=1e-6,
                report::Int=0,
                save_residuals::Bool=false,
                timing::Bool=true,
@@ -102,7 +105,7 @@ function solve(tree::ScenarioTree,
         println("Solving...")
     end
     (niter, residual) = @timeit(timo, "Solution",
-                                hedge(ph_data, max_iter, atol,
+                                hedge(ph_data, max_iter, atol, rtol,
                                       report, save_residuals, warm_start)
                                 )
 
@@ -128,7 +131,6 @@ end
           variable_dict::Dict{Int,Vector{String}},
           other_args...;
           model_type<:JuMP.AbstractModel=JuMP.Model,
-          atol::Float64=1e-8,
           args::Tuple=(),
           kwargs...)
 

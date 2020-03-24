@@ -1,6 +1,7 @@
 
 r = 25.0
 atol = 1e-8
+rtol = 1e-12
 max_iter = 500
 obj_val = 178.3537498401004
 var_vals = Dict([
@@ -48,6 +49,7 @@ end
                                         r,
                                         opt=optimizer,
                                         atol=atol,
+                                        rtol=rtol,
                                         max_iter=max_iter,
                                         report=0,
                                         timing=false,
@@ -71,6 +73,7 @@ end
                                         r,
                                         opt=optimizer,
                                         atol=atol,
+                                        rtol=rtol,
                                         max_iter=max_iter,
                                         report=-5,
                                         timing=false,
@@ -98,9 +101,31 @@ end
                                                    r,
                                                    opt=optimizer,
                                                    atol=atol,
+                                                   rtol=rtol,
                                                    max_iter=max_iter,
                                                    report=0,
                                                    timing=false)
                                           )
+    @test err > atol
     @test n == max_iter
+end
+
+@testset "Relative tolerance termination" begin
+    rtol = 1e-6
+    (n, err, obj, soln, phd) = PH.solve(build_scen_tree(),
+                                        create_model,
+                                        variable_dict(),
+                                        r,
+                                        opt=optimizer,
+                                        atol=atol,
+                                        rtol=rtol,
+                                        max_iter=max_iter,
+                                        report=0,
+                                        timing=false,
+                                        warm_start=true)
+
+    xmax = maximum(soln[soln[:,:stage] .!= 3,:value])
+    @test err > atol
+    @test n < max_iter
+    @test err < rtol * xmax
 end
