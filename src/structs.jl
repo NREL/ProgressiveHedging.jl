@@ -404,12 +404,13 @@ function PHData(r::N, tree::ScenarioTree,
                 leaf_map[vid] = vinfo
             else
                 branch_map[vid] = vinfo
+
+                xid = XhatID(vinfo.node_id, vid.index)
+                if !haskey(xhat_dict, xid)
+                    xhat_dict[xid] = PHHatVariable()
+                end
             end
 
-            xid = XhatID(vinfo.node_id, vid.index)
-            if !haskey(xhat_dict, xid)
-                xhat_dict[xid] = PHHatVariable()
-            end
         end
 
         scenario_map[scid] = ScenarioInfo(scen_proc_map[scid],

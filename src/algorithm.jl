@@ -119,11 +119,11 @@ end
 function update_ph_leaf_variables(phd::PHData)::Nothing
     retrieve_values(phd, true)
 
-    for (xid, xhat) in pairs(phd.Xhat)
-        if is_leaf(phd.scenario_tree, xid.node)
-            @assert(length(scenario_bundle(phd, xid)) == 1)
-            (scid, vid) = convert_to_variable_id(phd, xid)
-            xhat.value = phd.scenario_map[scid].leaf_map[vid].value
+    for (scid, sinfo) in pairs(phd.scenario_map)
+        for (vid, vinfo) in pairs(sinfo.leaf_map)
+            xhid = convert_to_xhat_id(phd, scid, vid)
+            @assert(!haskey(phd.Xhat, xhid))
+            phd.Xhat[xhid] = PHHatVariable(value(phd, scid, vid))
         end
     end
 
