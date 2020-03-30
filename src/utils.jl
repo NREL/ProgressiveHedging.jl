@@ -130,9 +130,9 @@ function retrieve_obj_value(phd::PHData)::Float64
 end
 
 function two_stage_tree(n::Int;
-                        pdict::Union{Nothing,Dict{Int,R}}=nothing
+                        pvect::Union{Nothing,Vector{R}}=nothing
                         )::ScenarioTree where R <: Real
-    p = pdict == nothing ? Dict([k => 1.0/n for k in 1:n]) : pdict
+    p = pvect == nothing ? [1.0/n for k in 1:n] : pvect
 
     st = ScenarioTree()
     for k in 1:n

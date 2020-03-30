@@ -17,6 +17,7 @@ using TimerOutputs
 
 include("common.jl")
 
+include("test_utils.jl")
 include("test_setup.jl")
 include("test_algorithm.jl")
 include("test_distributed.jl")

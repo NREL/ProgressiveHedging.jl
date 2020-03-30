@@ -12,7 +12,7 @@ using TimerOutputs
 # Functions for solving the problem
 export solve, solve_extensive
 # Functions for building the scenario tree
-export add_node, add_leaf, root
+export add_node, add_leaf, root, two_stage_tree
 # Functions for interacting with the returned PHData struct
 export residuals, retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_w
 
