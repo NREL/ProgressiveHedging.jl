@@ -111,12 +111,12 @@ function retrieve_ph_refs(phd::PHData,
             continue
         end
         
-        for scid in node.scenario_bundle
+        for scid in scenario_bundle(node)
 
             sinfo = phd.scenario_map[scid]
             vrefs = ref_map[scid]
 
-            for i in node.variable_indices
+            for i in indices(phd.indexer, node)
 
                 vid = VariableID(node.stage, i)
                 sinfo.W[vid].ref = @spawnat(sinfo.proc,
@@ -193,7 +193,8 @@ function create_models(scen_tree::ScenarioTree,
 
 end
 
-function collect_variable_refs(scen_tree::ScenarioTree,
+function collect_variable_refs(indexer::Indexer,
+                               scen_tree::ScenarioTree,
                                scen_proc_map::Dict{ScenarioID, Int},
                                submodels::Dict{ScenarioID, Future},
                                variable_dict::Dict{STAGE_ID,Vector{String}},
@@ -209,7 +210,7 @@ function collect_variable_refs(scen_tree::ScenarioTree,
         @assert(_value(node.stage) in keys(variable_dict))
 
         for var_name in variable_dict[_value(node.stage)]
-            idx = next_index(node)
+            idx = next_index(indexer, node)
 
             for s in node.scenario_bundle
 
@@ -249,17 +250,19 @@ function build_submodels(scen_tree::ScenarioTree,
                                       kwargs...)
                         )
     # Store variable references and other info
+    idxr = Indexer()
     var_map = @timeit(timo, "Collect variables",
-                      collect_variable_refs(scen_tree,
+                      collect_variable_refs(idxr,
+                                            scen_tree,
                                             scen_proc_map,
                                             submodels,
                                             variable_dict)
                       )
 
-    return (submodels, scen_proc_map, var_map)
+    return (submodels, scen_proc_map, var_map, idxr)
 end
 
-function initialize(scenario_tree::ScenarioTree,
+function initialize(scen_tree::ScenarioTree,
                     model_constructor::Function,
                     variable_dict::Dict{STAGE_ID,Vector{String}},
                     r::R,
@@ -272,14 +275,12 @@ function initialize(scenario_tree::ScenarioTree,
                                      R <: Real,
                                      M <: JuMP.AbstractModel}
 
-    scen_tree = deepcopy(scenario_tree)
-
     if report > 0
         println("...building submodels...")
         flush(stdout)
     end
 
-    (submodels, scen_proc_map, var_map
+    (submodels, scen_proc_map, var_map, indexer
      ) = @timeit(timo, "Submodel construction",
                  build_submodels(scen_tree,
                                  model_constructor,
@@ -296,6 +297,7 @@ function initialize(scenario_tree::ScenarioTree,
                      scen_tree.prob_map,
                      submodels,
                      var_map,
+                     indexer,
                      timo)
 
     if report > 0

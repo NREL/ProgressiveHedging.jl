@@ -40,7 +40,7 @@ function compute_and_save_xhat(phd::PHData)::Float64
             continue
         end
 
-        for i in node.variable_indices
+        for i in indices(phd.indexer, node)
 
             xhat = 0.0
             norm = 0.0
@@ -78,7 +78,7 @@ function compute_and_save_w(phd::PHData)::Float64
             continue
         end
 
-        for i in node.variable_indices
+        for i in indices(phd.indexer, node)
 
             xhat = phd.Xhat[XhatID(node_id,i)].value
             

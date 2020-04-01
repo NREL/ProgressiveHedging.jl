@@ -38,7 +38,6 @@
     nodes = [st.root, n1, n2, n3, n4, n5]
     for n in nodes
         @test st.tree_map[n.id] == n
-        @test n.id in st.stage_map[n.stage]
     end
 
     @test PH.scenarios(st) == Set([sc0, sc1, sc2])

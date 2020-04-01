@@ -43,16 +43,13 @@ end
 @testset "Convenience functions" begin
     st = two_stage_tree(3)
     @test length(st.tree_map) == 4
-    @test length(st.stage_map) == 2
-    @test length(st.stage_map[PH.stid(1)]) == 1
-    @test length(st.stage_map[PH.stid(2)]) == 3
     @test length(st.prob_map) == 3
     @test isapprox(sum(values(st.prob_map)), 1.0)
 
     p = [0.8, 0.2]
     st = two_stage_tree(2, pvect=p)
-    @test st.prob_map[PH.scid(0)] == 0.8
-    @test st.prob_map[PH.scid(1)] == 0.2
+    @test st.prob_map[PH.scid(0)] == p[1]
+    @test st.prob_map[PH.scid(1)] == p[2]
 end
 
 function build_var_map(n::Int,
@@ -97,6 +94,7 @@ phd = PH.PHData(1.0,
                 st.prob_map,
                 Dict{PH.ScenarioID, Future}([PH.scid(k)=>Future() for k in 0:nscen-1]),
                 var_map,
+                PH.Indexer(),
                 TimerOutputs.TimerOutput()
                 )
              
