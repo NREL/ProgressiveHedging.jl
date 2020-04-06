@@ -25,14 +25,12 @@ end
 
 function variable_by_name(as::S,
                           name::String
-                          )::V where {S <: AbstractSubproblem,
-                                      V <: JuMP.AbstractVariableRef}
+                          ) where {S <: AbstractSubproblem}
     throw(UnimplementedError("variable_by_name is unimplemented for $(S)"))
 end
 
 function variable_type(as::S
-                       )::V where {S <: AbstractSubproblem,
-                                   V <: JuMP.AbstractVariableRef}
+                       ) where {S <: AbstractSubproblem}
     throw(UnimplementedError("variable_type is unimplemented for $(S)"))
 end
 
@@ -85,10 +83,6 @@ function solve(js::JuMPSubproblem)::MOI.TerminationStatusCode
     JuMP.optimize!(js.model)
     return JuMP.termination_status(js.model)
 end
-
-# function termination_status(js::JuMPSubproblem)::MOI.TerminationStatusCode
-#     return JuMP.termination_status(js.model)
-# end
 
 function warm_start(js::JuMPSubproblem)::Nothing
     for var in JuMP.all_variables(js.model)
