@@ -1,8 +1,4 @@
 
-function _error(astring::String)
-    return
-end
-
 function assign_scenarios_to_procs(scen_tree::ScenarioTree)::Dict{ScenarioID,Int}
     sp_map = Dict{ScenarioID, Int}()
 
@@ -16,12 +12,12 @@ function assign_scenarios_to_procs(scen_tree::ScenarioTree)::Dict{ScenarioID,Int
 end
 
 function _augment_objective_w(obj::JuMP.GenericQuadExpr{Float64,V},
-                              model::M,
+                              subproblem::S,
                               var_dict::Dict{VariableID,VariableInfo},
                               ) where {V <: JuMP.AbstractVariableRef,
-                                       M <: JuMP.AbstractModel}
+                                       S <: AbstractSubproblem}
 
-    w_dict = Dict{VariableID,JuMP.variable_type(model)}()
+    w_dict = Dict{VariableID, variable_type(subproblem)}()
     jvi = JuMP.VariableInfo(false, NaN,   # lower_bound
                             false, NaN,   # upper_bound
                             true, 0.0,    # fixed
@@ -29,8 +25,7 @@ function _augment_objective_w(obj::JuMP.GenericQuadExpr{Float64,V},
                             false, false) # binary, integer
 
     for (vid, vinfo) in pairs(var_dict)
-        w_ref = JuMP.add_variable(model,
-                                  JuMP.build_variable(_error, jvi))
+        w_ref = add_variable(subproblem, jvi)
         w_dict[vid] = w_ref
         x_ref = fetch(vinfo.ref)
         JuMP.add_to_expression!(obj, w_ref*x_ref)
@@ -40,14 +35,14 @@ function _augment_objective_w(obj::JuMP.GenericQuadExpr{Float64,V},
 end
 
 function _augment_objective_xhat(obj::JuMP.GenericQuadExpr{Float64,V},
-                                 model::M,
+                                 subproblem::S,
                                  r::R,
                                  var_dict::Dict{VariableID,VariableInfo},
                                  ) where {V <: JuMP.AbstractVariableRef,
-                                          M <: JuMP.AbstractModel,
+                                          S <: AbstractSubproblem,
                                           R <: Real}
 
-    xhat_dict = Dict{VariableID,JuMP.variable_type(model)}()
+    xhat_dict = Dict{VariableID, variable_type(subproblem)}()
     jvi = JuMP.VariableInfo(false, NaN,   # lower_bound
                             false, NaN,   # upper_bound
                             true, 0.0,    # fixed
@@ -55,8 +50,7 @@ function _augment_objective_xhat(obj::JuMP.GenericQuadExpr{Float64,V},
                             false, false) # binary, integer
 
     for (vid, vinfo) in pairs(var_dict)
-        xhat_ref = JuMP.add_variable(model,
-                                     JuMP.build_variable(_error, jvi))
+        xhat_ref = add_variable(subproblem, jvi)
         xhat_dict[vid] = xhat_ref
         x_ref = fetch(vinfo.ref)
         JuMP.add_to_expression!(obj, 0.5 * r * (x_ref - xhat_ref)^2)
@@ -65,20 +59,18 @@ function _augment_objective_xhat(obj::JuMP.GenericQuadExpr{Float64,V},
     return xhat_dict
 end
 
-function _augment_objective(model::M,
+function _augment_objective(subproblem::S,
                            r::R,
                            var_dict::Dict{VariableID,VariableInfo}
-                           ) where {M <: JuMP.AbstractModel,
+                           ) where {S <: AbstractSubproblem,
                                     R <: Real}
-    obj = JuMP.objective_function(model,
-                                  JuMP.GenericQuadExpr{Float64,
-                                                       JuMP.variable_type(model)})
-    JuMP.set_objective_function(model, 0.0)
+    obj = objective(subproblem)
+    # set_objective_function(subproblem, 0.0)
 
-    w_refs = _augment_objective_w(obj, model, var_dict)
-    xhat_refs = _augment_objective_xhat(obj, model, r, var_dict)
+    w_refs = _augment_objective_w(obj, subproblem, var_dict)
+    xhat_refs = _augment_objective_xhat(obj, subproblem, r, var_dict)
 
-    JuMP.set_objective_function(model, obj)
+    set_objective(subproblem, obj)
 
     return (w_refs, xhat_refs)
 end
@@ -90,11 +82,11 @@ function order_augment(phd::PHData)::Dict{ScenarioID,Future}
     # Create variables and augment objectives
     @sync for (scid, sinfo) in pairs(phd.scenario_map)
         r = phd.r
-        model = sinfo.model
+        subproblem = sinfo.subproblem
         var_map = sinfo.branch_map
 
         ref_map[scid] = @spawnat(sinfo.proc,
-                                 _augment_objective(fetch(model),
+                                 _augment_objective(fetch(subproblem),
                                                     r,
                                                     var_map))
     end
@@ -147,18 +139,18 @@ end
 function _create_model(sint::Int,
                        model_constructor::Function,
                        model_constructor_args::Tuple,
-                       model_type::Type{M};
+                       subtype::Type{S};
                        kwargs...
-                       ) where {M <: JuMP.AbstractModel}
+                       )::S where {S <: AbstractSubproblem}
 
     model = model_constructor(sint,
                               model_constructor_args...;
                               kwargs...)
 
-    if typeof(model) != model_type
+    if typeof(model) != subtype
         @error("Model constructor function produced model of type " *
-               typeof(model) * ". " *
-               "Expected model of type $(model_type). " *
+               "$(typeof(model)). " *
+               "Expected model of type $(subtype). " *
                "Undefined behavior will probably result.")
     end
 
@@ -170,9 +162,9 @@ function create_models(scen_tree::ScenarioTree,
                        model_constructor::Function,
                        model_constructor_args::Tuple,
                        scen_proc_map::Dict{ScenarioID, Int},
-                       model_type::Type{M};
+                       sub_type::Type{S};
                        kwargs...
-                       ) where {M <: JuMP.AbstractModel}
+                       )::Dict{ScenarioID,Future} where {S <: AbstractSubproblem}
 
     submodels = Dict{ScenarioID,Future}()
 
@@ -183,7 +175,7 @@ function create_models(scen_tree::ScenarioTree,
                                 _create_model(sint,
                                               model_constructor,
                                               model_constructor_args,
-                                              model_type;
+                                              sub_type;
                                               kwargs...
                                               )
                                 )
@@ -218,7 +210,7 @@ function collect_variable_refs(indexer::Indexer,
                 proc = scen_proc_map[s]
                 model = submodels[s]
 
-                ref = @spawnat(proc, JuMP.variable_by_name(fetch(model), var_name))
+                ref = @spawnat(proc, variable_by_name(fetch(model), var_name))
                 var_map[s][vid] = VariableInfo(ref, var_name, nid)
 
             end
@@ -232,10 +224,10 @@ function build_submodels(scen_tree::ScenarioTree,
                          model_constructor::Function,
                          model_constructor_args::Tuple,
                          variable_dict::Dict{STAGE_ID,Vector{String}},
-                         model_type::Type{M},
+                         sub_type::Type{S},
                          timo::TimerOutputs.TimerOutput;
                          kwargs...
-                         ) where {M <: JuMP.AbstractModel}
+                         ) where {S <: AbstractSubproblem}
 
     # Assign each subproblem to a particular juila process
     scen_proc_map = assign_scenarios_to_procs(scen_tree)
@@ -246,7 +238,7 @@ function build_submodels(scen_tree::ScenarioTree,
                                       model_constructor,
                                       model_constructor_args,
                                       scen_proc_map,
-                                      model_type;
+                                      sub_type;
                                       kwargs...)
                         )
     # Store variable references and other info
@@ -266,14 +258,13 @@ function initialize(scen_tree::ScenarioTree,
                     model_constructor::Function,
                     variable_dict::Dict{STAGE_ID,Vector{String}},
                     r::R,
-                    model_type::Type{M},
+                    sub_type::Type{S},
                     timo::TimerOutputs.TimerOutput,
                     report::Int,
                     constructor_args::Tuple,;
                     kwargs...
-                    )::PHData where {S <: AbstractString,
-                                     R <: Real,
-                                     M <: JuMP.AbstractModel}
+                    )::PHData where {S <: AbstractSubproblem,
+                                     R <: Real}
 
     if report > 0
         println("...building submodels...")
@@ -286,7 +277,7 @@ function initialize(scen_tree::ScenarioTree,
                                  model_constructor,
                                  constructor_args,
                                  variable_dict,
-                                 M,
+                                 S,
                                  timo;
                                  kwargs...)
                  )
@@ -566,7 +557,11 @@ function build_extensive_form(optimizer::Function,
 
         smod = model_constructor(_value(s), constructor_args...; kwargs...)
 
-        snode_var_map = ef_copy_model(model, smod, s, tree,
+        if typeof(smod) != JuMPSubproblem
+            throw(UnimplementedError("build_extensive_form is has not been implemented for subproblems of type $(typeof(smod))"))
+        end
+
+        snode_var_map = ef_copy_model(model, smod.model, s, tree,
                                       variable_dict, node_var_map)
 
         @assert(isempty(intersect(keys(node_var_map), keys(snode_var_map))))

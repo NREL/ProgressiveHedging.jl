@@ -70,14 +70,14 @@ end
 struct ScenarioInfo
     proc::Int
     prob::Float64
-    model::Future
+    subproblem::Future
     branch_map::Dict{VariableID, VariableInfo}
     leaf_map::Dict{VariableID, VariableInfo}
     W::Dict{VariableID, PHVariable}
     Xhat::Dict{XhatID, PHVariable}
 end
 
-function ScenarioInfo(proc::Int, prob::Float64, submodel::Future,
+function ScenarioInfo(proc::Int, prob::Float64, subproblem::Future,
                       branch_map::Dict{VariableID, VariableInfo},
                       leaf_map::Dict{VariableID, VariableInfo}
                       )::ScenarioInfo
@@ -92,7 +92,7 @@ function ScenarioInfo(proc::Int, prob::Float64, submodel::Future,
 
     return ScenarioInfo(proc,
                         prob,
-                        submodel,
+                        subproblem,
                         branch_map,
                         leaf_map,
                         w_dict,
@@ -144,7 +144,7 @@ end
 function PHData(r::N, tree::ScenarioTree,
                 scen_proc_map::Dict{ScenarioID, Int},
                 probs::Dict{ScenarioID, Float64},
-                submodels::Dict{ScenarioID, Future},
+                subproblems::Dict{ScenarioID, Future},
                 var_map::Dict{ScenarioID, Dict{VariableID, VariableInfo}},
                 indexer::Indexer,
                 time_out::TimerOutputs.TimerOutput
@@ -153,7 +153,7 @@ function PHData(r::N, tree::ScenarioTree,
     xhat_dict = Dict{XhatID, PHHatVariable}()
 
     scenario_map = Dict{ScenarioID, ScenarioInfo}()
-    for (scid, model) in pairs(submodels)
+    for (scid, model) in pairs(subproblems)
 
         leaf_map = Dict{VariableID, VariableInfo}()
         branch_map = Dict{VariableID, VariableInfo}()

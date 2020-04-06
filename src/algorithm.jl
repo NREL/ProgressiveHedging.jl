@@ -131,20 +131,11 @@ function update_ph_leaf_variables(phd::PHData)::Nothing
 end
 
 # Some MOI interfaces do not support setting of start values
-function _set_start_values(model::JuMP.Model)::Nothing
-    for var in JuMP.all_variables(model)
-        if !JuMP.is_fixed(var)
-            JuMP.set_start_value(var, JuMP.value(var))
-        end
-    end
-    return
-end
-
 function set_start_values(phd::PHData)::Nothing
 
     @sync for (scid, sinfo) in pairs(phd.scenario_map)
-        model = sinfo.model
-        @spawnat(sinfo.proc, _set_start_values(fetch(model)))
+        subproblem = sinfo.subproblem
+        @spawnat(sinfo.proc, warm_start(fetch(subproblem)))
     end
 
     return
@@ -186,18 +177,17 @@ end
 
 function solve_subproblems(phd::PHData)::Nothing
 
-    # Find subproblem solutions--in parallel if we have the workers for it.
-    # @sync will wait for all processes to complete
+    # Find subproblem solutions
+    status = Dict{ScenarioID, Future}()
     @sync for (scen, sinfo) in pairs(phd.scenario_map)
-        model = sinfo.model
-        @spawnat(sinfo.proc, JuMP.optimize!(fetch(model)))
+        subproblem = sinfo.subproblem
+        status[scen] = @spawnat(sinfo.proc, solve(fetch(subproblem)))
     end
 
     for (scen, sinfo) in pairs(phd.scenario_map)
-        # MOI refers to the MathOptInterface package. Apparently this is made
-        # accessible by JuMP since it is not imported here
-        model = sinfo.model
-        sts = fetch(@spawnat(sinfo.proc, JuMP.termination_status(fetch(model))))
+        # MOI refers to the MathOptInterface package
+        subproblem = sinfo.subproblem
+        sts = fetch(status[scen])
         if sts != MOI.OPTIMAL && sts != MOI.LOCALLY_SOLVED &&
             sts != MOI.ALMOST_LOCALLY_SOLVED
             @error("Scenario $scen subproblem returned $sts.")

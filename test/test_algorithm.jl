@@ -40,6 +40,15 @@ var_vals = Dict([
     for var in JuMP.all_variables(efm)
         @test isapprox(JuMP.value(var), var_vals[JuMP.name(var)])
     end
+
+    struct FakeSubproblem <: AbstractSubproblem end
+    fake_constructor(scen::Int) = FakeSubproblem()
+    @test_throws(ProgressiveHedging.UnimplementedError,
+                 PH.solve_extensive(build_scen_tree(),
+                                    fake_constructor,
+                                    variable_dict(),
+                                    optimizer=optimizer)
+                 )
 end
 
 @testset "Solve" begin

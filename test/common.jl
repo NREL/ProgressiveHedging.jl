@@ -71,7 +71,7 @@ end
 
     JuMP.@objective(model, Min, obj)
     
-    return model
+    return JuMPSubproblem(model)
 end
 
 function build_scen_tree()

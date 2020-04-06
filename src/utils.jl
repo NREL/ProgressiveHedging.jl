@@ -96,8 +96,8 @@ function retrieve_aug_obj_value(phd::PHData)::Float64
     obj_value = 0.0
 
     for (scid, sinfo) in pairs(phd.scenario_map)
-        model = sinfo.model
-        obj = @spawnat(sinfo.proc, JuMP.objective_value(fetch(model)))
+        subproblem = sinfo.subproblem
+        obj = @spawnat(sinfo.proc, objective_value(fetch(subproblem)))
         obj_value += sinfo.prob * fetch(obj)
     end
 
@@ -110,8 +110,8 @@ function retrieve_obj_value(phd::PHData)::Float64
 
     for (scid, sinfo) in pairs(phd.scenario_map)
 
-        model = sinfo.model
-        obj = @spawnat(sinfo.proc, JuMP.objective_value(fetch(model)))
+        subproblem = sinfo.subproblem
+        obj = @spawnat(sinfo.proc, objective_value(fetch(subproblem)))
         obj_value += sinfo.prob * fetch(obj)
 
         # Remove PH terms

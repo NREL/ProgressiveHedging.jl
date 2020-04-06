@@ -9,6 +9,14 @@ using Distributed
 using Printf
 using TimerOutputs
 
+#### Exports ####
+
+## Types
+
+export AbstractSubproblem, JuMPSubproblem
+
+## Functions
+
 # Functions for solving the problem
 export solve, solve_extensive
 # Functions for building the scenario tree
@@ -16,16 +24,16 @@ export add_node, add_leaf, root, two_stage_tree
 # Functions for interacting with the returned PHData struct
 export residuals, retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_w
 
-# TODO: Find a way to return the objective value for each scenario
+#### Includes ####
 
-# TODO: Pass in actual error function for adding things in case something
-# goes wrong. Currently just a function stub.
-
+include("subproblem.jl")
 include("structs.jl")
 include("utils.jl")
 
 include("algorithm.jl")
 include("setup.jl")
+
+#### Functions ####
 
 """
     solve(tree::ScenarioTree,
@@ -55,7 +63,7 @@ Solve given problem using Progressive Hedging.
 
 **Keyword Arguments**
 
-* `model_type<:JuMP.AbstractModel` : Type of model to create or created by `model_constructor` to represent the subproblems. Defaults to JuMP.Model.
+* `subproblem_type<:AbstractSubproblem` : Type of model to create or created by `model_constructor` to represent the subproblems. Defaults to JuMPSubproblem.
 * `max_iter::Int` : Maximum number of iterations to perform before returning. Defaults to 1000.
 * `atol::Float64` : Absolute error tolerance. Defaults to 1e-6.
 * `rtol::Float64` : Relative error tolerance. Defaults to 1e-6.
@@ -71,7 +79,7 @@ function solve(tree::ScenarioTree,
                variable_dict::Dict{STAGE_ID,Vector{String}},
                r::T,
                other_args...;
-               model_type::Type{M}=JuMP.Model,
+               subproblem_type::Type{S}=JuMPSubproblem,
                max_iter::Int=1000,
                atol::Float64=1e-6,
                rtol::Float64=1e-6,
@@ -81,7 +89,7 @@ function solve(tree::ScenarioTree,
                warm_start::Bool=false,
                args::Tuple=(),
                kwargs...
-               ) where {T <: Real, M <: JuMP.AbstractModel}
+               ) where {T <: Real, S <: AbstractSubproblem}
     timo = TimerOutputs.TimerOutput()
 
     # Initialization
@@ -94,7 +102,7 @@ function solve(tree::ScenarioTree,
                                  model_constructor,
                                  variable_dict,
                                  r,
-                                 M,
+                                 subproblem_type,
                                  timo,
                                  report,
                                  Tuple([other_args...,args...]);
