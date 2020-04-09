@@ -5,6 +5,13 @@ end
 
 #### PH Subproblem Interface ####
 
+"""
+Abstract type for ProgressiveHedging subproblem types.
+
+A concrete subtype handles all details of creating, solving and updating subproblems for ProgressiveHedging (PH).  In particular, it handles all interaction with any modeling language that the subproblem is written in.  See `JuMPSubproblem` for an implementation that uses JuMP as the optimization modeling language.
+
+Variables and their values are identified and exchanged between PH and a Subproblem type using the `VariableID` type.  A unique `VariableID` is associated with each variable in the subproblem by the Subproblem implementation by using the `ScenarioID` of the subproblem as well as the `StageID` to which this variable belongs.  This combination uniquely identifies a node in the scenario tree to which the variable can be associated.  Variables associated with the same node in a scenario tree and sharing the same name are assumed to be consensus variables whose optimal value is determined by PH.  The final component of a `VariableID` is an `Index` which is just a counter assigned to a variable to differentiate it from other variables at the same node.  See `VariableID` type for more details.
+"""
 abstract type AbstractSubproblem end
 
 ## Required Interface Functions ##
@@ -12,6 +19,20 @@ abstract type AbstractSubproblem end
 # The below functions must be implemented by any new subtype of AbstractSubproblem.
 # Note they all default to throwing an `UnimplementedError`.
 
+"""
+    add_ph_objective_terms(as::AbstractSubproblem,
+                           vids::Vector{VariableID},
+                           r::Real
+                           )::Nothing
+
+Create model variables for Lagrange multipliers and hat variables and add lagrange and quadratic penalty terms to the objective function.
+
+**Arguments**
+
+* `as::AbstractSubproblem` : subproblem object (replace with appropriate type)
+* `vids::Vector{VariableID}` : list of `VariableIDs` which need ph terms created
+* `r::Real` : penalty parameter on quadratic term
+"""
 function add_ph_objective_terms(as::AbstractSubproblem,
                                 vids::Vector{VariableID},
                                 r::Real
@@ -19,26 +40,80 @@ function add_ph_objective_terms(as::AbstractSubproblem,
     throw(UnimplementedError("add_ph_objective_terms is unimplemented"))
 end
 
+"""
+    objective_value(as::AbstractSubproblem)::Float64
+
+Return the objective value of the solved subproblem.
+
+**Arguments**
+
+* `as::AbstractSubproblem` : subproblem object (replace with appropriate type)
+"""
 function objective_value(as::AbstractSubproblem)::Float64
     throw(UnimplementedError("objective_value is unimplemented"))
 end
 
+"""
+    report_variable_info(as::AbstractSubproblem,
+                         st::ScenarioTree
+                         )::Dict{VariableID, String}
+
+Assign `VariableID`s to all model variables and build a map from those ids to the variable name.
+
+**Arguments**
+
+* `as::AbstractSubproblem` : subproblem object (replace with appropriate type)
+* `st::ScenarioTree` : scenario tree for the entire PH problem
+"""
 function report_variable_info(as::AbstractSubproblem,
                               st::ScenarioTree
                               )::Dict{VariableID, String}
     throw(UnimplementedError("report_variable_info is unimplemented"))
 end
 
+"""
+    report_values(as::AbstractSubproblem,
+                  vars::Vector{VariableID}
+                  )::Dict{VariableID, Float64}
+
+Return the variable values specified by `vars`.
+
+**Arguments**
+
+* `as::AbstractSubproblem` : subproblem object (replace with appropriate type)
+* `vars::Vector{VariableID}` : collection of `VariableID`s to gather values for
+"""
 function report_values(as::AbstractSubproblem,
                        vars::Vector{VariableID}
                        )::Dict{VariableID, Float64}
     throw(UnimplementedError("report_values is unimplemented"))
 end
 
+"""
+    solve(as::AbstractSubproblem)::MOI.TerminationStatusCode
+
+Solve the subproblem specified by `as` and return the status code.
+
+**Arguments**
+
+* `as::AbstractSubproblem` : subproblem object (replace with appropriate type)
+"""
 function solve(as::AbstractSubproblem)::MOI.TerminationStatusCode
     throw(UnimplementedError("solve is unimplemented"))
 end
 
+"""
+    update_ph_terms(as::AbstractSubproblem,
+                    w_vals::Dict{VariableID,Float64},
+                    xhat_vals::Dict{VariableID,Float64}
+                    )::Nothing
+
+Update the values of the PH variables in this subproblem with those given by `w_vals` and `xhat_vals`.
+
+**Arguments**
+
+* `as::AbstractSubproblem` : subproblem object (replace with appropriate type)
+"""
 function update_ph_terms(as::AbstractSubproblem,
                          w_vals::Dict{VariableID,Float64},
                          xhat_vals::Dict{VariableID,Float64}
@@ -46,6 +121,15 @@ function update_ph_terms(as::AbstractSubproblem,
     throw(UnimplementedError("update_ph_terms is unimplemented"))
 end
 
+"""
+    warm_start(as::AbstractSubproblem)::Nothing
+
+Use the values of previous solves non-PH variables as starting points of the next solve.
+
+**Arguments**
+
+* `as::AbstractSubproblem` : subproblem object (replace with appropriate type)
+"""
 function warm_start(as::AbstractSubproblem)::Nothing
     throw(UnimplementedError("warm_start is unimplemented"))
 end
@@ -54,15 +138,42 @@ end
 
 # These functions are required only if an extensive form construction is desired
 
+"""
+    ef_copy_model(destination::JuMP.Model,
+                  original::AbstractSubproblem,
+                  scid::ScenarioID,
+                  scen_tree::ScenarioTree,
+                  node_dict::Dict{NodeID, Any}
+                  )
+
+Copy the subproblem described by `original` to the extensive form model `destination`.
+
+**Arguments**
+
+* `destination::JuMP.Model` : extensive form of the model that is being built
+* `original::AbstractSubproblem` : subproblem object (replace with appropriate type)
+* `scid::ScenarioID` : `ScenarioID` corresponding to this subproblem
+* `scen_tree::ScenarioTree` : scenario tree for the entire PH problem
+* `node_dict::Dict{NodeID, Any}` : dictionary for transferring nodal information from one submodel to another
+"""
 function ef_copy_model(destination::JuMP.Model,
                        original::AbstractSubproblem,
                        scid::ScenarioID,
                        scen_tree::ScenarioTree,
-                       node_var_map::Dict{NodeID, Any}
+                       node_dict::Dict{NodeID, Any}
                        )
     throw(UnimplementedError("ef_copy_model is unimplemented"))
 end
 
+"""
+    ef_node_dict_constructor(::Type{S}) where S <: AbstractSubproblem
+
+Construct dictionary that is used to carry information between subproblems for `ef_copy_model`.
+
+**Arguments**
+
+* `::Type{S}` : Subproblem type
+"""
 function ef_node_dict_constructor(::Type{S}) where S <: AbstractSubproblem
     throw(UnimplementedError("ef_node_dict_constructor is unimplemented"))
 end
