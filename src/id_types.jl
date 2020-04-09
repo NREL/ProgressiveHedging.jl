@@ -31,31 +31,28 @@ _increment(index::Index)::Index = Index(_value(index) + one(INDEX))
 Base.isless(a::Index, b::Index) = _value(a) < _value(b)
 
 struct VariableID
-    # scenario::ScenarioID # scenario to which this variable belongs
-    stage::StageID # stage to which this variable belongs
-    index::Index # coordinate in vector
-end
-
-function Base.isless(a::VariableID, b::VariableID)
-    return (a.stage < b.stage ||
-            (a.stage == b.stage && a.index < b.index))
-end
-
-struct UniqueVariableID
     scenario::ScenarioID # scenario to which this variable belongs
     stage::StageID # stage to which this variable belongs
     index::Index # coordinate in vector
 end
 
-function Base.isless(a::UniqueVariableID, b::UniqueVariableID)
+function scenario(vid::VariableID)::ScenarioID
+    return vid.scenario
+end
+
+function stage(vid::VariableID)::StageID
+    return vid.stage
+end
+
+function index(vid::VariableID)::Index
+    return vid.index
+end
+
+function Base.isless(a::VariableID, b::VariableID)
     return (a.stage < b.stage ||
             (a.stage == b.stage &&
              (a.scenario < b.scenario ||
               (a.scenario == b.scenario && a.index < b.index))))
-end
-
-function UniqueVariableID(s::ScenarioID, vid::VariableID)
-    return UniqueVariableID(s, vid.stage, vid.index)
 end
 
 struct XhatID

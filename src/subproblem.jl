@@ -1,82 +1,180 @@
 
-abstract type AbstractSubproblem end
-
 struct UnimplementedError <: Exception
     msg::String
 end
 
-function add_variable(as::S,
-                      vi::JuMP.VariableInfo
-                      )::JuMP.VariableRef where {S <: AbstractSubproblem}
-    throw(UnimplementedError("add_variable is unimplemented for $(S)"))
+#### PH Subproblem Interface ####
+
+abstract type AbstractSubproblem end
+
+## Required Interface Functions ##
+
+# The below functions must be implemented by any new subtype of AbstractSubproblem.
+# Note they all default to throwing an `UnimplementedError`.
+
+function add_ph_objective_terms(as::AbstractSubproblem,
+                                vids::Vector{VariableID},
+                                r::Real
+                                )::Nothing
+    throw(UnimplementedError("add_ph_objective_terms is unimplemented"))
 end
 
-function objective(as::S)::JuMP.VariableRef where {S <: AbstractSubproblem}
-    throw(UnimplementedError("objective is unimplemented for $(S)"))
+function objective_value(as::AbstractSubproblem)::Float64
+    throw(UnimplementedError("objective_value is unimplemented"))
 end
 
-function objective_value(as::S)::Float64 where {S <: AbstractSubproblem}
-    throw(UnimplementedError("objective_value is unimplemented for $(S)"))
+function report_variable_info(as::AbstractSubproblem,
+                              st::ScenarioTree
+                              )::Dict{VariableID, String}
+    throw(UnimplementedError("report_variable_info is unimplemented"))
 end
 
-function set_objective(as::S)::Nothing where {S <: AbstractSubproblem}
-    throw(UnimplementedError("set_objective is unimplemented for $(S)"))
+function report_values(as::AbstractSubproblem,
+                       vars::Vector{VariableID}
+                       )::Dict{VariableID, Float64}
+    throw(UnimplementedError("report_values is unimplemented"))
 end
 
-function variable_by_name(as::S,
-                          name::String
-                          ) where {S <: AbstractSubproblem}
-    throw(UnimplementedError("variable_by_name is unimplemented for $(S)"))
+function solve(as::AbstractSubproblem)::MOI.TerminationStatusCode
+    throw(UnimplementedError("solve is unimplemented"))
 end
 
-function variable_type(as::S
-                       ) where {S <: AbstractSubproblem}
-    throw(UnimplementedError("variable_type is unimplemented for $(S)"))
+function update_ph_terms(as::AbstractSubproblem,
+                         w_vals::Dict{VariableID,Float64},
+                         xhat_vals::Dict{VariableID,Float64}
+                         )::Nothing
+    throw(UnimplementedError("update_ph_terms is unimplemented"))
 end
 
-function solve(as::S)::MOI.TerminationStatusCode where {S <: AbstractSubproblem}
-    throw(UnimplementedError("solve is unimplemented for $(S)"))
+function warm_start(as::AbstractSubproblem)::Nothing
+    throw(UnimplementedError("warm_start is unimplemented"))
 end
 
-function warm_start(as::S)::Nothing where {S <: AbstractSubproblem}
-    throw(UnimplementedError("warm_start is unimplemented for $(S)"))
+## Optional Interface Functions ##
+
+# These functions are required only if an extensive form construction is desired
+
+function ef_copy_model(destination::JuMP.Model,
+                       original::AbstractSubproblem,
+                       scid::ScenarioID,
+                       scen_tree::ScenarioTree,
+                       node_var_map::Dict{NodeID, Any}
+                       )
+    throw(UnimplementedError("ef_copy_model is unimplemented"))
 end
+
+function ef_node_dict_constructor(::Type{S}) where S <: AbstractSubproblem
+    throw(UnimplementedError("ef_node_dict_constructor is unimplemented"))
+end
+
+#### JuMPSubproblem Implementation ####
 
 struct JuMPSubproblem <: AbstractSubproblem
     model::JuMP.Model
+    scenario::ScenarioID
+    stage_map::Dict{StageID, Vector{JuMP.VariableRef}}
+    vars::Dict{VariableID, JuMP.VariableRef}
+    w_vars::Dict{VariableID, JuMP.VariableRef}
+    xhat_vars::Dict{VariableID, JuMP.VariableRef}
 end
 
-function _error(astring::String)
+function JuMPSubproblem(m::JuMP.Model,
+                        scid::ScenarioID,
+                        stage_map::Dict{StageID, Vector{JuMP.VariableRef}}
+                        )::JuMPSubproblem
+    return JuMPSubproblem(m, scid, stage_map,
+                          Dict{VariableID, JuMP.VariableRef}(),
+                          Dict{VariableID, JuMP.VariableRef}(),
+                          Dict{VariableID, JuMP.VariableRef}()
+                          )
+end
+
+## JuMPSubproblem Internal Structs ##
+
+struct JSVariable
+    ref::JuMP.VariableRef
+    name::String
+    node_id::NodeID
+end
+
+## Interface Functions ##
+
+function add_ph_objective_terms(js::JuMPSubproblem,
+                                vids::Vector{VariableID},
+                                r::Real
+                                )::Nothing
+
+    obj = JuMP.objective_function(js.model,
+                                  JuMP.GenericQuadExpr{Float64, JuMP.VariableRef}
+                                  )
+
+    jvi = JuMP.VariableInfo(false, NaN,   # lower_bound
+                            false, NaN,   # upper_bound
+                            true, 0.0,    # fixed
+                            false, NaN,   # start value
+                            false, false) # binary, integer
+
+    for vid in vids
+        var = js.vars[vid]
+
+        w_ref = JuMP.add_variable(js.model, JuMP.build_variable(_error, jvi))
+        JuMP.add_to_expression!(obj, w_ref * var)
+        js.w_vars[vid] = w_ref
+
+        xhat_ref = JuMP.add_variable(js.model, JuMP.build_variable(_error, jvi))
+        JuMP.add_to_expression!(obj, 0.5 * r * (var - xhat_ref)^2)
+        js.xhat_vars[vid] = xhat_ref
+    end
+
+    JuMP.set_objective_function(js.model, obj)
+
     return
 end
 
-function add_variable(js::JuMPSubproblem, vi::JuMP.VariableInfo)::JuMP.VariableRef
-    return JuMP.add_variable(js.model, JuMP.build_variable(_error, vi))
-end
+function update_ph_terms(js::JuMPSubproblem,
+                         w_vals::Dict{VariableID,Float64},
+                         xhat_vals::Dict{VariableID,Float64}
+                         )::Nothing
+    for (wid, wval) in pairs(w_vals)
+        JuMP.fix(js.w_vars[wid], wval, force=true)
+    end
 
-function objective(js::JuMPSubproblem)
-    return JuMP.objective_function(js.model,
-                                   JuMP.GenericQuadExpr{Float64, JuMP.variable_type(js.model)}
-                                   )
+    for (xhid, xhval) in pairs(xhat_vals)
+        JuMP.fix(js.xhat_vars[xhid], xhval, force=true)
+    end
+
+    return
 end
 
 function objective_value(js::JuMPSubproblem)::Float64
     return JuMP.objective_value(js.model)
 end
 
-function set_objective(js::JuMPSubproblem,
-                       obj::JuMP.GenericQuadExpr{Float64,V}
-                       )::Nothing where {V <: JuMP.AbstractVariableRef}
-    JuMP.set_objective_function(js.model, obj)
-    return
+function report_variable_info(js::JuMPSubproblem,
+                              st::ScenarioTree
+                              )::Dict{VariableID, String}
+
+    var_info = Dict{VariableID, String}()
+
+    for node in scenario_nodes(st, js.scenario)
+        stid = stage(node)
+
+        for (k, var) in enumerate(js.stage_map[stid])
+            vid = VariableID(js.scenario, stid, Index(k))
+            js.vars[vid] = var
+            var_info[vid] = JuMP.name(var)
+        end
+    end
+
+    return var_info
 end
 
-function variable_by_name(js::JuMPSubproblem, name::String)::JuMP.VariableRef
-    return JuMP.variable_by_name(js.model, name)
-end
-
-function variable_type(js::JuMPSubproblem)
-    return JuMP.variable_type(js.model)
+function report_values(js::JuMPSubproblem, vars::Vector{VariableID})::Dict{VariableID, Float64}
+    val_dict = Dict{VariableID, Float64}()
+    for vid in vars
+        val_dict[vid] = JuMP.value(js.vars[vid])
+    end
+    return val_dict
 end
 
 function solve(js::JuMPSubproblem)::MOI.TerminationStatusCode
@@ -90,5 +188,236 @@ function warm_start(js::JuMPSubproblem)::Nothing
             JuMP.set_start_value(var, JuMP.value(var))
         end
     end
+    return
+end
+
+function ef_copy_model(efm::JuMP.Model,
+                       js::JuMPSubproblem,
+                       scid::ScenarioID,
+                       tree::ScenarioTree,
+                       node_var_map::Dict{NodeID, Set{JSVariable}}
+                       )::Dict{NodeID, Set{JSVariable}}
+
+    (snode_var_map, s_var_map) = _ef_copy_variables(efm, js, scid, tree, node_var_map)
+    processed = Set(keys(node_var_map))
+    _ef_copy_constraints(efm, js, s_var_map, processed)
+    _ef_copy_objective(efm, js, s_var_map, tree.prob_map[scid])
+
+    return snode_var_map
+end
+
+function ef_node_dict_constructor(::Type{JuMPSubproblem})
+    return Dict{NodeID, Set{JSVariable}}()
+end
+
+## JuMPSubproblem Internal Functions ##
+
+function _error(astr::String)::Nothing
+    @error(astr)
+    return
+end
+
+function _build_var_info(vref::JuMP.VariableRef)
+    hlb = JuMP.has_lower_bound(vref)
+    hub = JuMP.has_upper_bound(vref)
+    hf = JuMP.is_fixed(vref)
+    ib = JuMP.is_binary(vref)
+    ii = JuMP.is_integer(vref)
+
+    return JuMP.VariableInfo(hlb,
+                             hlb ? JuMP.lower_bound(vref) : 0,
+                             hub,
+                             hub ? JuMP.upper_bound(vref) : 0,
+                             hf,
+                             hf ? JuMP.fix_value(vref) : 0,
+                             false, # Some solvers don't accept starting values
+                             0,
+                             ib,
+                             ii)
+end
+
+function _ef_add_variables(model::JuMP.Model,
+                           js::JuMPSubproblem,
+                           s::ScenarioID,
+                           node::ScenarioNode,
+                           )
+
+    smod = js.model
+
+    var_map = Dict{JuMP.VariableRef, JSVariable}()
+    new_vars = Set{JSVariable}()
+
+    for vref in js.stage_map[node.stage]
+        info = _build_var_info(vref)
+        var = JuMP.name(vref)
+        vname = var * "_{" * stringify(_value.(scenario_bundle(node))) * "}"
+        new_vref = JuMP.add_variable(model,
+                                     JuMP.build_variable(_error, info),
+                                     vname)
+        jsv = JSVariable(new_vref, vname, node.id)
+        var_map[vref] = jsv
+        push!(new_vars, jsv)
+    end
+
+    return (var_map, new_vars)
+end
+
+function _ef_map_variables(js::JuMPSubproblem,
+                           node::ScenarioNode,
+                           new_vars::Set{JSVariable},
+                           )
+    var_map = Dict{JuMP.VariableRef, JSVariable}()
+
+    for vref in js.stage_map[stage(node)]
+
+        var = JuMP.name(vref)
+
+        for jsv in new_vars
+
+            @assert jsv.node_id == node.id
+
+            if occursin(var, jsv.name)
+                var_map[vref] = jsv
+            end
+
+        end
+
+    end
+
+    return var_map
+end
+
+function _ef_copy_variables(model::JuMP.Model,
+                            js::JuMPSubproblem,
+                            s::ScenarioID,
+                            tree::ScenarioTree,
+                            node_var_map::Dict{NodeID, Set{JSVariable}},
+                            )
+
+    # Below for mapping variables in the subproblem model `smod` into variables for
+    # the extensive form model `model`
+    s_var_map = Dict{JuMP.VariableRef, JSVariable}()
+
+    # For saving updates to node_var_map and passing back up
+    snode_var_map = Dict{NodeID, Set{JSVariable}}()
+
+    smod = js.model
+
+    for node in scenario_nodes(tree, s)
+
+        # For the given model `smod`, either create extensive variables corresponding
+        # to this node or map them onto existing extensive variables.
+        if !haskey(node_var_map, id(node))
+            (var_map, new_vars) = _ef_add_variables(model, js, s, node)
+            snode_var_map[node.id] = new_vars
+        else
+            var_map = _ef_map_variables(js,
+                                        node,
+                                        node_var_map[node.id])
+        end
+
+        @assert(isempty(intersect(keys(s_var_map), keys(var_map))))
+        merge!(s_var_map, var_map)
+    end
+
+    return (snode_var_map, s_var_map)
+end
+
+function _ef_convert_and_add_expr(add_to::JuMP.QuadExpr,
+                                  convert::JuMP.AffExpr,
+                                  s_var_map::Dict{JuMP.VariableRef,JSVariable},
+                                  scalar::Real,
+                                  )::Set{NodeID}
+
+    nodes = Set{NodeID}()
+
+    JuMP.add_to_expression!(add_to, scalar * JuMP.constant(convert))
+
+    for (coef, var) in JuMP.linear_terms(convert)
+        vi = s_var_map[var]
+        nvar = vi.ref
+        JuMP.add_to_expression!(add_to, scalar*coef, nvar)
+
+        push!(nodes, vi.node_id)
+    end
+
+    return nodes
+end
+
+function _ef_convert_and_add_expr(add_to::JuMP.QuadExpr,
+                                  convert::JuMP.QuadExpr,
+                                  s_var_map::Dict{JuMP.VariableRef,JSVariable},
+                                  scalar::Real,
+                                  )::Set{NodeID}
+
+    nodes = _ef_convert_and_add_expr(add_to, convert.aff, s_var_map, scalar)
+
+    for (coef, var1, var2) in JuMP.quad_terms(convert)
+        vi1 = s_var_map[var1]
+        vi2 = s_var_map[var2]
+
+        nvar1 = vi1.ref
+        nvar2 = vi2.ref
+        JuMP.add_to_expression!(add_to, scalar*coef, nvar1, nvar2)
+
+        push!(nodes, vi1.node_id)
+        push!(nodes, vi2.node_id)
+    end
+
+    return nodes
+end
+
+function _ef_copy_constraints(model::JuMP.Model,
+                              js::JuMPSubproblem,
+                              s_var_map::Dict{JuMP.VariableRef,JSVariable},
+                              processed::Set{NodeID},
+                              )::Nothing
+
+    smod = js.model
+    constraint_list = JuMP.list_of_constraint_types(smod)
+
+    for (func,set) in constraint_list
+
+        if func == JuMP.VariableRef
+            # These constraints are handled by the variable bounds
+            # which are copied during copy variable creation so
+            # we skip them
+            continue
+        end
+
+        for cref in JuMP.all_constraints(smod, func, set)
+
+            cobj = JuMP.constraint_object(cref)
+            expr = zero(JuMP.QuadExpr)
+            nodes = _ef_convert_and_add_expr(expr,
+                                            JuMP.jump_function(cobj),
+                                            s_var_map,
+                                            1)
+
+            # If all variables in the expression are from processed nodes,
+            # then this constraint has already been added to the model
+            # and can be skipped.
+            if !issubset(nodes, processed)
+                JuMP.drop_zeros!(expr)
+                JuMP.@constraint(model, expr in JuMP.moi_set(cobj))
+            end
+        end
+    end
+
+    return
+end
+
+function _ef_copy_objective(model::JuMP.Model,
+                            js::JuMPSubproblem,
+                            s_var_map::Dict{JuMP.VariableRef,JSVariable},
+                            prob::Real
+                            )::Nothing
+
+    add_obj = JuMP.objective_function(js.model)
+    obj = JuMP.objective_function(model)
+    _ef_convert_and_add_expr(obj, add_obj, s_var_map, prob)
+    JuMP.drop_zeros!(obj)
+    JuMP.set_objective_function(model, obj)
+
     return
 end

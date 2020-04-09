@@ -26,6 +26,8 @@ export residuals, retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_
 
 #### Includes ####
 
+include("id_types.jl")
+include("scenario_tree.jl")
 include("subproblem.jl")
 include("structs.jl")
 include("utils.jl")
@@ -37,11 +39,10 @@ include("setup.jl")
 
 """
     solve(tree::ScenarioTree,
-          model_constructor::Function,
-          variable_dict::Dict{Int,Vector{String}},
+          subproblem_constructor::Function,
           r<:Real,
           other_args...;
-          model_type<:JuMP.AbstractModel=JuMP.Model,
+          subproblem_type<:AbstractSubproblem=JuMPSubproblem,
           max_iter::Int=1000,
           atol::Float64=1e-6,
           rtol::Float64=1e-6,
@@ -56,14 +57,13 @@ Solve given problem using Progressive Hedging.
 **Arguments**
 
 * `tree::ScenararioTree` : Scenario tree describing the structure of the problem to be solved.
-* `model_constructor::Function` : User created function to construct a subproblem model.  Should accept an Int (a unique identifier for the scenario) and return a model of type `model_type`.  Additional arguments may be passed with `other_args` or through `kwargs` (provided they don't collide with the keyword arguments for `solve`.
-* `variable_dict::Dict{Int,Vector{String}}` : Dictionary specifying the names of variables (value) in a given stage (key).
+* `subproblem_constructor::Function` : User created function to construct a subproblem. Should accept a `ScenarioID` (a unique identifier for each scenario subproblem) as an argument and returns a subtype of `AbstractSubproblem` specified by `subproblem_type`.
 * `r<:Real` : Parameter to use on quadratic penalty term.
-* `other_args` : Other arguments that should be passed to `model_constructor`. See also keyword arguments `args` and `kwargs`
+* `other_args` : Other arguments that should be passed to `subproblem_constructor`. See also keyword arguments `args` and `kwargs`
 
 **Keyword Arguments**
 
-* `subproblem_type<:AbstractSubproblem` : Type of model to create or created by `model_constructor` to represent the subproblems. Defaults to JuMPSubproblem.
+* `subproblem_type<:AbstractSubproblem` : Type of model to create or created by `subproblem_constructor` to represent the subproblems. Defaults to JuMPSubproblem.
 * `max_iter::Int` : Maximum number of iterations to perform before returning. Defaults to 1000.
 * `atol::Float64` : Absolute error tolerance. Defaults to 1e-6.
 * `rtol::Float64` : Relative error tolerance. Defaults to 1e-6.
@@ -72,11 +72,10 @@ Solve given problem using Progressive Hedging.
 * `timing::Bool` : Flag indicating whether or not to record timing information. Defaults to true.
 * `warm_start::Bool` : Flag indicating that solver should be "warm started" by using the previous solution as the starting point (not compatible with all solvers)
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
-* `kwargs` : Any keyword arguments not specified here that need to be passed to `model_constructor`.  See also `other_args` and `args`.
+* `kwargs` : Any keyword arguments not specified here that need to be passed to `subproblem_constructor`.  See also `other_args` and `args`.
 """
 function solve(tree::ScenarioTree,
-               model_constructor::Function,
-               variable_dict::Dict{STAGE_ID,Vector{String}},
+               subproblem_constructor::Function,
                r::T,
                other_args...;
                subproblem_type::Type{S}=JuMPSubproblem,
@@ -99,8 +98,7 @@ function solve(tree::ScenarioTree,
 
     ph_data = @timeit(timo, "Intialization",
                       initialize(tree,
-                                 model_constructor,
-                                 variable_dict,
+                                 subproblem_constructor,
                                  r,
                                  subproblem_type,
                                  timo,
@@ -129,16 +127,15 @@ function solve(tree::ScenarioTree,
         println(timo)
     end
 
-    # return (niter, residual, soln_df, cost_dict, ph_data)
     return (niter, residual, obj, soln_df, ph_data)
 end
 
 """
     solve_extensive(tree::ScenarioTree,
-          model_constructor::Function,
-          variable_dict::Dict{Int,Vector{String}},
+          subproblem_constructor::Function,
+          optimizer::Function,
           other_args...;
-          model_type<:JuMP.AbstractModel=JuMP.Model,
+          subproblem_type::Type{S}=JuMPSubproblem,
           args::Tuple=(),
           kwargs...)
 
@@ -147,30 +144,30 @@ Solve given problem using Progressive Hedging.
 **Arguments**
 
 * `tree::ScenararioTree` : Scenario tree describing the structure of the problem to be solved.
-* `model_constructor::Function` : User created function to construct a subproblem model.  Should accept an Int (a unique identifier for the scenario) and return a model of type `model_type`.  Additional arguments may be passed with `other_args` or through `kwargs` (provided they don't collide with the keyword arguments for `solve`.
-* `variable_dict::Dict{Int,Vector{String}}` : Dictionary specifying the names of variables (value) in a given stage (key).
-* `other_args` : Other arguments that should be passed to `model_constructor`. See also keyword arguments `args` and `kwargs`
+* `subproblem_constructor::Function` : User created function to construct a subproblem. Should accept a `ScenarioID` (a unique identifier for each scenario subproblem) as an argument and returns a subtype of `AbstractSubproblem` specified by `subproblem_type`.
+* `optimizer::Function` : Function which works with `JuMP.set_optimizer`
+* `other_args` : Other arguments that should be passed to `subproblem_constructor`. See also keyword arguments `args` and `kwargs`
 
 **Keyword Arguments**
 
-* `model_type<:JuMP.AbstractModel` : Type of model to create or created by `model_constructor` to represent the subproblems. Defaults to JuMP.Model.
-* `optimizer::Function` : Function which works with `JuMP.set_optimizer`
+* `subproblem_type<:JuMP.AbstractModel` : Type of model to create or created by `subproblem_constructor` to represent the subproblems. Defaults to JuMPSubproblem
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
-* `kwargs` : Any keyword arguments not specified here that need to be passed to `model_constructor`.  See also `other_args` and `args`.
+* `kwargs` : Any keyword arguments not specified here that need to be passed to `subproblem_constructor`.  See also `other_args` and `args`.
 """
 function solve_extensive(tree::ScenarioTree,
-                         model_constructor::Function,
-                         variable_dict::Dict{STAGE_ID,Vector{String}},
+                         subproblem_constructor::Function,
+                         optimizer::Function,
                          other_args...;
-                         model_type::Type{M}=JuMP.Model,
-                         optimizer::Function=()->Ipopt.Optimizer(print_level=0),
+                         subproblem_type::Type{S}=JuMPSubproblem,
                          args::Tuple=(),
                          kwargs...
-                         ) where {T <: Real, M <: JuMP.AbstractModel}
+                         ) where {S <: AbstractSubproblem}
 
-    model = build_extensive_form(optimizer, tree, variable_dict,
-                                 model_constructor,
-                                 Tuple([other_args...,args...]);
+    model = build_extensive_form(optimizer,
+                                 tree,
+                                 subproblem_constructor,
+                                 Tuple([other_args...,args...]),
+                                 subproblem_type;
                                  kwargs...)
 
     JuMP.optimize!(model)
@@ -180,3 +177,10 @@ end
 
 
 end # module
+
+#### TODOs ####
+
+# 1. Improve error handling of remote exceptions (check for them, figure out a way to
+#    retrieve errors that occur when creating subproblems).
+# 2. Add tests for unimplemented subproblem error throwing?
+# 3. Add flag to solve call to turn off parallelism

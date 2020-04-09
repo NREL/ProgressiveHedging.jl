@@ -27,7 +27,6 @@ struct ScenarioNode
     id::NodeID # id of this node
     stage::StageID # stage of this node
     scenario_bundle::Set{ScenarioID} # scenarios that are indistiguishable
-    # variable_indices::Set{Index} # var indices
     parent::Union{Nothing, ScenarioNode}
     children::Set{ScenarioNode}
 end
@@ -52,6 +51,10 @@ end
 
 function id(node::ScenarioNode)::NodeID
     return node.id
+end
+
+function stage(node::ScenarioNode)::StageID
+    return node.stage
 end
 
 """
@@ -158,6 +161,26 @@ end
 
 _assign_scenario_id(tree::ScenarioTree)::ScenarioID = _generate_scenario_id(tree.id_gen)
 
+function node(tree::ScenarioTree,
+              scid::ScenarioID,
+              stid::StageID
+              )::Union{Nothing,ScenarioNode}
+
+    ret_node = nothing
+
+    for node in values(tree.tree_map)
+
+        if stage(node) == stid && scid in scenario_bundle(node)
+            ret_node = node
+            break
+        end
+
+    end
+
+    return ret_node
+
+end
+
 function scenario_bundle(node::ScenarioNode)::Set{ScenarioID}
     return node.scenario_bundle
 end
@@ -167,3 +190,17 @@ function scenario_bundle(tree::ScenarioTree, nid::NodeID)::Set{ScenarioID}
 end
 
 scenarios(tree::ScenarioTree)::Set{ScenarioID} = tree.root.scenario_bundle
+
+function scenario_nodes(tree::ScenarioTree)
+    return collect(values(tree_map))
+end
+
+function scenario_nodes(tree::ScenarioTree, scid::ScenarioID)
+    nodes = Vector{ScenarioNode}()
+    for node in values(tree.tree_map)
+        if scid in scenario_bundle(node)
+            push!(nodes, node)
+        end
+    end
+    return nodes
+end

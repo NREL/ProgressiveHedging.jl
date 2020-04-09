@@ -1,54 +1,52 @@
-function name(phd::PHData, scen::ScenarioID, vid::VariableID)::String
-    vinfo = retrieve_variable(phd.scenario_map[scen], vid)
+function name(phd::PHData, vid::VariableID)::String
+    vinfo = retrieve_variable(phd.scenario_map[scenario(vid)], vid)
     return vinfo.name
 end
 
-function value(phd::PHData, scen::ScenarioID, vid::VariableID)::Float64
-    vinfo = retrieve_variable(phd.scenario_map[scen], vid)
+function value(phd::PHData, vid::VariableID)::Float64
+    vinfo = retrieve_variable(phd.scenario_map[scenario(vid)], vid)
     return vinfo.value
 end
 
 function value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
-    vid = VariableID(stage, idx)
-    return value(phd, scen, vid)
+    vid = VariableID(scen, stage, idx)
+    return value(phd, vid)
 end
 
-function branch_value(phd::PHData, scen::ScenarioID, vid::VariableID)::Float64
-    return phd.scenario_map[scen].branch_map[vid].value
+function branch_value(phd::PHData, vid::VariableID)::Float64
+    return phd.scenario_map[scenario(vid)].branch_vars[vid].value
 end
 
-branch_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64 = branch_value(phd, scen, VariableID(stage, idx))
-
-function leaf_value(phd::PHData, scen::ScenarioID, vid::VariableID)::Float64
-    return phd.scenario_map[scen].leaf_map[vid].value
+function branch_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+    return branch_value(phd, VariableID(scen, stage, idx))
 end
 
-leaf_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64 = leaf_value(phd, scen, VariableID(stage, idx))
+function leaf_value(phd::PHData, vid::VariableID)::Float64
+    return phd.scenario_map[scenario(vid)].leaf_vars[vid].value
+end
 
+function leaf_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+    return leaf_value(phd, VariableID(scen, stage, idx))
+end
 
-function w_value(phd::PHData, scen::ScenarioID, vid::VariableID)::Float64
-    return phd.scenario_map[scen].W[vid].value
+function w_value(phd::PHData, vid::VariableID)::Float64
+    return phd.scenario_map[scenario(vid)].w_vars[vid]
 end
 
 function w_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
-    vid = VariableID(stage, idx)
-    return w_value(phd, scen, vid)
+    return w_value(phd, VariableID(scen, stage, idx))
 end
 
 function xhat_value(phd::PHData, xhat_id::XhatID)::Float64
-    return phd.Xhat[xhat_id].value
+    return value(phd.xhat[xhat_id])
 end
 
-function xhat_value(phd::PHData, scen::ScenarioID, vid::VariableID)::Float64
-    return xhat_value(phd, convert_to_xhat_id(phd, scen, vid))
+function xhat_value(phd::PHData, vid::VariableID)::Float64
+    return xhat_value(phd, convert_to_xhat_id(phd, vid))
 end
 
-function xhat_value(phd::PHData, scen::ScenarioID,
-                    stage::StageID, idx::Index)::Float64
-    return xhat_value(phd,
-                      convert_to_xhat_id(phd, scen,
-                                         VariableID(stage, idx))
-                      )
+function xhat_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+    return xhat_value(phd, VariableID(scen, stage, idx))
 end
 
 function stringify(set::Set{K})::String where K
@@ -74,12 +72,12 @@ function retrieve_soln(phd::PHData)::DataFrames.DataFrame
     stages = Vector{STAGE_ID}()
     scens = Vector{String}()
 
-    for xid in sort!(collect(keys(phd.Xhat)))
+    for xid in sort!(collect(keys(phd.xhat)))
 
-        scid, vid = convert_to_variable_id(phd, xid)
+        vid = first(convert_to_variable_ids(phd, xid))
 
-        push!(vars, name(phd, scid, vid))
-        push!(vals, phd.Xhat[xid].value)
+        push!(vars, name(phd, vid))
+        push!(vals, xhat_value(phd, xid))
         push!(stages, _value(stage_id(phd, xid)))
         push!(scens, stringify(_value.(scenario_bundle(phd, xid))))
 
@@ -115,10 +113,10 @@ function retrieve_obj_value(phd::PHData)::Float64
         obj_value += sinfo.prob * fetch(obj)
 
         # Remove PH terms
-        for (vid, var) in pairs(sinfo.branch_map)
+        for (vid, var) in pairs(sinfo.branch_vars)
             x_val = var.value
-            w_val = sinfo.W[vid].value
-            xhat_val = xhat_value(phd, scid, vid)
+            w_val = sinfo.w_vars[vid]
+            xhat_val = xhat_value(phd, vid)
             p = sinfo.prob
             r = phd.r
 
@@ -154,20 +152,17 @@ function retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
     scenario = Vector{SCENARIO_ID}()
     index = Vector{INDEX}()
 
-    variable_map = Dict{UniqueVariableID, VariableInfo}()
+    variable_map = Dict{VariableID, VariableInfo}()
     for (scid,sinfo) in phd.scenario_map
-        for (vid,vinfo) in merge(sinfo.branch_map, sinfo.leaf_map)
-            uvid = UniqueVariableID(scid, vid)
-            variable_map[uvid] = vinfo
-        end
+        merge!(variable_map, sinfo.branch_vars, sinfo.leaf_vars)
     end
 
-    for uvid in sort!(collect(keys(variable_map)))
-        push!(vars, variable_map[uvid].name)
-        push!(vals, variable_map[uvid].value)
-        push!(stage, _value(uvid.stage))
-        push!(scenario, _value(uvid.scenario))
-        push!(index, _value(uvid.index))
+    for vid in sort!(collect(keys(variable_map)))
+        push!(vars, variable_map[vid].name)
+        push!(vals, variable_map[vid].value)
+        push!(stage, _value(vid.stage))
+        push!(scenario, _value(vid.scenario))
+        push!(index, _value(vid.index))
     end
 
     soln_df = DataFrames.DataFrame(variable=vars, value=vals, stage=stage,
@@ -183,22 +178,18 @@ function retrieve_w(phd::PHData)::DataFrames.DataFrame
     scenario = Vector{SCENARIO_ID}()
     index = Vector{INDEX}()
 
-    variable_map = Dict{UniqueVariableID, PHVariable}()
+    variable_map = Dict{VariableID, Float64}()
     for (scid,sinfo) in phd.scenario_map
-        for (vid,w_var) in sinfo.W
-            uvid = UniqueVariableID(scid, vid)
-            variable_map[uvid] = w_var
-        end
+        merge!(variable_map, sinfo.w_vars)
     end
 
-    for uvid in sort!(collect(keys(variable_map)))
+    for vid in sort!(collect(keys(variable_map)))
 
-        vid = VariableID(uvid.stage, uvid.index)
-        push!(vars, "W_" * phd.scenario_map[uvid.scenario].branch_map[vid].name)
-        push!(vals, variable_map[uvid].value)
-        push!(stage, _value(uvid.stage))
-        push!(scenario, _value(uvid.scenario))
-        push!(index, _value(uvid.index))
+        push!(vars, "W_" * phd.scenario_map[vid.scenario].branch_vars[vid].name)
+        push!(vals, variable_map[vid])
+        push!(stage, _value(vid.stage))
+        push!(scenario, _value(vid.scenario))
+        push!(index, _value(vid.index))
 
     end
 

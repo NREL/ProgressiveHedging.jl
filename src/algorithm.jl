@@ -1,26 +1,24 @@
 
-function _report_values(var_dict::Dict{VariableID, VariableInfo}
-                        )::Dict{VariableID, Float64}
-    val_dict = Dict{VariableID, Float64}()
-    for (vid, vinfo) in pairs(var_dict)
-        val_dict[vid] = JuMP.value(fetch(vinfo.ref))
-    end
-    return val_dict
-end
-
 function retrieve_values(phd::PHData, leaf_mode::Bool)::Nothing
 
-    map_sym = leaf_mode ? :leaf_map : :branch_map
+    map_sym = leaf_mode ? :leaf_vars : :branch_vars
 
     val_dict = Dict{ScenarioID, Future}()
     for (scid,sinfo) in phd.scenario_map
-        vmap = getfield(sinfo, map_sym)
-        val_dict[scid] = @spawnat(sinfo.proc, _report_values(vmap))
+        vars = collect(keys(getfield(sinfo, map_sym)))
+        subprob = sinfo.subproblem
+        val_dict[scid] = @spawnat(sinfo.proc, report_values(fetch(subprob), vars))
     end
 
     for (scid,fv) in pairs(val_dict)
         sinfo = phd.scenario_map[scid]
         var_values = fetch(fv)
+
+        if typeof(var_values) == RemoteException
+            # println(var_values.captured)
+            throw(var_values)
+        end
+
         for (vid, value) in pairs(var_values)
             vmap = getfield(sinfo, map_sym)
             vmap[vid].value = value
@@ -34,35 +32,26 @@ function compute_and_save_xhat(phd::PHData)::Float64
 
     xhat_res = 0.0
 
-    for (node_id, node) in pairs(phd.scenario_tree.tree_map)
+    for (xhid, xhat_var) in pairs(phd.xhat)
 
-        if is_leaf(node)
-            continue
+        xhat = 0.0
+        norm = 0.0
+
+        for vid in variables(xhat_var)
+
+            s = scenario(vid)
+            p = phd.scenario_map[s].prob
+            x = branch_value(phd, vid)
+
+            xhat += p * x
+            norm += p
         end
 
-        for i in indices(phd.indexer, node)
+        xhat_new = xhat / norm
+        xhat_old = value(xhat_var)
 
-            xhat = 0.0
-            norm = 0.0
-            
-            for s in node.scenario_bundle
-                
-                p = phd.scenario_map[s].prob
-                x = branch_value(phd, s, node.stage, i)
-
-                xhat += p * x
-                norm += p
-                
-            end
-
-            xhat_id = XhatID(node_id,i)
-            xhat_new = xhat / norm
-
-            xhat_old = phd.Xhat[xhat_id].value
-            phd.Xhat[xhat_id].value = xhat_new
-
-            xhat_res += (xhat_new - xhat_old)^2
-        end
+        xhat_var.value = xhat_new
+        xhat_res += (xhat_new - xhat_old)^2
     end
 
     return xhat_res
@@ -72,37 +61,31 @@ function compute_and_save_w(phd::PHData)::Float64
 
     kxsq = 0.0
 
-    for (node_id, node) in pairs(phd.scenario_tree.tree_map)
+    for (xhid, xhat_var) in pairs(phd.xhat)
 
-        if is_leaf(node)
-            continue
+        xhat = value(xhat_var)
+
+        exp = 0.0
+        norm = 0.0
+
+        for vid in variables(xhat_var)
+
+            s = scenario(vid)
+            p = phd.scenario_map[s].prob
+            kx = branch_value(phd, vid) - xhat
+
+            phd.scenario_map[s].w_vars[vid] += phd.r *kx
+
+            kxsq += p * kx^2
+
+            exp += p * w_value(phd, vid)
+            norm += p
         end
 
-        for i in indices(phd.indexer, node)
-
-            xhat = phd.Xhat[XhatID(node_id,i)].value
-            
-            exp = 0.0
-            norm = 0.0
-
-            for s in node.scenario_bundle
-                p = phd.scenario_map[s].prob
-
-                var_id = VariableID(node.stage, i)
-                kx = branch_value(phd, s, var_id) - xhat
-                phd.scenario_map[s].W[var_id].value += phd.r * kx
-
-                kxsq += p * kx^2
-
-                exp += p * w_value(phd, s, var_id)
-                norm += p
-            end
-
-            if abs(exp) > 1e-6
-                @warn("Conditional expectation of " *
-                      "W[$(node.scenario_bundle),$(node.stage),$i] " *
-                      "is non-zero: " * string(exp/norm))
-            end
+        if abs(exp) > 1e-6
+            @warn("Conditional expectation of " *
+                  "W[$(scenario(vid)),$(stage(vid)),$(index(vid))] " *
+                  "is non-zero: " * string(exp/norm))
         end
     end
 
@@ -120,10 +103,10 @@ function update_ph_leaf_variables(phd::PHData)::Nothing
     retrieve_values(phd, true)
 
     for (scid, sinfo) in pairs(phd.scenario_map)
-        for (vid, vinfo) in pairs(sinfo.leaf_map)
-            xhid = convert_to_xhat_id(phd, scid, vid)
-            @assert(!haskey(phd.Xhat, xhid))
-            phd.Xhat[xhid] = PHHatVariable(value(phd, scid, vid))
+        for (vid, vinfo) in pairs(sinfo.leaf_vars)
+            xhid = convert_to_xhat_id(phd, vid)
+            @assert(!haskey(phd.xhat, xhid))
+            phd.xhat[xhid] = HatVariable(value(phd, vid), vid)
         end
     end
 
@@ -142,21 +125,15 @@ function set_start_values(phd::PHData)::Nothing
 
 end
 
-function _fix_values(ph_vars::Vector{PHVariable})::Nothing
-
-    for phv in ph_vars
-        JuMP.fix(fetch(phv.ref), phv.value, force=true)
-    end
-
-    return
-end
-
 function update_si_xhat(phd::PHData)::Nothing
-    for (scid, sinfo) in pairs(phd.scenario_map)
-        for (xhat_id, x_var) in pairs(sinfo.Xhat)
-            x_var.value = phd.Xhat[xhat_id].value
+
+    for (xhid, xhat) in pairs(phd.xhat)
+        for vid in variables(xhat)
+            sinfo = phd.scenario_map[scenario(vid)]
+            sinfo.xhat_vars[vid] = value(xhat)
         end
     end
+
     return
 end
 
@@ -164,12 +141,12 @@ function fix_ph_variables(phd::PHData)::Nothing
 
     update_si_xhat(phd)
 
-    @sync for (scid, sinfo) in pairs(phd.scenario_map)
-        w_array = collect(values(sinfo.W))
-        xhat_array = collect(values(sinfo.Xhat))
+    @sync for sinfo in values(phd.scenario_map)
 
-        @spawnat(sinfo.proc, _fix_values(w_array))
-        @spawnat(sinfo.proc, _fix_values(xhat_array))
+        (w_dict, xhat_dict) = create_ph_dicts(sinfo)
+        subproblem = sinfo.subproblem
+
+        @spawnat(sinfo.proc, update_ph_terms(fetch(subproblem), w_dict, xhat_dict))
     end
 
     return
@@ -211,8 +188,8 @@ function hedge(ph_data::PHData,
     (xhat_res_sq, x_res_sq) = @timeit(ph_data.time_info, "Update PH Vars",
                                       update_ph_variables(ph_data))
 
-    nsqrt = sqrt(length(ph_data.Xhat))
-    xmax = max(maximum(abs.(value.(values(ph_data.Xhat)))), 1e-12)
+    nsqrt = sqrt(length(ph_data.xhat))
+    xmax = max(maximum(abs.(value.(values(ph_data.xhat)))), 1e-12)
     residual = sqrt(xhat_res_sq + x_res_sq) / nsqrt
 
     if report_flag
@@ -253,7 +230,7 @@ function hedge(ph_data::PHData,
         # its corresponding xhat variable (so lack of consensus amongst the
         # subproblems or violation of the nonanticipativity constraint)
         residual= sqrt(xhat_res_sq + x_res_sq) / nsqrt
-        xmax = max(maximum(abs.(value.(values(ph_data.Xhat)))), 1e-12)
+        xmax = max(maximum(abs.(value.(values(ph_data.xhat)))), 1e-12)
         
         niter += 1
 

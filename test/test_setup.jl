@@ -68,8 +68,8 @@ end
     @test isapprox(st.prob_map[sc3], 0.5*0.25)
 
     (smods, sp_map, v_map) = PH.build_submodels(st,
-                                                create_model, (),
-                                                variable_dict(),
+                                                create_model,
+                                                (),
                                                 PH.JuMPSubproblem,
                                                 TimerOutputs.TimerOutput())
 
