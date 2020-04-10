@@ -184,3 +184,5 @@ end # module
 #    retrieve errors that occur when creating subproblems).
 # 2. Add tests for unimplemented subproblem error throwing?
 # 3. Add flag to solve call to turn off parallelism
+# 4. Add handling of nonlinear objective functions
+# 5. Add tests for nonlinear constraints (these should work currently but testing is need)
