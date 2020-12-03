@@ -229,9 +229,9 @@ function hedge(ph_data::PHData,
         # x_res_sq measures the disagreement between the x variables and
         # its corresponding xhat variable (so lack of consensus amongst the
         # subproblems or violation of the nonanticipativity constraint)
-        residual= sqrt(xhat_res_sq + x_res_sq) / nsqrt
+        residual = sqrt(xhat_res_sq + x_res_sq) / nsqrt
         xmax = max(maximum(abs.(value.(values(ph_data.xhat)))), 1e-12)
-        
+
         niter += 1
 
         if report_flag && niter % report == 0

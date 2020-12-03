@@ -1,8 +1,13 @@
 
 @everywhere function create_model(scenario_id::PH.ScenarioID;
-                                  opt=()->Ipopt.Optimizer(print_level=0))
+                                  opt=()->Ipopt.Optimizer(),
+                                  opt_args=(print_level=0,)
+                                  )
 
     model = JuMP.Model(opt)
+    for (key,value) in pairs(opt_args)
+        JuMP.set_optimizer_attribute(model, string(key), value)
+    end
 
     scid = PH._value(scenario_id)
     
@@ -88,9 +93,4 @@ function build_scen_tree()
         end
     end
     return tree
-end
-
-@everywhere function optimizer()
-    return Ipopt.Optimizer(print_level=0,
-                           tol=1e-12)
 end

@@ -23,7 +23,9 @@ var_vals = Dict([
 @testset "Solve Extensive" begin
     efm = PH.solve_extensive(build_scen_tree(),
                              create_model,
-                             optimizer)
+                             ()->Ipopt.Optimizer();
+                             opt_args=(print_level=0,tol=1e-12)
+                             )
 
     @test JuMP.num_variables(efm) == length(keys(var_vals))
 
@@ -45,7 +47,7 @@ var_vals = Dict([
     @test_throws(ProgressiveHedging.UnimplementedError,
                  PH.solve_extensive(build_scen_tree(),
                                     fake_constructor,
-                                    optimizer,
+                                    ()->Ipopt.Optimizer(),
                                     subproblem_type=FakeSubproblem)
                  )
 end
@@ -54,7 +56,8 @@ end
     (n, err, obj, soln, phd) = PH.solve(build_scen_tree(),
                                         create_model,
                                         r,
-                                        opt=optimizer,
+                                        opt=Ipopt.Optimizer,
+                                        opt_args=(print_level=0,tol=1e-12),
                                         atol=atol,
                                         rtol=rtol,
                                         max_iter=max_iter,
@@ -77,7 +80,8 @@ end
     (n, err, obj, soln, phd) = PH.solve(build_scen_tree(),
                                         create_model,
                                         r,
-                                        opt=optimizer,
+                                        opt=Ipopt.Optimizer,
+                                        opt_args=(print_level=0,tol=1e-12),
                                         atol=atol,
                                         rtol=rtol,
                                         max_iter=max_iter,
@@ -104,7 +108,8 @@ end
                                           PH.solve(build_scen_tree(),
                                                    create_model,
                                                    r,
-                                                   opt=optimizer,
+                                                   opt=Ipopt.Optimizer,
+                                                   opt_args=(print_level=0,tol=1e-12),
                                                    atol=atol,
                                                    rtol=rtol,
                                                    max_iter=max_iter,
@@ -120,7 +125,8 @@ end
     (n, err, obj, soln, phd) = PH.solve(build_scen_tree(),
                                         create_model,
                                         r,
-                                        opt=optimizer,
+                                        opt=Ipopt.Optimizer,
+                                        opt_args=(print_level=0,tol=1e-12),
                                         atol=atol,
                                         rtol=rtol,
                                         max_iter=max_iter,

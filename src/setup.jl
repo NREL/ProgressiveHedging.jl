@@ -181,15 +181,14 @@ function initialize(scen_tree::ScenarioTree,
     return ph_data
 end
 
-function build_extensive_form(optimizer::Function,
-                              tree::ScenarioTree,
+function build_extensive_form(tree::ScenarioTree,
                               model_constructor::Function,
                               constructor_args::Tuple,
                               sub_type::Type{S};
                               kwargs...
                               )::JuMP.Model where {S <: AbstractSubproblem}
 
-    model = JuMP.Model(optimizer)
+    model = JuMP.Model()
     JuMP.set_objective_sense(model, MOI.MIN_SENSE)
     JuMP.set_objective_function(model, zero(JuMP.QuadExpr))
 

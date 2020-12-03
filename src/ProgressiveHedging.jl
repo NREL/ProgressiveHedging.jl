@@ -135,6 +135,7 @@ end
           subproblem_constructor::Function,
           optimizer::Function,
           other_args...;
+          opt_args::NamedTuple=NamedTuple(),
           subproblem_type::Type{S}=JuMPSubproblem,
           args::Tuple=(),
           kwargs...)
@@ -151,6 +152,7 @@ Solve given problem using Progressive Hedging.
 **Keyword Arguments**
 
 * `subproblem_type<:JuMP.AbstractModel` : Type of model to create or created by `subproblem_constructor` to represent the subproblems. Defaults to JuMPSubproblem
+* `opt_args::NamedTuple` : arguments passed to function given by `optimizer`
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
 * `kwargs` : Any keyword arguments not specified here that need to be passed to `subproblem_constructor`.  See also `other_args` and `args`.
 """
@@ -158,18 +160,22 @@ function solve_extensive(tree::ScenarioTree,
                          subproblem_constructor::Function,
                          optimizer::Function,
                          other_args...;
+                         opt_args::NamedTuple=NamedTuple(),
                          subproblem_type::Type{S}=JuMPSubproblem,
                          args::Tuple=(),
                          kwargs...
                          ) where {S <: AbstractSubproblem}
 
-    model = build_extensive_form(optimizer,
-                                 tree,
+    model = build_extensive_form(tree,
                                  subproblem_constructor,
                                  Tuple([other_args...,args...]),
                                  subproblem_type;
                                  kwargs...)
 
+    JuMP.set_optimizer(model, optimizer)
+    for (key, value) in pairs(opt_args)
+        JuMP.set_optimizer_attribute(model, string(key), value)
+    end
     JuMP.optimize!(model)
 
     return model
