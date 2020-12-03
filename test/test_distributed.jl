@@ -25,6 +25,7 @@ Distributed.addprocs(2)
 @everywhere using Pkg
 @everywhere Pkg.activate(".")
 @everywhere using ProgressiveHedging
+@everywhere const PH = ProgressiveHedging
 @everywhere using Ipopt
 @everywhere using JuMP
 include("common.jl")
@@ -36,7 +37,6 @@ include("common.jl")
     # Solve the problem
     (n, err, obj, soln, phd) = PH.solve(build_scen_tree(),
                                         create_model,
-                                        variable_dict(),
                                         r,
                                         atol=atol,
                                         rtol=rtol,

@@ -68,17 +68,17 @@ end
     @test isapprox(st.prob_map[sc3], 0.5*0.25)
 
     (smods, sp_map, v_map) = PH.build_submodels(st,
-                                                create_model, (),
-                                                variable_dict(),
-                                                JuMP.Model,
+                                                create_model,
+                                                (),
+                                                PH.JuMPSubproblem,
                                                 TimerOutputs.TimerOutput())
 
     for (scid, mfuture) in pairs(smods)
-        model = fetch(mfuture)
-        @test length(JuMP.all_variables(model)) == 6
+        subproblem = fetch(mfuture)
+        @test length(JuMP.all_variables(subproblem.model)) == 6
         ncons = 0
-        for (ftype,stype) in JuMP.list_of_constraint_types(model)
-            ncons += JuMP.num_constraints(model, ftype, stype)
+        for (ftype,stype) in JuMP.list_of_constraint_types(subproblem.model)
+            ncons += JuMP.num_constraints(subproblem.model, ftype, stype)
         end
         @test ncons == 7
     end

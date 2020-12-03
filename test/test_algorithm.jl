@@ -23,8 +23,7 @@ var_vals = Dict([
 @testset "Solve Extensive" begin
     efm = PH.solve_extensive(build_scen_tree(),
                              create_model,
-                             variable_dict(),
-                             optimizer=optimizer)
+                             optimizer)
 
     @test JuMP.num_variables(efm) == length(keys(var_vals))
 
@@ -40,12 +39,20 @@ var_vals = Dict([
     for var in JuMP.all_variables(efm)
         @test isapprox(JuMP.value(var), var_vals[JuMP.name(var)])
     end
+
+    struct FakeSubproblem <: AbstractSubproblem end
+    fake_constructor(scen::Int) = FakeSubproblem()
+    @test_throws(ProgressiveHedging.UnimplementedError,
+                 PH.solve_extensive(build_scen_tree(),
+                                    fake_constructor,
+                                    optimizer,
+                                    subproblem_type=FakeSubproblem)
+                 )
 end
 
 @testset "Solve" begin
     (n, err, obj, soln, phd) = PH.solve(build_scen_tree(),
                                         create_model,
-                                        variable_dict(),
                                         r,
                                         opt=optimizer,
                                         atol=atol,
@@ -69,7 +76,6 @@ end
 @testset "Warm-start" begin
     (n, err, obj, soln, phd) = PH.solve(build_scen_tree(),
                                         create_model,
-                                        variable_dict(),
                                         r,
                                         opt=optimizer,
                                         atol=atol,
@@ -97,7 +103,6 @@ end
     (n, err, obj, soln, phd) = @test_warn(regex,
                                           PH.solve(build_scen_tree(),
                                                    create_model,
-                                                   variable_dict(),
                                                    r,
                                                    opt=optimizer,
                                                    atol=atol,
@@ -114,7 +119,6 @@ end
     rtol = 1e-6
     (n, err, obj, soln, phd) = PH.solve(build_scen_tree(),
                                         create_model,
-                                        variable_dict(),
                                         r,
                                         opt=optimizer,
                                         atol=atol,

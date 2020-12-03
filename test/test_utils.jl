@@ -19,16 +19,10 @@ end
     @test PH.index(10) < PH.index(16)
     @test PH._increment(PH.index(15)) == PH.index(16)
 
-    vid1 = PH.VariableID(PH.stid(1), PH.index(5))
-    vid2 = PH.VariableID(PH.stid(2), PH.index(2))
-    vid3 = PH.VariableID(PH.stid(2), PH.index(3))
-    @test vid1 < vid2
-    @test vid2 < vid3
-
-    uvid1 = PH.UniqueVariableID(PH.scid(4), PH.stid(1), PH.index(347))
-    uvid2 = PH.UniqueVariableID(PH.scid(0), PH.stid(2), PH.index(2))
-    uvid3 = PH.UniqueVariableID(PH.scid(1), PH.stid(2), PH.index(2))
-    uvid4 = PH.UniqueVariableID(PH.scid(1), PH.stid(2), PH.index(3))
+    uvid1 = PH.VariableID(PH.scid(4), PH.stid(1), PH.index(347))
+    uvid2 = PH.VariableID(PH.scid(0), PH.stid(2), PH.index(2))
+    uvid3 = PH.VariableID(PH.scid(1), PH.stid(2), PH.index(2))
+    uvid4 = PH.VariableID(PH.scid(1), PH.stid(2), PH.index(3))
     @test uvid1 < uvid2
     @test uvid2 < uvid3
     @test uvid3 < uvid4
@@ -63,17 +57,15 @@ function build_var_map(n::Int,
 
         vars = Dict{PH.VariableID, PH.VariableInfo}()
         for j in 1:m1
-            vid = PH.VariableID(PH.stid(1), PH.index(j-1))
-            vars[vid] = PH.VariableInfo(Future(),
-                                        "a$j",
+            vid = PH.VariableID(scid, PH.stid(1), PH.index(j + k - 1))
+            vars[vid] = PH.VariableInfo("a$j",
                                         PH.NodeID(0),
                                         convert(Float64, j))
         end
 
         for j in 1:m2
-            vid = PH.VariableID(PH.stid(2), PH.index(j-1))
-            vars[vid] = PH.VariableInfo(Future(),
-                                        "b$j",
+            vid = PH.VariableID(scid, PH.stid(2), PH.index(j-1))
+            vars[vid] = PH.VariableInfo("b$j",
                                         PH.NodeID(k),
                                         convert(Float64, k*j + n))
         end
@@ -90,63 +82,83 @@ st = two_stage_tree(nscen)
 var_map = build_var_map(nscen, nv1, nv2)
 phd = PH.PHData(1.0,
                 st,
-                Dict{PH.ScenarioID, Int}([PH.scid(k)=>1 for k in 0:nscen-1]),
+                Dict{PH.ScenarioID, Int}(PH.scid(k)=>1 for k in 0:nscen-1),
                 st.prob_map,
-                Dict{PH.ScenarioID, Future}([PH.scid(k)=>Future() for k in 0:nscen-1]),
+                Dict{PH.ScenarioID, Future}(PH.scid(k)=>Future() for k in 0:nscen-1),
                 var_map,
-                PH.Indexer(),
                 TimerOutputs.TimerOutput()
                 )
-             
+# Create entries for leaf variables.  This is normally done at the end of the solve call
+# but since we aren't calling that here...
+for (scid, sinfo) in pairs(phd.scenario_map)
+    for (vid, vinfo) in pairs(sinfo.leaf_vars)
+        xhid = PH.convert_to_xhat_id(phd, vid)
+        phd.xhat[xhid] = PH.HatVariable(PH.value(phd, vid), vid)
+    end
+end
+
 @testset "Accessor Utilities" begin
     scid = PH.scid(0)
     stid = PH.stid(1)
-    index = PH.index(1)
-    vid = PH.VariableID(stid, index)
-    @test PH.name(phd, scid, vid) == "a2"
-    val = convert(Float64, PH._value(index) + 1)
-    @test PH.value(phd, scid, vid) == val
+    index = PH.index(2)
+    vid = PH.VariableID(scid, stid, index)
+    @test PH.name(phd, vid) == "a2"
+    val = convert(Float64, PH._value(index) - PH._value(scid))
+    @test PH.value(phd, vid) == val
     @test PH.value(phd, scid, stid, index) == val
-    @test PH.branch_value(phd, scid, vid) == val
+    @test PH.branch_value(phd, vid) == val
     @test PH.branch_value(phd, scid, stid, index) == val
 
     scid = PH.scid(1)
     stid = PH.stid(2)
     index = PH.index(3)
-    vid = PH.VariableID(stid, index)
-    @test PH.name(phd, scid, vid) == "b4"
+    vid = PH.VariableID(scid, stid, index)
+    @test PH.name(phd, vid) == "b4"
     val = convert(Float64, nscen + (PH._value(index) + 1)*(PH._value(scid) + 1))
-    @test PH.value(phd, scid, vid) == val
+    @test PH.value(phd, vid) == val
     @test PH.value(phd, scid, stid, index) == val
-    @test PH.leaf_value(phd, scid, vid) == val
+    @test PH.leaf_value(phd, vid) == val
     @test PH.leaf_value(phd, scid, stid, index) == val
 end
 
 @testset "Conversion utilities" begin
-    vid = PH.VariableID(PH.stid(2), PH.index(1))
-    xhid = PH.XhatID(PH.NodeID(1), PH.index(1))
-    @test PH.convert_to_variable_id(phd, xhid) == (PH.scid(0), vid)
-    @test PH.convert_to_xhat_id(phd, PH.scid(0), vid) == xhid
+
+    # Branch variables
+    for i in 1:nv1
+        vid1 = PH.VariableID(PH.scid(0), PH.stid(1), PH.index(i))
+        vid2 = PH.VariableID(PH.scid(1), PH.stid(1), PH.index(i+1))
+        xhid = PH.convert_to_xhat_id(phd, vid1)
+        @test PH.convert_to_xhat_id(phd, vid2) == xhid
+        @test PH.convert_to_variable_ids(phd, xhid) == Set{PH.VariableID}([vid1, vid2])
+    end
+
+    # Leaf variables
+    for j in 1:nv2
+        vid1 = PH.VariableID(PH.scid(0), PH.stid(2), PH.index(j-1))
+        vid2 = PH.VariableID(PH.scid(1), PH.stid(2), PH.index(j-1))
+        @test PH.convert_to_variable_ids(phd, PH.convert_to_xhat_id(phd, vid1)) == Set{PH.VariableID}([vid1])
+        @test PH.convert_to_variable_ids(phd, PH.convert_to_xhat_id(phd, vid2)) == Set{PH.VariableID}([vid2])
+        @test PH.convert_to_xhat_id(phd, vid1) != PH.convert_to_xhat_id(phd, vid2)
+    end
+
 end
 
 @testset "PH variable accessors" begin
-    stid = PH.stid(1)
-    index = PH.index(0)
-    vid = PH.VariableID(stid, index)
-    rval = rand()
     scid = PH.scid(0)
+    stid = PH.stid(1)
+    index = PH.index(1)
+    vid = PH.VariableID(scid, stid, index)
+    rval = rand()
 
-    phd.scenario_map[scid].W[vid].value = rval
-    @test PH.w_value(phd, scid, vid) == rval
+    phd.scenario_map[scid].w_vars[vid] = rval
+    @test PH.w_value(phd, vid) == rval
     @test PH.w_value(phd, scid, stid, index) == rval
 
     rval = rand()
-    nid = PH.NodeID(0)
-    index = PH.index(0)
-    xhid = PH.XhatID(nid, index)
+    xhid = PH.convert_to_xhat_id(phd, vid)
 
-    phd.Xhat[xhid].value = rval
+    phd.xhat[xhid].value = rval
     @test PH.xhat_value(phd, xhid) == rval
-    @test PH.xhat_value(phd, scid, vid) == rval
+    @test PH.xhat_value(phd, vid) == rval
     @test PH.xhat_value(phd, scid, stid, index) == rval
 end

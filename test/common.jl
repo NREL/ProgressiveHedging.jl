@@ -1,18 +1,10 @@
 
-function variable_dict()
-    first_stage_vars = ["x[1]", "x[2]", "x[3]"]
-    second_stage_vars = ["y"]
-    third_stage_vars = ["z[1]", "z[2]"]
-
-    var_dict = Dict(1=>first_stage_vars,
-                    2=>second_stage_vars,
-                    3=>third_stage_vars)
-    return var_dict
-end
-
-@everywhere function create_model(scenario_id::Int; opt=()->Ipopt.Optimizer(print_level=0))
+@everywhere function create_model(scenario_id::PH.ScenarioID;
+                                  opt=()->Ipopt.Optimizer(print_level=0))
 
     model = JuMP.Model(opt)
+
+    scid = PH._value(scenario_id)
     
     c = [1.0, 10.0, 0.01]
     d = 7.0
@@ -31,47 +23,56 @@ end
     s21 = 5.0
     s22 = 18.0
     
-    JuMP.@variable(model, x[1:3] >= 0.0)
+    stage1 = JuMP.@variable(model, x[1:3] >= 0.0)
     JuMP.@constraint(model, x[3] <= 1.0)
     obj = zero(JuMP.GenericQuadExpr{Float64,JuMP.VariableRef})
     JuMP.add_to_expression!(obj, sum(c.*x))
 
     # Second stage
-    if scenario_id < 2
-        JuMP.@variable(model, y >= 0.0)
+    stage2 = Vector{JuMP.VariableRef}()
+    if scid < 2
+        vref = JuMP.@variable(model, y >= 0.0)
         JuMP.@constraint(model, α*sum(x) + β*y >= s1)
         JuMP.add_to_expression!(obj, d*y)
     else
-        JuMP.@variable(model, y >= 0.0)
+        vref = JuMP.@variable(model, y >= 0.0)
         JuMP.@constraint(model, α*sum(x) + β*y >= s2)
         JuMP.add_to_expression!(obj, d*y)
     end
+    push!(stage2, vref)
 
     # Third stage
-    if scenario_id == 0
-        JuMP.@variable(model, z[1:2])
+    stage3 = Vector{JuMP.VariableRef}()
+    if scid == 0
+        vref = JuMP.@variable(model, z[1:2])
         JuMP.@constraint(model, ϵ*sum(x) + γ*y + δ*sum(z) == s11)
         JuMP.add_to_expression!(obj, a*sum(z[i]^2 for i in 1:2))
         
-    elseif scenario_id == 1
-        JuMP.@variable(model, z[1:2])
+    elseif scid == 1
+        vref = JuMP.@variable(model, z[1:2])
         JuMP.@constraint(model, ϵ*sum(x) + γ*y + δ*sum(z) == s12)
         JuMP.add_to_expression!(obj, a*sum(z[i]^2 for i in 1:2))
 
-    elseif scenario_id == 2
-        JuMP.@variable(model, z[1:2])
+    elseif scid == 2
+        vref = JuMP.@variable(model, z[1:2])
         JuMP.@constraint(model, ϵ*sum(x) + γ*y + δ*sum(z) == s21)
         JuMP.add_to_expression!(obj, a*sum(z[i]^2 for i in 1:2))
 
     else
-        JuMP.@variable(model, z[1:2])
+        vref = JuMP.@variable(model, z[1:2])
         JuMP.@constraint(model, ϵ*sum(x) + γ*y + δ*sum(z) == s22)
         JuMP.add_to_expression!(obj, a*sum(z[i]^2 for i in 1:2))
     end
+    append!(stage3, vref)
 
     JuMP.@objective(model, Min, obj)
+
+    vdict = Dict{PH.StageID, Vector{JuMP.VariableRef}}([PH.stid(1) => stage1,
+                                                        PH.stid(2) => stage2,
+                                                        PH.stid(3) => stage3,
+                                                        ])
     
-    return model
+    return JuMPSubproblem(model, scenario_id, vdict)
 end
 
 function build_scen_tree()
