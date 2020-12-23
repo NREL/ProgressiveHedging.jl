@@ -94,7 +94,7 @@ end
     end
 end
 
-@testset "Subproblems" begin
+@testset "Initialization" begin
     @testset "Build Subproblems" begin
         st = build_scen_tree()
 
