@@ -42,8 +42,7 @@ end
 
 mutable struct VariableInfo
     name::String
-    node_id::NodeID
-    value::Float64
+    xhat_id::XhatID
 end
 
 function VariableInfo(name::String,
@@ -52,13 +51,30 @@ function VariableInfo(name::String,
     return VariableInfo(name, nid, 0.0)
 end
 
-function id(vinfo::VariableInfo)::VariableID
-    return vinfo.id
-end
+# function id(vinfo::VariableInfo)::VariableID
+#     return vinfo.id
+# end
 
-function value(vinfo::VariableInfo)::Float64
-    return vinfo.value
-end
+# function value(vinfo::VariableInfo)::Float64
+#     return vinfo.value
+# end
+
+# function _generate_variable_info_map(idxr::Indexer,
+#                                      scen_tree::ScenarioTree
+#                                      )::Dict{VariableID,VariableInfo}
+#     # name_map = Dict{VariableID, String}()
+#     # for (nid, idx_map) in pairs(idxr.indices)
+#     #     my_node = node(scen_tree, nid)
+#     #     my_stage = stage(my_node)
+#     #     for s in scenario_bundle(my_node)
+#     #         for (name, idx) in pairs(idx_map)
+#     #             vid = VariableID(s, my_stage, idx)
+#     #             name_map[vid] = name
+#     #         end
+#     #     end
+#     # end
+#     # return name_map
+# end
 
 mutable struct HatVariable
     value::Float64 # Current value of variable
@@ -86,40 +102,59 @@ function variables(a::HatVariable)::Set{VariableID}
     return a.vars
 end
 
-struct ScenarioInfo
-    proc::Int
-    prob::Float64
-    subproblem::Future
-    branch_vars::Dict{VariableID, VariableInfo}
-    leaf_vars::Dict{VariableID, VariableInfo}
-    w_vars::Dict{VariableID, Float64}
-    xhat_vars::Dict{VariableID, Float64}
+mutable struct ProblemData
+    obj::Float64
+    sts::MOI.TerminationStatusCode
+    time::Float64
 end
 
-function ScenarioInfo(proc::Int,
+ProblemData() = ProblemData(0.0, MOI.OPTIMIZE_NOT_CALLED, 0.0)
+
+struct ScenarioInfo
+    pid::Int
+    prob::Float64
+    branch_vars::Dict{VariableID, Float64}
+    leaf_vars::Dict{VariableID, Float64}
+    w_vars::Dict{VariableID, Float64}
+    xhat_vars::Dict{VariableID, Float64}
+    problem_data::ProblemData
+end
+
+function ScenarioInfo(pid::Int,
                       prob::Float64,
-                      subproblem::Future,
-                      branch_map::Dict{VariableID, VariableInfo},
-                      leaf_map::Dict{VariableID, VariableInfo}
+                      branch_ids::Set{VariableID},
+                      leaf_ids::Set{VariableID}
                       )::ScenarioInfo
 
-    w_dict = Dict{VariableID, Float64}(vid => 0.0 for vid in keys(branch_map))
-    x_dict = Dict{VariableID, Float64}(vid => 0.0 for vid in keys(branch_map))
+    branch_map = Dict{VariableID, Float64}()
+    w_dict = Dict{VariableID, Float64}()
+    x_dict = Dict{VariableID, Float64}()
+    for vid in branch_ids
+        branch_map[vid] = 0.0
+        w_dict[vid] = 0.0
+        x_dict[vid] = 0.0
+    end
 
-    return ScenarioInfo(proc,
+    leaf_map = Dict{VariableID, Float64}(vid => 0.0 for vid in leaf_ids)
+
+    return ScenarioInfo(pid,
                         prob,
-                        subproblem,
                         branch_map,
                         leaf_map,
                         w_dict,
-                        x_dict)
+                        x_dict,
+                        ProblemData())
 end
 
 function create_ph_dicts(sinfo::ScenarioInfo)
     return (sinfo.w_vars, sinfo.xhat_vars)
 end
 
-function retrieve_variable(sinfo::ScenarioInfo, vid::VariableID)::VariableInfo
+function objective_value(sinfo::ScenarioInfo)::Float64
+    return sinfo.problem_data.obj
+end
+
+function retrieve_variable_value(sinfo::ScenarioInfo, vid::VariableID)::Float64
     if haskey(sinfo.branch_vars, vid)
         vi = sinfo.branch_vars[vid]
     else
@@ -156,6 +191,7 @@ struct PHData
     scenario_tree::ScenarioTree
     scenario_map::Dict{ScenarioID, ScenarioInfo}
     xhat::Dict{XhatID, HatVariable}
+    variable_data::Dict{VariableID, VariableInfo}
     indexer::Indexer
     residual_info::PHResidualHistory
     time_info::TimerOutputs.TimerOutput
@@ -163,54 +199,64 @@ end
 
 function PHData(r::Real,
                 tree::ScenarioTree,
-                scen_proc_map::Dict{ScenarioID, Int},
-                probs::Dict{ScenarioID, Float64},
-                subproblems::Dict{ScenarioID, Future},
-                var_map::Dict{ScenarioID, Dict{VariableID, VariableInfo}},
+                scen_proc_map::Dict{Int, Set{ScenarioID}},
+                var_map::Dict{ScenarioID, Dict{VariableID, String}},
                 time_out::TimerOutputs.TimerOutput
                 )::PHData
 
+    var_data = Dict{VariableID,VariableInfo}()
     xhat_dict = Dict{XhatID, HatVariable}()
     idxr = Indexer()
 
     scenario_map = Dict{ScenarioID, ScenarioInfo}()
-    for (scid, model) in pairs(subproblems)
+    for (pid, scenarios) in pairs(scen_proc_map)
+        for scen in scenarios
 
-        leaf_map = Dict{VariableID, VariableInfo}()
-        branch_map = Dict{VariableID, VariableInfo}()
-        for (vid, vinfo) in pairs(var_map[scid])
+            branch_ids = Set{VariableID}()
+            leaf_ids = Set{VariableID}()
 
-            if is_leaf(tree, vinfo.node_id)
-                leaf_map[vid] = vinfo
-            else
-                branch_map[vid] = vinfo
+            for (vid, vname) in pairs(var_map[scen])
 
-                nid = vinfo.node_id
-                idx = index(idxr, nid, vinfo.name)
-                xhid = XhatID(nid, idx)
+                vnode = node(tree, vid.scenario, vid.stage)
 
-                if !haskey(xhat_dict, xhid)
-                    xhat_dict[xhid] = HatVariable()
+                if vnode == nothing
+                    error("Unable to locate node for variable id $vid.")
                 end
-                add_variable(xhat_dict[xhid], vid)
 
+                idx = index(idxr, vnode.id, vname)
+                xhid = XhatID(vnode.id, idx)
+                var_info = VariableInfo(vname, xhid)
+                var_data[vid] = var_info
+
+                if is_leaf(vnode)
+
+                    push!(leaf_ids, vid)
+
+                else
+
+                    push!(branch_ids, vid)
+
+                    if !haskey(xhat_dict, xhid)
+                        xhat_dict[xhid] = HatVariable()
+                    end
+                    add_variable(xhat_dict[xhid], vid)
+
+                end
             end
 
+            scenario_map[scen] = ScenarioInfo(pid,
+                                              tree.prob_map[scen],
+                                              branch_ids,
+                                              leaf_ids,
+                                              )
         end
-
-        scenario_map[scid] = ScenarioInfo(scen_proc_map[scid],
-                                          probs[scid],
-                                          model,
-                                          branch_map,
-                                          leaf_map,
-                                          )
-
     end
 
     return PHData(float(r),
                   tree,
                   scenario_map,
                   xhat_dict,
+                  var_data,
                   idxr,
                   PHResidualHistory(),
                   time_out,
@@ -234,12 +280,14 @@ function scenario_bundle(phd::PHData, xid::XhatID)::Set{ScenarioID}
     return scenario_bundle(phd.scenario_tree, xid.node)
 end
 
+function scenarios(phd::PHData)::Set{ScenarioID}
+    return scenarios(phd.scenario_tree)
+end
+
 function convert_to_variable_ids(phd::PHData, xid::XhatID)
     return variables(phd.xhat[xid])
 end
 
 function convert_to_xhat_id(phd::PHData, vid::VariableID)::XhatID
-    vinfo = retrieve_variable(phd.scenario_map[scenario(vid)], vid)
-    idx = index(phd.indexer, vinfo.node_id, vinfo.name)
-    return XhatID(vinfo.node_id, idx)
+    return phd.variable_data[vid].xhat_id
 end

@@ -228,11 +228,11 @@ function add_ph_objective_terms(js::JuMPSubproblem,
     for vid in vids
         var = js.vars[vid]
 
-        w_ref = JuMP.add_variable(js.model, JuMP.build_variable(_error, jvi))
+        w_ref = JuMP.add_variable(js.model, JuMP.build_variable(error, jvi))
         JuMP.add_to_expression!(obj, w_ref * var)
         js.w_vars[vid] = w_ref
 
-        xhat_ref = JuMP.add_variable(js.model, JuMP.build_variable(_error, jvi))
+        xhat_ref = JuMP.add_variable(js.model, JuMP.build_variable(error, jvi))
         JuMP.add_to_expression!(obj, 0.5 * r * (var - xhat_ref)^2)
         js.xhat_vars[vid] = xhat_ref
     end
@@ -323,10 +323,10 @@ end
 
 ## JuMPSubproblem Internal Functions ##
 
-function _error(astr::String)::Nothing
-    @error(astr)
-    return
-end
+# function _error(astr::String)::Nothing
+#     @error(astr)
+#     return
+# end
 
 function _build_var_info(vref::JuMP.VariableRef)
     hlb = JuMP.has_lower_bound(vref)
@@ -363,7 +363,7 @@ function _ef_add_variables(model::JuMP.Model,
         var = JuMP.name(vref)
         vname = var * "_{" * stringify(_value.(scenario_bundle(node))) * "}"
         new_vref = JuMP.add_variable(model,
-                                     JuMP.build_variable(_error, info),
+                                     JuMP.build_variable(error, info),
                                      vname)
         jsv = JSVariable(new_vref, vname, node.id)
         var_map[vref] = jsv

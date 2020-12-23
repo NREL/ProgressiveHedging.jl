@@ -1,184 +1,152 @@
 
-function assign_scenarios_to_procs(scen_tree::ScenarioTree)::Dict{ScenarioID,Int}
-    sp_map = Dict{ScenarioID, Int}()
+function assign_scenarios_to_procs(scen_tree::ScenarioTree
+                                   )::Dict{Int,Set{ScenarioID}}
+    sp_map = Dict{Int, Set{ScenarioID}}()
 
-    nprocs = Distributed.nworkers()
+    nprocs = nworkers()
     wrks = workers()
+    sp_map = Dict(w => Set{ScenarioID}() for w in wrks)
+
     for (k,s) in enumerate(scenarios(scen_tree))
-        sp_map[s] = wrks[(k-1) % nprocs + 1]
+        w = wrks[(k-1) % nprocs + 1]
+        push!(sp_map[w], s)
     end
 
     return sp_map
 end
 
-function augment_objectives(phd::PHData)::Nothing
+function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
+                                 wi::WorkerInf,
+                                 scen_tree::ScenarioTree,
+                                 constructor::Function,
+                                 constructor_args::Tuple,
+                                 r::R,
+                                 warm_start::Bool;
+                                 kwargs...
+                                 ) where R <: Real
 
-    r = phd.r
-    @sync for (scid, sinfo) in pairs(phd.scenario_map)
-        subproblem = sinfo.subproblem
-        vars = collect(keys(sinfo.branch_vars))
-        @spawnat(sinfo.proc, add_ph_objective_terms(fetch(subproblem), vars, r))
+    # Send initialization commands
+    for (wid, scenarios) in pairs(sp_map)
+        # println("......initializing worker $wid with scenarios $scenarios")
+        # flush(stdout)
+        _send_message(wi,
+                      wid,
+                      Initialize(constructor,
+                                 constructor_args,
+                                 (;kwargs...),
+                                 r,
+                                 scenarios,
+                                 scen_tree,
+                                 warm_start)
+                      )
     end
 
-    return
-end
-
-function _create_model(scid::ScenarioID,
-                       model_constructor::Function,
-                       model_constructor_args::Tuple,
-                       subtype::Type{S};
-                       kwargs...
-                       )::S where {S <: AbstractSubproblem}
-
-    model = model_constructor(scid,
-                              model_constructor_args...;
-                              kwargs...)
-
-    if typeof(model) != subtype
-        @error("Model constructor function produced model of type " *
-               "$(typeof(model)). " *
-               "Expected model of type $(subtype). " *
-               "Undefined behavior will probably result.")
-    end
-
-    return model
-end
-    
-
-function create_models(scen_tree::ScenarioTree,
-                       model_constructor::Function,
-                       model_constructor_args::Tuple,
-                       scen_proc_map::Dict{ScenarioID, Int},
-                       sub_type::Type{S};
-                       kwargs...
-                       )::Dict{ScenarioID,Future} where {S <: AbstractSubproblem}
-
-    submodels = Dict{ScenarioID,Future}()
-
-    @sync for s in scenarios(scen_tree)
-        proc = scen_proc_map[s]
-        submodels[s] = @spawnat(proc,
-                                _create_model(s,
-                                              model_constructor,
-                                              model_constructor_args,
-                                              sub_type;
-                                              kwargs...
-                                              )
-                                )
-    end
-
-    return submodels
-
-end
-
-function collect_variable_info(scen_tree::ScenarioTree,
-                               scen_proc_map::Dict{ScenarioID, Int},
-                               submodels::Dict{ScenarioID, Future},
-                               )
-
-    var_map = Dict{ScenarioID, Dict{VariableID, VariableInfo}}()
-    var_report = Dict{ScenarioID, Future}()
-
-    @sync for s in scenarios(scen_tree)
-        proc = scen_proc_map[s]
-        model = submodels[s]
-        var_report[s] = @spawnat(proc, report_variable_info(fetch(model), scen_tree))
-    end
-
+    # Wait for and process initialization replies
+    var_maps = Dict{ScenarioID,Dict{VariableID,String}}()
     for s in scenarios(scen_tree)
-        var_dict = Dict{VariableID, VariableInfo}()
+        var_maps[s] = Dict{VariableID,String}()
+    end
 
-        vdict = fetch(var_report[s])
-        # TODO: Check for remote exception here
-        for (vid, name) in pairs(vdict)
-            nid = id(node(scen_tree, s, vid.stage))
-            var_dict[vid] = VariableInfo(name, nid)
+    remaining_maps = copy(scenarios(scen_tree))
+    msg_waiting = Vector{ReportBranch}()
+
+    while !isempty(remaining_maps)
+
+        msg = _retrieve_message_type(wi, Union{ReportBranch,VariableMap})
+
+        if typeof(msg) <: ReportBranch
+
+            # println("Got branch report for $(msg.scen).")
+            # _copy_values(init_vals[msg.scen], msg.vals)
+            # delete!(remaining_vals, msg.scen)
+            push!(msg_waiting, msg)
+
+        elseif typeof(msg) <: VariableMap
+
+            # println("Got variable map for $(msg.scen).")
+            var_maps[msg.scen] = msg.var_names
+            delete!(remaining_maps, msg.scen)
+
+        else
+
+            error("Inconceivable!!!!")
+
         end
 
-        var_map[s] = var_dict
     end
 
-    return var_map
+    # Put any initial value messages back
+    for msg in msg_waiting
+        put!(wi.output, msg)
+    end
+
+    return var_maps
 end
 
-function build_submodels(scen_tree::ScenarioTree,
-                         model_constructor::Function,
-                         model_constructor_args::Tuple,
-                         sub_type::Type{S},
-                         timo::TimerOutputs.TimerOutput;
-                         kwargs...
-                         ) where {S <: AbstractSubproblem}
+function _set_initial_values(phd::PHData,
+                             winf::WorkerInf,
+                             )::Nothing
 
-    # Assign each subproblem to a particular juila process
-    scen_proc_map = assign_scenarios_to_procs(scen_tree)
+    _process_reports(phd, winf, ReportBranch)
 
-    # Construct the models
-    submodels = @timeit(timo, "Create models",
-                        create_models(scen_tree,
-                                      model_constructor,
-                                      model_constructor_args,
-                                      scen_proc_map,
-                                      sub_type;
-                                      kwargs...)
-                        )
-
-    # Store variable references and other info
-    var_map = @timeit(timo, "Collect variables",
-                      collect_variable_info(scen_tree,
-                                            scen_proc_map,
-                                            submodels)
-                      )
-
-    return (submodels, scen_proc_map, var_map)
+    return
 end
 
 function initialize(scen_tree::ScenarioTree,
                     model_constructor::Function,
                     r::R,
-                    sub_type::Type{S},
+                    warm_start::Bool,
                     timo::TimerOutputs.TimerOutput,
                     report::Int,
                     constructor_args::Tuple,;
                     kwargs...
-                    )::PHData where {S <: AbstractSubproblem,
-                                     R <: Real}
+                    )::Tuple{PHData,WorkerInf} where R <: Real
 
+    # Assign scenarios to processes
+    scen_proc_map = assign_scenarios_to_procs(scen_tree)
+    scen_per_worker = maximum(length.(collect(values(scen_proc_map))))
+    n_scenarios = length(scenarios(scen_tree))
+
+    # Start worker loops
     if report > 0
-        println("...building submodels...")
+        println("...launching workers...")
+    end
+    worker_inf = @timeit(timo,
+                         "Launch Workers",
+                         _launch_workers(scen_per_worker, n_scenarios)
+                         )
+
+    # Initialize workers
+    if report > 0
+        println("...initializing subproblems...")
         flush(stdout)
     end
+    var_map = @timeit(timo,
+                      "Initialize Subproblems",
+                      _initialize_subproblems(scen_proc_map,
+                                              worker_inf,
+                                              scen_tree,
+                                              model_constructor,
+                                              constructor_args,
+                                              r,
+                                              warm_start;
+                                              kwargs...)
+                      )
 
-    (submodels, scen_proc_map, var_map
-     ) = @timeit(timo, "Submodel construction",
-                 build_submodels(scen_tree,
-                                 model_constructor,
-                                 constructor_args,
-                                 S,
-                                 timo;
-                                 kwargs...)
-                 )
+    # Construct master ph object
+    ph_data = @timeit(timo,
+                      "Other",
+                      PHData(r,
+                             scen_tree,
+                             scen_proc_map,
+                             var_map,
+                             timo)
+                      )
 
-    ph_data = PHData(r,
-                     scen_tree,
-                     scen_proc_map,
-                     scen_tree.prob_map,
-                     submodels,
-                     var_map,
-                     timo)
+    # Initial values
+    _set_initial_values(ph_data, worker_inf)
 
-    if report > 0
-        println("...computing starting values...")
-        flush(stdout)
-    end
-    @timeit(timo, "Compute start values", solve_subproblems(ph_data))
-
-    if report > 0
-        println("...augmenting objectives...")
-        flush(stdout)
-    end
-    @timeit(timo, "Augment objectives", augment_objectives(ph_data))
-    
-    return ph_data
+    return (ph_data, worker_inf)
 end
 
 function build_extensive_form(tree::ScenarioTree,

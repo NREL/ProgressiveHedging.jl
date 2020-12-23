@@ -1,11 +1,12 @@
 function name(phd::PHData, vid::VariableID)::String
-    vinfo = retrieve_variable(phd.scenario_map[scenario(vid)], vid)
-    return vinfo.name
+    if !haskey(phd.variable_data, vid)
+        error("No name available for variable id $vid")
+    end
+    return phd.variable_data[vid].name
 end
 
 function value(phd::PHData, vid::VariableID)::Float64
-    vinfo = retrieve_variable(phd.scenario_map[scenario(vid)], vid)
-    return vinfo.value
+    return retrieve_variable_value(phd.scenario_map[scenario(vid)], vid)
 end
 
 function value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
@@ -14,7 +15,7 @@ function value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float
 end
 
 function branch_value(phd::PHData, vid::VariableID)::Float64
-    return phd.scenario_map[scenario(vid)].branch_vars[vid].value
+    return phd.scenario_map[scenario(vid)].branch_vars[vid]
 end
 
 function branch_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
@@ -22,7 +23,7 @@ function branch_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)
 end
 
 function leaf_value(phd::PHData, vid::VariableID)::Float64
-    return phd.scenario_map[scenario(vid)].leaf_vars[vid].value
+    return phd.scenario_map[scenario(vid)].leaf_vars[vid]
 end
 
 function leaf_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
@@ -94,9 +95,7 @@ function retrieve_aug_obj_value(phd::PHData)::Float64
     obj_value = 0.0
 
     for (scid, sinfo) in pairs(phd.scenario_map)
-        subproblem = sinfo.subproblem
-        obj = @spawnat(sinfo.proc, objective_value(fetch(subproblem)))
-        obj_value += sinfo.prob * fetch(obj)
+        obj_value += sinfo.prob * objective_value(sinfo)
     end
 
     return obj_value
@@ -108,20 +107,17 @@ function retrieve_obj_value(phd::PHData)::Float64
 
     for (scid, sinfo) in pairs(phd.scenario_map)
 
-        subproblem = sinfo.subproblem
-        obj = @spawnat(sinfo.proc, objective_value(fetch(subproblem)))
-        obj_value += sinfo.prob * fetch(obj)
+        obj_s = objective_value(sinfo)
 
         # Remove PH terms
-        for (vid, var) in pairs(sinfo.branch_vars)
-            x_val = var.value
+        for (vid, x_val) in pairs(sinfo.branch_vars)
             w_val = sinfo.w_vars[vid]
             xhat_val = xhat_value(phd, vid)
-            p = sinfo.prob
-            r = phd.r
-
-            obj_value -= p * (w_val * x_val + 0.5 * r * (x_val - xhat_val)^2)
+            obj_s -= w_val * x_val + 0.5 * phd.r * (x_val - xhat_val)^2
         end
+
+        obj_value += sinfo.prob * obj_s
+
     end
 
     return obj_value
@@ -152,13 +148,13 @@ function retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
     scenario = Vector{SCENARIO_ID}()
     index = Vector{INDEX}()
 
-    variable_map = Dict{VariableID, VariableInfo}()
+    variable_map = Dict{VariableID, Float64}()
     for (scid,sinfo) in phd.scenario_map
         merge!(variable_map, sinfo.branch_vars, sinfo.leaf_vars)
     end
 
     for vid in sort!(collect(keys(variable_map)))
-        push!(vars, variable_map[vid].name)
+        push!(vars, name(phd, vid))
         push!(vals, variable_map[vid].value)
         push!(stage, _value(vid.stage))
         push!(scenario, _value(vid.scenario))
@@ -185,7 +181,8 @@ function retrieve_w(phd::PHData)::DataFrames.DataFrame
 
     for vid in sort!(collect(keys(variable_map)))
 
-        push!(vars, "W_" * phd.scenario_map[vid.scenario].branch_vars[vid].name)
+        # push!(vars, "W_" * phd.scenario_map[vid.scenario].branch_vars[vid].name)
+        push!(vars, "W_" * name(phd, vid))
         push!(vals, variable_map[vid])
         push!(stage, _value(vid.stage))
         push!(scenario, _value(vid.scenario))
