@@ -51,6 +51,17 @@ function _process_reports(phd::PHData,
     return
 end
 
+function _send_solve_commands(phd::PHData,
+                              winf::WorkerInf,
+                              )::Nothing
+    @sync for (scen, sinfo) in pairs(phd.scenario_map)
+        (w_dict, xhat_dict) = create_ph_dicts(sinfo)
+        @async _send_message(winf, sinfo.pid, Solve(scen, w_dict, xhat_dict))
+    end
+
+    return
+end
+
 function _update_si_xhat(phd::PHData)::Nothing
 
     for (xhid, xhat) in pairs(phd.xhat)
@@ -150,21 +161,24 @@ function update_ph_variables(phd::PHData)::NTuple{2,Float64}
     return (xhat_residual, x_residual)
 end
 
-
 function solve_subproblems(phd::PHData,
                            winf::WorkerInf,
                            )::Nothing
 
     # Copy hat values to scenario base structure for easy dispersal
-    _update_si_xhat(phd)
+    @timeit(phd.time_info,
+            "Other",
+            _update_si_xhat(phd))
+
     # Send solve command to workers
-    for (scen, sinfo) in pairs(phd.scenario_map)
-        (w_dict, xhat_dict) = create_ph_dicts(sinfo)
-        put!(winf.inputs[sinfo.pid], Solve(scen, w_dict, xhat_dict))
-    end
+    @timeit(phd.time_info,
+            "Issuing solve commands",
+            _send_solve_commands(phd, winf))
 
     # Wait for and process replies
-    _process_reports(phd, winf, ReportBranch)
+    @timeit(phd.time_info,
+            "Collecting results",
+            _process_reports(phd, winf, ReportBranch))
 
     return
 end
@@ -174,8 +188,8 @@ function finish(phd::PHData,
                 )::Nothing
 
     # Send shutdown command to workers
-    for rchan in values(winf.inputs)
-        put!(rchan, ShutDown())
+    @sync for rchan in values(winf.inputs)
+        @async put!(rchan, ShutDown())
     end
 
     # Wait for and process replies

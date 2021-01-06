@@ -26,19 +26,19 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
                                  ) where R <: Real
 
     # Send initialization commands
-    for (wid, scenarios) in pairs(sp_map)
+    @sync for (wid, scenarios) in pairs(sp_map)
         # println("......initializing worker $wid with scenarios $scenarios")
         # flush(stdout)
-        _send_message(wi,
-                      wid,
-                      Initialize(constructor,
-                                 constructor_args,
-                                 (;kwargs...),
-                                 r,
-                                 scenarios,
-                                 scen_tree,
-                                 warm_start)
-                      )
+        @async _send_message(wi,
+                             wid,
+                             Initialize(constructor,
+                                        constructor_args,
+                                        (;kwargs...),
+                                        r,
+                                        scenarios,
+                                        scen_tree,
+                                        warm_start)
+                             )
     end
 
     # Wait for and process initialization replies

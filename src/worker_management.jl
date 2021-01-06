@@ -73,10 +73,12 @@ function _launch_workers(min_worker_size::Int,
     worker_results = RemoteChannel(()->Channel{Message}(result_q_size))
     worker_qs = Dict{Int,RemoteChannel}()
     futures = Dict{Int,Future}()
-    for wid in workers()
-        worker_q = RemoteChannel(()->Channel{Message}(worker_q_size), wid)
-        futures[wid] = remotecall(worker_loop, wid, wid, worker_q, worker_results)
-        worker_qs[wid] = worker_q
+    @sync for wid in workers()
+        @async begin
+            worker_q = RemoteChannel(()->Channel{Message}(worker_q_size), wid)
+            futures[wid] = remotecall(worker_loop, wid, wid, worker_q, worker_results)
+            worker_qs[wid] = worker_q
+        end
     end
 
     wi = WorkerInf(worker_qs, worker_results, futures)
