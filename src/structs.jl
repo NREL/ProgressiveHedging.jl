@@ -187,7 +187,7 @@ function save_residual(phrh::PHResidualHistory, iter::Int, res::Float64)::Nothin
 end
 
 struct PHData
-    r::Float64
+    r::T where T <: AbstractPenaltyParameter
     scenario_tree::ScenarioTree
     scenario_map::Dict{ScenarioID, ScenarioInfo}
     xhat::Dict{XhatID, HatVariable}
@@ -197,7 +197,7 @@ struct PHData
     time_info::TimerOutputs.TimerOutput
 end
 
-function PHData(r::Real,
+function PHData(r::T where T <: AbstractPenaltyParameter,
                 tree::ScenarioTree,
                 scen_proc_map::Dict{Int, Set{ScenarioID}},
                 var_map::Dict{ScenarioID, Dict{VariableID, String}},
@@ -252,7 +252,7 @@ function PHData(r::Real,
         end
     end
 
-    return PHData(float(r),
+    return PHData(r,
                   tree,
                   scenario_map,
                   xhat_dict,

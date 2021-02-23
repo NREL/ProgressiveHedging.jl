@@ -14,6 +14,13 @@ Variables and their values are identified and exchanged between PH and a Subprob
 """
 abstract type AbstractSubproblem end
 
+"""
+Abstract type for ProgressiveHedging penalty parameter.
+
+Concrete sybtypes determine how this penalty is used within the PH algorithm.
+"""
+abstract type AbstractPenaltyParameter end
+
 ## Required Interface Functions ##
 
 # The below functions must be implemented by any new subtype of AbstractSubproblem.
@@ -22,7 +29,7 @@ abstract type AbstractSubproblem end
 """
     add_ph_objective_terms(as::AbstractSubproblem,
                            vids::Vector{VariableID},
-                           r::Real
+                           r::AbstractPenaltyParameter
                            )::Nothing
 
 Create model variables for Lagrange multipliers and hat variables and add lagrange and quadratic penalty terms to the objective function.
@@ -31,11 +38,11 @@ Create model variables for Lagrange multipliers and hat variables and add lagran
 
 * `as::AbstractSubproblem` : subproblem object (replace with appropriate type)
 * `vids::Vector{VariableID}` : list of `VariableIDs` which need ph terms created
-* `r::Real` : penalty parameter on quadratic term
+* `r::AbstractPenaltyParameter` : penalty parameter on quadratic term
 """
 function add_ph_objective_terms(as::AbstractSubproblem,
                                 vids::Vector{VariableID},
-                                r::Real
+                                r::AbstractPenaltyParameter
                                 )::Nothing
     throw(UnimplementedError("add_ph_objective_terms is unimplemented"))
 end
@@ -208,11 +215,24 @@ struct JSVariable
     node_id::NodeID
 end
 
+## Scalar Penalty Implementation ## 
+
+struct ScalarPenaltyParameter{T <: Real} 
+    value::T
+end
+convert(::Type{T}, r::ScalarPenaltyParameter{S}) where {T<:Real, S<:Real} = T(r.value)
+Base.promote_rule(::Type{ScalarPenaltyParameter{S}}, ::Type{T}) where {T<:Real, S<:Real} = T
+AbstractPenaltyParameter(x::T where T <: Real) = ScalarPenaltyParameter(x)
+Base.:+(x::ScalarPenaltyParameter, y::Number) = +(promote(x,y)...)
+Base.:-(x::ScalarPenaltyParameter, y::Number) = -(promote(x,y)...)
+Base.:*(x::ScalarPenaltyParameter, y::Number) = *(promote(x,y)...)
+Base.:/(x::ScalarPenaltyParameter, y::Number) = /(promote(x,y)...)
+
 ## Interface Functions ##
 
 function add_ph_objective_terms(js::JuMPSubproblem,
                                 vids::Vector{VariableID},
-                                r::Real
+                                r::ScalarPenaltyParameter
                                 )::Nothing
 
     obj = JuMP.objective_function(js.model,
