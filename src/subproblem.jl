@@ -253,12 +253,21 @@ function add_ph_objective_terms(js::JuMPSubproblem,
         js.w_vars[vid] = w_ref
 
         xhat_ref = JuMP.add_variable(js.model, JuMP.build_variable(error, jvi))
-        JuMP.add_to_expression!(obj, 1/2 * r.value * (var - xhat_ref)^2)
+        add_penalty_to_expression!(obj, r, var, xhat_ref)
         js.xhat_vars[vid] = xhat_ref
     end
 
     JuMP.set_objective_function(js.model, obj)
 
+    return
+end
+
+function add_penalty_to_expression!(obj::JuMP.GenericQuadExpr,
+                                   r::ScalarPenaltyParameter,
+                                   var::JuMP.VariableRef,
+                                   xhat_ref::JuMP.VariableRef,
+                                   )::Nothing
+    JuMP.add_to_expression!(obj, 1/2 * r.value * (var - xhat_ref)^2)
     return
 end
 
