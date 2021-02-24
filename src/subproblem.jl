@@ -232,7 +232,7 @@ convert(::Type{T}, r::ProportionalPenaltyParameter{S}) where {T<:Real, S<:Real} 
 
 function add_ph_objective_terms(js::JuMPSubproblem,
                                 vids::Vector{VariableID},
-                                r::ScalarPenaltyParameter
+                                r::AbstractPenaltyParameter,
                                 )::Nothing
 
     obj = JuMP.objective_function(js.model,
@@ -268,6 +268,24 @@ function add_penalty_to_expression!(obj::JuMP.GenericQuadExpr,
                                    xhat_ref::JuMP.VariableRef,
                                    )::Nothing
     JuMP.add_to_expression!(obj, 1/2 * r.value * (var - xhat_ref)^2)
+    return
+end
+
+# NOTE: temporary fcns for coefficients of expressions
+coefficient(a::JuMP.GenericAffExpr{C,V}, v::V) where {C,V} = get(a.terms, v, zero(C))
+coefficient(a::JuMP.GenericAffExpr{C,V}, v1::V, v2::V) where {C,V} = zero(C)
+function coefficient(q::JuMP.GenericQuadExpr{C,V}, v1::V, v2::V) where {C,V}
+    return get(q.terms, UnorderedPair(v1,v2), zero(C))
+end
+coefficient(q::JuMP.GenericQuadExpr{C,V}, v::V) where {C,V} = coefficient(q.aff, v)
+
+function add_penalty_to_expression!(obj::JuMP.GenericQuadExpr,
+                                    r::ProportionalPenaltyParameter,
+                                    var::JuMP.VariableRef,
+                                    xhat_ref::JuMP.VariableRef,
+                                    )::Nothing
+    coeff = coefficient(obj, var)
+    JuMP.add_to_expression!(obj, 1/2 * r.value/coeff * (var - xhat_ref)^2)
     return
 end
 
