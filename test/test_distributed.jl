@@ -32,6 +32,35 @@ include("common.jl")
 
 @assert Distributed.nworkers() == 2
 
+@testset "Distributed Error Handling" begin
+    ch_size = 10
+    worker_inf = PH._launch_workers(ch_size, ch_size)
+
+    @everywhere struct MakeWorkerError <: PH.Message end
+
+    PH._send_message(worker_inf, first(workers()), MakeWorkerError())
+
+    my_task = @async begin
+        PH._wait_for_shutdown(worker_inf)
+    end
+    if timeout_wait(my_task)
+        @test istaskfailed(my_task)
+        @test typeof(my_task.exception) <: RemoteException
+    else
+        error("Timed out on test")
+    end
+
+    my_task = @async begin
+        PH._wait_for_shutdown(worker_inf)
+        return PH._isrunning(worker_inf)
+    end
+    if timeout_wait(my_task)
+        @test !fetch(my_task)
+    else
+        error("Timed out on test")
+    end
+end
+
 @testset "Distributed solve" begin
     
     # Solve the problem

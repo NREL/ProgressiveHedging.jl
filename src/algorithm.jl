@@ -1,30 +1,91 @@
 
-function retrieve_values(phd::PHData, leaf_mode::Bool)::Nothing
+function _copy_values(target::Dict{VariableID,Float64},
+                      source::Dict{VariableID,Float64}
+                      )::Nothing
 
-    map_sym = leaf_mode ? :leaf_vars : :branch_vars
-
-    val_dict = Dict{ScenarioID, Future}()
-    for (scid,sinfo) in phd.scenario_map
-        vars = collect(keys(getfield(sinfo, map_sym)))
-        subprob = sinfo.subproblem
-        val_dict[scid] = @spawnat(sinfo.proc, report_values(fetch(subprob), vars))
+    for (vid, value) in pairs(source)
+        target[vid] = value
     end
 
-    for (scid,fv) in pairs(val_dict)
-        sinfo = phd.scenario_map[scid]
-        var_values = fetch(fv)
+    return
+end
 
-        if typeof(var_values) == RemoteException
-            # println(var_values.captured)
-            throw(var_values)
-        end
+function _update_values(phd::PHData,
+                        msg::ReportBranch
+                        )::Nothing
 
-        for (vid, value) in pairs(var_values)
-            vmap = getfield(sinfo, map_sym)
-            vmap[vid].value = value
+    sinfo = phd.scenario_map[msg.scen]
+
+    pd = sinfo.problem_data
+    pd.obj = msg.obj
+    pd.sts = msg.sts
+    pd.time = msg.time
+
+    _copy_values(sinfo.branch_vars, msg.vals)
+
+    return
+end
+
+function _update_values(phd::PHData,
+                        msg::ReportLeaf
+                        )::Nothing
+    return _copy_values(phd.scenario_map[msg.scen].leaf_vars, msg.vals)
+end
+
+function _process_reports(phd::PHData,
+                          winf::WorkerInf,
+                          report_type::Union{Type{ReportBranch},Type{ReportLeaf}},
+                          )::Nothing
+
+    waiting_on = copy(scenarios(phd))
+
+    while !isempty(waiting_on)
+
+        msg = _retrieve_message_type(winf, report_type)
+        _verify_report(msg)
+        _update_values(phd, msg)
+
+        delete!(waiting_on, msg.scen)
+    end
+
+    return
+end
+
+function _send_solve_commands(phd::PHData,
+                              winf::WorkerInf,
+                              )::Nothing
+    @sync for (scen, sinfo) in pairs(phd.scenario_map)
+        (w_dict, xhat_dict) = create_ph_dicts(sinfo)
+        @async _send_message(winf, sinfo.pid, Solve(scen, w_dict, xhat_dict))
+    end
+
+    return
+end
+
+function _update_si_xhat(phd::PHData)::Nothing
+
+    for (xhid, xhat) in pairs(phd.xhat)
+        for vid in variables(xhat)
+            sinfo = phd.scenario_map[scenario(vid)]
+            sinfo.xhat_vars[vid] = value(xhat)
         end
     end
 
+    return
+end
+
+function _verify_report(msg::ReportBranch)::Nothing
+    if (msg.sts != MOI.OPTIMAL &&
+        msg.sts != MOI.LOCALLY_SOLVED &&
+        msg.sts != MOI.ALMOST_LOCALLY_SOLVED)
+        # TODO: Create user adjustable/definable behavior for when this happens
+        @error("Scenario $(msg.scen) subproblem returned $(msg.sts).")
+    end
+    return
+end
+
+function _verify_report(msg::ReportLeaf)::Nothing
+    # Intentional no-op
     return
 end
 
@@ -74,7 +135,7 @@ function compute_and_save_w(phd::PHData)::Float64
             p = phd.scenario_map[s].prob
             kx = branch_value(phd, vid) - xhat
 
-            phd.scenario_map[s].w_vars[vid] += phd.r *kx
+            phd.scenario_map[s].w_vars[vid] += phd.r * kx
 
             kxsq += p * kx^2
 
@@ -92,16 +153,50 @@ function compute_and_save_w(phd::PHData)::Float64
     return kxsq
 end
 
-function update_ph_variables(phd::PHData)::Tuple{Float64,Float64}
-    retrieve_values(phd, false)
+function update_ph_variables(phd::PHData)::NTuple{2,Float64}
+
     xhat_residual = compute_and_save_xhat(phd)
     x_residual = compute_and_save_w(phd)
+
     return (xhat_residual, x_residual)
 end
 
-function update_ph_leaf_variables(phd::PHData)::Nothing
-    retrieve_values(phd, true)
+function solve_subproblems(phd::PHData,
+                           winf::WorkerInf,
+                           )::Nothing
 
+    # Copy hat values to scenario base structure for easy dispersal
+    @timeit(phd.time_info,
+            "Other",
+            _update_si_xhat(phd))
+
+    # Send solve command to workers
+    @timeit(phd.time_info,
+            "Issuing solve commands",
+            _send_solve_commands(phd, winf))
+
+    # Wait for and process replies
+    @timeit(phd.time_info,
+            "Collecting results",
+            _process_reports(phd, winf, ReportBranch))
+
+    return
+end
+
+function finish(phd::PHData,
+                winf::WorkerInf,
+                )::Nothing
+
+    # Send shutdown command to workers
+    @sync for rchan in values(winf.inputs)
+        @async put!(rchan, ShutDown())
+    end
+
+    # Wait for and process replies
+    _process_reports(phd, winf, ReportLeaf)
+
+    # Create hat variables for all leaf variables so
+    # that `retrieve_soln` picks up the values
     for (scid, sinfo) in pairs(phd.scenario_map)
         for (vid, vinfo) in pairs(sinfo.leaf_vars)
             xhid = convert_to_xhat_id(phd, vid)
@@ -110,82 +205,26 @@ function update_ph_leaf_variables(phd::PHData)::Nothing
         end
     end
 
-    return
-end
-
-# Some MOI interfaces do not support setting of start values
-function set_start_values(phd::PHData)::Nothing
-
-    @sync for (scid, sinfo) in pairs(phd.scenario_map)
-        subproblem = sinfo.subproblem
-        @spawnat(sinfo.proc, warm_start(fetch(subproblem)))
-    end
-
-    return
-
-end
-
-function update_si_xhat(phd::PHData)::Nothing
-
-    for (xhid, xhat) in pairs(phd.xhat)
-        for vid in variables(xhat)
-            sinfo = phd.scenario_map[scenario(vid)]
-            sinfo.xhat_vars[vid] = value(xhat)
-        end
-    end
-
-    return
-end
-
-function fix_ph_variables(phd::PHData)::Nothing
-
-    update_si_xhat(phd)
-
-    @sync for sinfo in values(phd.scenario_map)
-
-        (w_dict, xhat_dict) = create_ph_dicts(sinfo)
-        subproblem = sinfo.subproblem
-
-        @spawnat(sinfo.proc, update_ph_terms(fetch(subproblem), w_dict, xhat_dict))
-    end
-
-    return
-end
-
-function solve_subproblems(phd::PHData)::Nothing
-
-    # Find subproblem solutions
-    status = Dict{ScenarioID, Future}()
-    @sync for (scen, sinfo) in pairs(phd.scenario_map)
-        subproblem = sinfo.subproblem
-        status[scen] = @spawnat(sinfo.proc, solve(fetch(subproblem)))
-    end
-
-    for (scen, sinfo) in pairs(phd.scenario_map)
-        # MOI refers to the MathOptInterface package
-        subproblem = sinfo.subproblem
-        sts = fetch(status[scen])
-        if sts != MOI.OPTIMAL && sts != MOI.LOCALLY_SOLVED &&
-            sts != MOI.ALMOST_LOCALLY_SOLVED
-            @error("Scenario $scen subproblem returned $sts.")
-        end
-    end
+    # Wait for workers to exit cleanly
+    _wait_for_shutdown(winf)
 
     return
 end
 
 function hedge(ph_data::PHData,
+               worker_inf::WorkerInf,
                max_iter::Int,
                atol::Float64,
                rtol::Float64,
                report::Int,
                save_res::Bool,
-               warm_start::Bool,
                )::Tuple{Int,Float64}
+
     niter = 0
     report_flag = (report > 0)
 
-    (xhat_res_sq, x_res_sq) = @timeit(ph_data.time_info, "Update PH Vars",
+    (xhat_res_sq, x_res_sq) = @timeit(ph_data.time_info,
+                                      "Update PH Vars",
                                       update_ph_variables(ph_data))
 
     nsqrt = sqrt(length(ph_data.xhat))
@@ -205,23 +244,15 @@ function hedge(ph_data::PHData,
     end
     
     while niter < max_iter && residual > atol && residual > rtol * xmax
-        
-        # Set initial values, fix cross model values (W and Xhat) and
-        # solve the subproblems
 
-        # Setting start values causes issues with some solvers
-        if warm_start
-            @timeit(ph_data.time_info, "Set start values",
-                    set_start_values(ph_data))
-        end
-        @timeit(ph_data.time_info, "Fix PH variables",
-                fix_ph_variables(ph_data))
-
-        @timeit(ph_data.time_info, "Solve subproblems",
-                solve_subproblems(ph_data))
+        # Solve subproblems
+        @timeit(ph_data.time_info,
+                "Solve subproblems",
+                solve_subproblems(ph_data, worker_inf))
 
         # Update xhat and w
-        (xhat_res_sq, x_res_sq) = @timeit(ph_data.time_info, "Update PH Vars",
+        (xhat_res_sq, x_res_sq) = @timeit(ph_data.time_info,
+                                          "Update PH Vars",
                                           update_ph_variables(ph_data))
 
         # Update stopping criteria -- xhat_res_sq measures the movement of
@@ -248,8 +279,9 @@ function hedge(ph_data::PHData,
 
     end
 
-    @timeit(ph_data.time_info, "Update PH leaf variables",
-            update_ph_leaf_variables(ph_data))
+    @timeit(ph_data.time_info,
+            "Finishing",
+            finish(ph_data, worker_inf))
 
     if niter >= max_iter && residual > atol
         @warn("Performed $niter iterations without convergence. " *

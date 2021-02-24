@@ -94,3 +94,19 @@ function build_scen_tree()
     end
     return tree
 end
+
+function timeout_wait(t::Task, limit::Real=10, interval::Real=1)
+    count = 0
+    success = false
+    while true
+        sleep(interval)
+        count += 1
+        if istaskdone(t)
+            success = true
+            break
+        elseif count >= limit
+            break
+        end
+    end
+    return success
+end

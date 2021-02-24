@@ -31,6 +31,8 @@ struct ScenarioNode
     children::Set{ScenarioNode}
 end
 
+Base.show(io::IO, sn::ScenarioNode) = print("ScenarioNode($(sn.id), $(sn.stage), $(sn.scenario_bundle))")
+
 function _add_child(parent::ScenarioNode, child::ScenarioNode)::Nothing
     push!(parent.children, child)
     return
@@ -109,6 +111,10 @@ function last_stage(tree::ScenarioTree)::StageID
     return maximum(getfield.(values(tree.tree_map), :stage))
 end
 
+function is_leaf(tree::ScenarioTree, vid::VariableID)::Bool
+    return is_leaf(node(tree, vid.scenario, vid.stage))
+end
+
 function is_leaf(node::ScenarioNode)::Bool
     return length(node.children) == 0 ||
         (length(node.children) == 1 && is_leaf(first(node.children)))
@@ -160,6 +166,12 @@ function add_leaf(tree::ScenarioTree, parent::ScenarioNode, probability::R
 end
 
 _assign_scenario_id(tree::ScenarioTree)::ScenarioID = _generate_scenario_id(tree.id_gen)
+
+function node(tree::ScenarioTree,
+              nid::NodeID
+              )::ScenarioNode
+    return tree.tree_map[nid]
+end
 
 function node(tree::ScenarioTree,
               scid::ScenarioID,

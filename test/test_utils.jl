@@ -48,52 +48,57 @@ end
 
 function build_var_map(n::Int,
                        m1::Int,
-                       m2::Int,
-                       )::Dict{PH.ScenarioID, Dict{PH.VariableID, PH.VariableInfo}}
-
-    vmap = Dict{PH.ScenarioID, Dict{PH.VariableID, PH.VariableInfo}}()
+                       m2::Int)
+    vmap = Dict{PH.ScenarioID, Dict{PH.VariableID, String}}()
+    vval = Dict{PH.ScenarioID, Dict{PH.VariableID, Float64}}()
     for k in 1:n
         scid = PH.scid(k-1)
 
-        vars = Dict{PH.VariableID, PH.VariableInfo}()
+        vars = Dict{PH.VariableID, String}()
+        vals = Dict{PH.VariableID, Float64}()
         for j in 1:m1
             vid = PH.VariableID(scid, PH.stid(1), PH.index(j + k - 1))
-            vars[vid] = PH.VariableInfo("a$j",
-                                        PH.NodeID(0),
-                                        convert(Float64, j))
+            vars[vid] = "a$j" # convert(Float64, j)
+            vals[vid] = convert(Float64, j)
         end
 
         for j in 1:m2
             vid = PH.VariableID(scid, PH.stid(2), PH.index(j-1))
-            vars[vid] = PH.VariableInfo("b$j",
-                                        PH.NodeID(k),
-                                        convert(Float64, k*j + n))
+            vars[vid] = "b$j" # convert(Float64, k*j + n)
+            vals[vid] = convert(Float64, k*j + n)
         end
 
         vmap[scid] = vars
+        vval[scid] = vals
     end
-    return vmap
+    return (vmap, vval)
 end
 
 nscen = 2
 nv1 = 3
 nv2 = 4
 st = two_stage_tree(nscen)
-var_map = build_var_map(nscen, nv1, nv2)
+(var_map, var_val) = build_var_map(nscen, nv1, nv2)
+
 phd = PH.PHData(1.0,
                 st,
-                Dict{PH.ScenarioID, Int}(PH.scid(k)=>1 for k in 0:nscen-1),
-                st.prob_map,
-                Dict{PH.ScenarioID, Future}(PH.scid(k)=>Future() for k in 0:nscen-1),
+                Dict{Int,Set{PH.ScenarioID}}(1=>copy(PH.scenarios(st))),
                 var_map,
                 TimerOutputs.TimerOutput()
                 )
+
 # Create entries for leaf variables.  This is normally done at the end of the solve call
 # but since we aren't calling that here...
 for (scid, sinfo) in pairs(phd.scenario_map)
-    for (vid, vinfo) in pairs(sinfo.leaf_vars)
+    for vid in keys(sinfo.branch_vars)
         xhid = PH.convert_to_xhat_id(phd, vid)
-        phd.xhat[xhid] = PH.HatVariable(PH.value(phd, vid), vid)
+        sinfo.branch_vars[vid] = var_val[scid][vid]
+        phd.xhat[xhid].value = var_val[scid][vid]
+    end
+    for vid in keys(sinfo.leaf_vars)
+        xhid = PH.convert_to_xhat_id(phd, vid)
+        sinfo.leaf_vars[vid] = var_val[scid][vid]
+        phd.xhat[xhid] = PH.HatVariable(var_val[scid][vid], vid)
     end
 end
 

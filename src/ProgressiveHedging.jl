@@ -29,7 +29,13 @@ export residuals, retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_
 include("id_types.jl")
 include("scenario_tree.jl")
 include("subproblem.jl")
+
+include("message.jl")
+
 include("structs.jl")
+include("worker.jl")
+include("worker_management.jl")
+
 include("utils.jl")
 
 include("algorithm.jl")
@@ -63,7 +69,6 @@ Solve given problem using Progressive Hedging.
 
 **Keyword Arguments**
 
-* `subproblem_type<:AbstractSubproblem` : Type of model to create or created by `subproblem_constructor` to represent the subproblems. Defaults to JuMPSubproblem.
 * `max_iter::Int` : Maximum number of iterations to perform before returning. Defaults to 1000.
 * `atol::Float64` : Absolute error tolerance. Defaults to 1e-6.
 * `rtol::Float64` : Relative error tolerance. Defaults to 1e-6.
@@ -76,9 +81,8 @@ Solve given problem using Progressive Hedging.
 """
 function solve(tree::ScenarioTree,
                subproblem_constructor::Function,
-               r::T,
+               r::R,
                other_args...;
-               subproblem_type::Type{S}=JuMPSubproblem,
                max_iter::Int=1000,
                atol::Float64=1e-6,
                rtol::Float64=1e-6,
@@ -88,7 +92,8 @@ function solve(tree::ScenarioTree,
                warm_start::Bool=false,
                args::Tuple=(),
                kwargs...
-               ) where {T <: Real, S <: AbstractSubproblem}
+               ) where {R <: Real}
+
     timo = TimerOutputs.TimerOutput()
 
     # Initialization
@@ -96,23 +101,26 @@ function solve(tree::ScenarioTree,
         println("Initializing...")
     end
 
-    ph_data = @timeit(timo, "Intialization",
-                      initialize(tree,
-                                 subproblem_constructor,
-                                 r,
-                                 subproblem_type,
-                                 timo,
-                                 report,
-                                 Tuple([other_args...,args...]);
-                                 kwargs...))
+    (phd, winf) = @timeit(timo,
+                          "Intialization",
+                          initialize(tree,
+                                     subproblem_constructor,
+                                     r,
+                                     warm_start,
+                                     timo,
+                                     report,
+                                     (other_args...,args...);
+                                     kwargs...)
+                          )
 
     # Solution
     if report > 0
         println("Solving...")
     end
     (niter, residual) = @timeit(timo, "Solution",
-                                hedge(ph_data, max_iter, atol, rtol,
-                                      report, save_residuals, warm_start)
+                                hedge(phd, winf,
+                                      max_iter, atol, rtol,
+                                      report, save_residuals)
                                 )
 
     # Post Processing
@@ -120,14 +128,14 @@ function solve(tree::ScenarioTree,
         println("Done.")
     end
 
-    soln_df = retrieve_soln(ph_data)
-    obj = retrieve_obj_value(ph_data)
+    soln_df = retrieve_soln(phd)
+    obj = retrieve_obj_value(phd)
 
     if timing
         println(timo)
     end
 
-    return (niter, residual, obj, soln_df, ph_data)
+    return (niter, residual, obj, soln_df, phd)
 end
 
 """
@@ -186,9 +194,7 @@ end # module
 
 #### TODOs ####
 
-# 1. Improve error handling of remote exceptions (check for them, figure out a way to
-#    retrieve errors that occur when creating subproblems).
-# 2. Add tests for unimplemented subproblem error throwing?
-# 3. Add flag to solve call to turn off parallelism
-# 4. Add handling of nonlinear objective functions
-# 5. Add tests for nonlinear constraints (these should work currently but testing is need)
+# 1. Add tests for unimplemented subproblem error throwing?
+# 2. Add flag to solve call to turn off parallelism
+# 3. Add handling of nonlinear objective functions
+# 4. Add tests for nonlinear constraints (these should work currently but testing is needed)
