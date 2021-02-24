@@ -1,5 +1,5 @@
 
-r = 25.0
+r = PH.ScalarPenaltyParameter(25.0)
 atol = 1e-8
 rtol = 1e-12
 max_iter = 500

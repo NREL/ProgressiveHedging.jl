@@ -186,8 +186,8 @@ function save_residual(phrh::PHResidualHistory, iter::Int, res::Float64)::Nothin
     return
 end
 
-struct PHData
-    r::T where T <: AbstractPenaltyParameter
+struct PHData{R <: AbstractPenaltyParameter}
+    r::R
     scenario_tree::ScenarioTree
     scenario_map::Dict{ScenarioID, ScenarioInfo}
     xhat::Dict{XhatID, HatVariable}
@@ -197,7 +197,7 @@ struct PHData
     time_info::TimerOutputs.TimerOutput
 end
 
-function PHData(r::T where T <: AbstractPenaltyParameter,
+function PHData(r::AbstractPenaltyParameter,
                 tree::ScenarioTree,
                 scen_proc_map::Dict{Int, Set{ScenarioID}},
                 var_map::Dict{ScenarioID, Dict{VariableID, String}},
@@ -262,6 +262,8 @@ function PHData(r::T where T <: AbstractPenaltyParameter,
                   time_out,
                   )
 end
+
+PHData(r::Real, args...) = PHData(ScalarPenaltyParameter(r), args...)
 
 function residuals(phd::PHData)::Vector{Float64}
     return residual_vector(phd.residual_info)

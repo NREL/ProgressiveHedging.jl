@@ -1,5 +1,5 @@
 
-r = 25.0
+r = PH.ScalarPenaltyParameter(25.0)
 atol = 1e-8
 rtol = 1e-12
 max_iter = 500
@@ -21,16 +21,17 @@ var_vals = Dict([
 ])
 
 # Setup distributed stuff
-Distributed.addprocs(2)
+nw = 2
+diff = nw - nworkers()
+diff > 0 && Distributed.addprocs(nw)
+@assert Distributed.nworkers() == nw
 @everywhere using Pkg
-@everywhere Pkg.activate(".")
+@everywhere Pkg.activate(@__DIR__)
 @everywhere using ProgressiveHedging
 @everywhere const PH = ProgressiveHedging
 @everywhere using Ipopt
 @everywhere using JuMP
 include("common.jl")
-
-@assert Distributed.nworkers() == 2
 
 @testset "Distributed Error Handling" begin
     ch_size = 10

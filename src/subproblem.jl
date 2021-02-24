@@ -217,16 +217,16 @@ end
 
 ## Scalar Penalty Implementation ## 
 
-struct ScalarPenaltyParameter{T <: Real} 
+struct ScalarPenaltyParameter{T<:Real} <: AbstractPenaltyParameter
     value::T
 end
 convert(::Type{T}, r::ScalarPenaltyParameter{S}) where {T<:Real, S<:Real} = T(r.value)
-Base.promote_rule(::Type{ScalarPenaltyParameter{S}}, ::Type{T}) where {T<:Real, S<:Real} = T
-AbstractPenaltyParameter(x::T where T <: Real) = ScalarPenaltyParameter(x)
-Base.:+(x::ScalarPenaltyParameter, y::Number) = +(promote(x,y)...)
-Base.:-(x::ScalarPenaltyParameter, y::Number) = -(promote(x,y)...)
-Base.:*(x::ScalarPenaltyParameter, y::Number) = *(promote(x,y)...)
-Base.:/(x::ScalarPenaltyParameter, y::Number) = /(promote(x,y)...)
+
+## Proportional Penalty Implementation ##
+struct ProportionalPenaltyParameter{T<:Real} <: AbstractPenaltyParameter
+    value::T
+end
+convert(::Type{T}, r::ProportionalPenaltyParameter{S}) where {T<:Real, S<:Real} = T(r.value)
 
 ## Interface Functions ##
 
@@ -253,7 +253,7 @@ function add_ph_objective_terms(js::JuMPSubproblem,
         js.w_vars[vid] = w_ref
 
         xhat_ref = JuMP.add_variable(js.model, JuMP.build_variable(error, jvi))
-        JuMP.add_to_expression!(obj, 0.5 * r * (var - xhat_ref)^2)
+        JuMP.add_to_expression!(obj, 1/2 * r.value * (var - xhat_ref)^2)
         js.xhat_vars[vid] = xhat_ref
     end
 

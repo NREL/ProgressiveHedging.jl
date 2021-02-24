@@ -92,7 +92,7 @@ function solve(tree::ScenarioTree,
                warm_start::Bool=false,
                args::Tuple=(),
                kwargs...
-               ) where {R <: Real}
+               ) where {R <: AbstractPenaltyParameter}
 
     timo = TimerOutputs.TimerOutput()
 

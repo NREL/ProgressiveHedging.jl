@@ -20,10 +20,10 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
                                  scen_tree::ScenarioTree,
                                  constructor::Function,
                                  constructor_args::Tuple,
-                                 r::R,
+                                 r::AbstractPenaltyParameter,
                                  warm_start::Bool;
                                  kwargs...
-                                 ) where R <: Real
+                                 )
 
     # Send initialization commands
     @sync for (wid, scenarios) in pairs(sp_map)
@@ -94,13 +94,13 @@ end
 
 function initialize(scen_tree::ScenarioTree,
                     model_constructor::Function,
-                    r::R,
+                    r::AbstractPenaltyParameter,
                     warm_start::Bool,
                     timo::TimerOutputs.TimerOutput,
                     report::Int,
                     constructor_args::Tuple,;
                     kwargs...
-                    )::Tuple{PHData,WorkerInf} where R <: Real
+                    )::Tuple{PHData,WorkerInf}
 
     # Assign scenarios to processes
     scen_proc_map = assign_scenarios_to_procs(scen_tree)

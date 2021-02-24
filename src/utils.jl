@@ -113,7 +113,7 @@ function retrieve_obj_value(phd::PHData)::Float64
         for (vid, x_val) in pairs(sinfo.branch_vars)
             w_val = sinfo.w_vars[vid]
             xhat_val = xhat_value(phd, vid)
-            obj_s -= w_val * x_val + 0.5 * phd.r * (x_val - xhat_val)^2
+            obj_s -= w_val * x_val + 1/2 * phd.r.value * (x_val - xhat_val)^2
         end
 
         obj_value += sinfo.prob * obj_s

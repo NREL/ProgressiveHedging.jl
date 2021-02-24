@@ -3,11 +3,11 @@ abstract type Message end
 
 struct Abort <: Message end
 
-struct Initialize <: Message
+struct Initialize{R <: AbstractPenaltyParameter} <: Message
     create_subproblem::Function
     create_subproblem_args::Tuple
     create_subproblem_kwargs::NamedTuple
-    r::Float64
+    r::R
     scenarios::Set{ScenarioID}
     scenario_tree::ScenarioTree
     warm_start::Bool

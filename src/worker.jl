@@ -243,7 +243,7 @@ function _initial_solve(output::RemoteChannel,
 end
 
 function _augment_subproblems(record::WorkerRecord,
-                              r::Float64
+                              r::AbstractPenaltyParameter
                               )::Nothing
 
     for (scen, sub) in record.subproblems

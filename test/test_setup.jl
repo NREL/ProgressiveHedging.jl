@@ -171,7 +171,7 @@ end
                                        st,
                                        create_model,
                                        (),
-                                       1.0,
+                                       PH.ScalarPenaltyParameter(1.0),
                                        false)
         end
 
