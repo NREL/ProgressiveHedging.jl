@@ -244,13 +244,14 @@ end
 
 function _augment_subproblems(record::WorkerRecord,
                               r::AbstractPenaltyParameter
-                              )::Nothing
+                              )
 
+    penalty_map = Dict{ScenarioID,Dict{VariableID,Real}}()
     for (scen, sub) in record.subproblems
-        add_ph_objective_terms(sub.problem,
+        penalty_map[scen] = add_ph_objective_terms(sub.problem,
                                sub.branch_vars,
                                r)
     end
 
-    return
+    return penalty_map
 end

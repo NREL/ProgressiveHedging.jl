@@ -35,14 +35,14 @@ end
 function penalty_value(r::ScalarPenaltyParameter, 
                         obj::JuMP.GenericQuadExpr,
                         var::JuMP.VariableRef
-                        )
+                        )::Real
     return r.value
 end
 
 function penalty_value(r::ProportionalPenaltyParameter, 
                         obj::JuMP.GenericQuadExpr,
                         var::JuMP.VariableRef
-                        )
+                        )::Real
     coeff = coefficient(obj, var)
     return r.value * coeff
 end
