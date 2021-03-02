@@ -28,9 +28,9 @@ end
 @testset "Algorithm" begin
     include("test_algorithm.jl")
 end
-@testset "Distributed" begin
-    include("test_distributed.jl")
-end
 @testset "Penalty" begin
     include("test_penalty.jl")
+end
+@testset "Distributed" begin
+    include("test_distributed.jl")
 end

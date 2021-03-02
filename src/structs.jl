@@ -1,3 +1,6 @@
+struct UnimplementedError <: Exception
+    msg::String
+end
 
 struct Indexer
     next_index::Dict{NodeID, Index}

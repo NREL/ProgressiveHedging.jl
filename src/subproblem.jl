@@ -1,8 +1,3 @@
-
-struct UnimplementedError <: Exception
-    msg::String
-end
-
 #### PH Subproblem Interface ####
 
 """
@@ -13,13 +8,6 @@ A concrete subtype handles all details of creating, solving and updating subprob
 Variables and their values are identified and exchanged between PH and a Subproblem type using the `VariableID` type.  A unique `VariableID` is associated with each variable in the subproblem by the Subproblem implementation by using the `ScenarioID` of the subproblem as well as the `StageID` to which this variable belongs.  This combination uniquely identifies a node in the scenario tree to which the variable can be associated.  Variables associated with the same node in a scenario tree and sharing the same name are assumed to be consensus variables whose optimal value is determined by PH.  The final component of a `VariableID` is an `Index` which is just a counter assigned to a variable to differentiate it from other variables at the same node.  See `VariableID` type for more details.
 """
 abstract type AbstractSubproblem end
-
-"""
-Abstract type for ProgressiveHedging penalty parameter.
-
-Concrete sybtypes determine how this penalty is used within the PH algorithm.
-"""
-abstract type AbstractPenaltyParameter end
 
 ## Required Interface Functions ##
 
@@ -215,19 +203,6 @@ struct JSVariable
     node_id::NodeID
 end
 
-## Scalar Penalty Implementation ## 
-
-struct ScalarPenaltyParameter{T<:Real} <: AbstractPenaltyParameter
-    value::T
-end
-convert(::Type{T}, r::ScalarPenaltyParameter{S}) where {T<:Real, S<:Real} = T(r.value)
-
-## Proportional Penalty Implementation ##
-struct ProportionalPenaltyParameter{T<:Real} <: AbstractPenaltyParameter
-    value::T
-end
-convert(::Type{T}, r::ProportionalPenaltyParameter{S}) where {T<:Real, S<:Real} = T(r.value)
-
 ## Interface Functions ##
 
 function add_ph_objective_terms(js::JuMPSubproblem,
@@ -253,39 +228,13 @@ function add_ph_objective_terms(js::JuMPSubproblem,
         js.w_vars[vid] = w_ref
 
         xhat_ref = JuMP.add_variable(js.model, JuMP.build_variable(error, jvi))
-        add_penalty_to_expression!(obj, r, var, xhat_ref)
+        rho = penalty_value(r, obj, var)
+        JuMP.add_to_expression!(obj, 1/2 * rho * (var - xhat_ref)^2)
         js.xhat_vars[vid] = xhat_ref
     end
 
     JuMP.set_objective_function(js.model, obj)
 
-    return
-end
-
-function add_penalty_to_expression!(obj::JuMP.GenericQuadExpr,
-                                   r::ScalarPenaltyParameter,
-                                   var::JuMP.VariableRef,
-                                   xhat_ref::JuMP.VariableRef,
-                                   )::Nothing
-    JuMP.add_to_expression!(obj, 1/2 * r.value * (var - xhat_ref)^2)
-    return
-end
-
-# NOTE: temporary fcns for coefficients of expressions
-coefficient(a::JuMP.GenericAffExpr{C,V}, v::V) where {C,V} = get(a.terms, v, zero(C))
-coefficient(a::JuMP.GenericAffExpr{C,V}, v1::V, v2::V) where {C,V} = zero(C)
-function coefficient(q::JuMP.GenericQuadExpr{C,V}, v1::V, v2::V) where {C,V}
-    return get(q.terms, UnorderedPair(v1,v2), zero(C))
-end
-coefficient(q::JuMP.GenericQuadExpr{C,V}, v::V) where {C,V} = coefficient(q.aff, v)
-
-function add_penalty_to_expression!(obj::JuMP.GenericQuadExpr,
-                                    r::ProportionalPenaltyParameter,
-                                    var::JuMP.VariableRef,
-                                    xhat_ref::JuMP.VariableRef,
-                                    )::Nothing
-    coeff = coefficient(obj, var)
-    JuMP.add_to_expression!(obj, 1/2 * r.value/coeff * (var - xhat_ref)^2)
     return
 end
 

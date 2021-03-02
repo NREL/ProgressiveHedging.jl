@@ -1,13 +1,3 @@
-
-function invert_map(my_map::Dict{A,B})::Dict{B,A} where {A,B}
-    inv_map = Dict{B,A}()
-    for (k,v) in pairs(my_map)
-        inv_map[v] = k
-    end
-    @assert length(inv_map) == length(my_map)
-    return inv_map
-end
-
 @testset "Scenario Form" begin
     st = build_scen_tree()
 
