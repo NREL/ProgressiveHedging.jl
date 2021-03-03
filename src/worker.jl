@@ -99,7 +99,7 @@ function process_message(msg::Initialize,
     
     _initial_solve(output, record)
 
-    _augment_subproblems(record, msg.r)
+    _augment_subproblems(output, record, msg.r)
 
     record.initialized = true
 
@@ -165,6 +165,14 @@ function process_message(msg::Solve,
                               var_vals)
          )
 
+    return true
+end
+
+function process_message(msg::PenaltyMap,
+                         record::WorkerRecord,
+                         output::RemoteChannel
+                         )
+    # WHAT HERE?
     return true
 end
 
@@ -242,16 +250,20 @@ function _initial_solve(output::RemoteChannel,
     return
 end
 
-function _augment_subproblems(record::WorkerRecord,
+function _augment_subproblems(output::RemoteChannel,
+                              record::WorkerRecord,
                               r::AbstractPenaltyParameter
                               )
 
     penalty_map = Dict{ScenarioID,Dict{VariableID,Real}}()
     for (scen, sub) in record.subproblems
-        penalty_map[scen] = add_ph_objective_terms(sub.problem,
-                               sub.branch_vars,
-                               r)
+        put!(output, PenaltyMap(
+                                scen,
+                                add_ph_objective_terms(sub.problem,
+                                                       sub.branch_vars,
+                                                       r
+                                                       ),
+                               )
+            )
     end
-
-    return penalty_map
 end

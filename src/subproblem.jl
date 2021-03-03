@@ -219,7 +219,7 @@ function add_ph_objective_terms(js::JuMPSubproblem,
                             true, 0.0,    # fixed
                             false, NaN,   # start value
                             false, false) # binary, integer
-    penalty_map = Dict{VariableID,Real}() # NOTE: value type to be changed?
+    penalty_map = Dict{VariableID,Float64}()
     for vid in vids
         var = js.vars[vid]
 
@@ -229,7 +229,7 @@ function add_ph_objective_terms(js::JuMPSubproblem,
 
         xhat_ref = JuMP.add_variable(js.model, JuMP.build_variable(error, jvi))
         penalty_map[vid] = rho = penalty_value(r, obj, var)
-        JuMP.add_to_expression!(obj, 1/2 * rho * (var - xhat_ref)^2)
+        JuMP.add_to_expression!(obj, 0.5 * rho * (var - xhat_ref)^2)
         js.xhat_vars[vid] = xhat_ref
     end
 

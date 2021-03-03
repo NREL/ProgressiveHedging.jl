@@ -40,3 +40,8 @@ struct VariableMap <: Message
     scen::ScenarioID
     var_names::Dict{VariableID,String}
 end
+
+struct PenaltyMap <: Message
+    scen::ScenarioID
+    var_penalties::Dict{VariableID,Float64}
+end
