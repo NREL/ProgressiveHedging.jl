@@ -208,7 +208,7 @@ end
 function add_ph_objective_terms(js::JuMPSubproblem,
                                 vids::Vector{VariableID},
                                 r::AbstractPenaltyParameter,
-                                )::Dict{VariableID,Real}
+                                )::Dict{VariableID,Float64}
 
     obj = JuMP.objective_function(js.model,
                                   JuMP.GenericQuadExpr{Float64, JuMP.VariableRef}

@@ -92,8 +92,8 @@ end
     sts = PH.solve(js)
 
     r = PH.ScalarPenaltyParameter(10.0)
-    @test (PH.add_ph_objective_terms(js, br_vids, r) === nothing)
+    @test (typeof(PH.add_ph_objective_terms(js, br_vids, r)) <: Dict{PH.VariableID, Float64})
 
     r = PH.ProportionalPenaltyParameter(10.0)
-    @test (PH.add_ph_objective_terms(js, br_vids, r) === nothing)
+    @test (typeof(PH.add_ph_objective_terms(js, br_vids, r)) <: Dict{PH.VariableID, Float64})
 end

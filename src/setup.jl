@@ -60,6 +60,10 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
             # _copy_values(init_vals[msg.scen], msg.vals)
             # delete!(remaining_vals, msg.scen)
             push!(msg_waiting, msg)
+        
+        elseif typeof(msg) <: PenaltyMap
+
+            push!(msg.waiting, msg)
 
         elseif typeof(msg) <: VariableMap
 

@@ -7,16 +7,19 @@ abstract type AbstractPenaltyParameter end
 
 ## Scalar Penalty Implementation ## 
 
-struct ScalarPenaltyParameter{T<:Real} <: AbstractPenaltyParameter
-    value::T
+struct ScalarPenaltyParameter <: AbstractPenaltyParameter
+    value::Float64
 end
-convert(::Type{T}, r::ScalarPenaltyParameter{S}) where {T<:Real, S<:Real} = T(r.value)
 
 ## Proportional Penalty Implementation ##
-struct ProportionalPenaltyParameter{T<:Real} <: AbstractPenaltyParameter
-    value::T
+struct ProportionalPenaltyParameter <: AbstractPenaltyParameter
+    constant::Float64
+    coefficient::Dict{XhatID,Float64}
 end
-convert(::Type{T}, r::ProportionalPenaltyParameter{S}) where {T<:Real, S<:Real} = T(r.value)
+
+function ProportionalPenaltyParameter(constant::Float64)
+    return ProportionalPenaltyParameter(constant, Dict{XhatID,Float64}())
+end
 
 # NOTE: temporary fcns for coefficients of expressions
 # Future JuMP versions will implement this
@@ -27,7 +30,6 @@ function coefficient(q::JuMP.GenericQuadExpr{C,V}, v1::V, v2::V) where {C,V}
 end
 coefficient(q::JuMP.GenericQuadExpr{C,V}, v::V) where {C,V} = coefficient(q.aff, v)
 
-
 function penalty_value(r::AbstractPenaltyParameter, var)
     throw(UnimplementedError("penalty_value is unimplemented for `r` of type $(typeof(r)) and `var` of type $(typeof(var))."))
 end
@@ -35,14 +37,20 @@ end
 function penalty_value(r::ScalarPenaltyParameter, 
                         obj::JuMP.GenericQuadExpr,
                         var::JuMP.VariableRef
-                        )::Real
+                        )::Float64
     return r.value
 end
 
 function penalty_value(r::ProportionalPenaltyParameter, 
                         obj::JuMP.GenericQuadExpr,
                         var::JuMP.VariableRef
-                        )::Real
+                        )::Float64
     coeff = coefficient(obj, var)
-    return r.value * coeff
+    return r.constant * coeff
+end
+
+function penalty_value(r::ProportionalPenaltyParameter,
+                       xhid::XhatID
+                       )::Float64
+    return r.constant * r.coefficient[xhid]
 end
