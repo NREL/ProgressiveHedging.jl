@@ -1,4 +1,4 @@
-
+# Type containing information on workers.
 struct WorkerInf
     inputs::Dict{Int,RemoteChannel}
     output::RemoteChannel

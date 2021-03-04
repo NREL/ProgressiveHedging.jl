@@ -48,22 +48,18 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
     end
 
     remaining_maps = copy(scenarios(scen_tree))
-    msg_waiting = Vector{ReportBranch}()
+    msg_waiting = Vector{Union{ReportBranch,PenaltyMap}}()
 
     while !isempty(remaining_maps)
 
-        msg = _retrieve_message_type(wi, Union{ReportBranch,VariableMap})
+        msg = _retrieve_message_type(wi, Union{ReportBranch,VariableMap,PenaltyMap})
 
-        if typeof(msg) <: ReportBranch
+        if typeof(msg) <: ReportBranch || typeof(msg) <: PenaltyMap
 
             # println("Got branch report for $(msg.scen).")
             # _copy_values(init_vals[msg.scen], msg.vals)
             # delete!(remaining_vals, msg.scen)
             push!(msg_waiting, msg)
-        
-        elseif typeof(msg) <: PenaltyMap
-
-            push!(msg.waiting, msg)
 
         elseif typeof(msg) <: VariableMap
 
@@ -94,6 +90,61 @@ function _set_initial_values(phd::PHData,
     _process_reports(phd, winf, ReportBranch)
 
     return
+end
+
+function _map_penalty_coefficients(ph_data::PHData
+                                    w::WorkerInf,
+                                    r::AbstractPenaltyParameter
+                                    )::Nothing
+    throw(UninmplementedError("_map_penalty_coefficients uninmplemented for penalty of type $(typeof(r))"))
+end
+
+function _map_penalty_coefficients(ph_data::PHData
+                                    w::WorkerInf,
+                                    r::ScalarPenaltyParameter
+                                    )::Nothing
+    return 
+end
+
+function _map_penalty_coefficients(ph_data::PHData
+                                    w::WorkerInf,
+                                    r::ProportionalPenaltyParameter
+                                    )::Nothing
+    # Wait for and process mapping replies
+    coefficient = r.coefficient
+    remaining_maps = copy(scenarios(ph_data.scenario_tree))
+    msg_waiting = Vector{Union{ReportBranch}}()
+
+    while !isempty(remaining_maps)
+
+        msg = _retrieve_message_type(wi, Union{ReportBranch,PenaltyMap})
+
+        if typeof(msg) <: ReportBranch
+
+            push!(msg_waiting, msg)
+
+        elseif typeof(msg) <: PenaltyMap
+
+            for (var_id, coeff) in msg.var_penalties
+                xhat_id = convert_to_xhat_id(ph_data, var_id)
+                coefficient[xhat_id] = coeff
+            end
+            delete!(remaining_maps, msg.scen)
+
+        else
+
+            error("Inconceivable!!!!")
+
+        end
+
+    end
+
+    # Put any initial value messages back
+    for msg in msg_waiting
+        put!(wi.output, msg)
+    end
+
+    return 
 end
 
 function initialize(scen_tree::ScenarioTree,
@@ -146,6 +197,18 @@ function initialize(scen_tree::ScenarioTree,
                              var_map,
                              timo)
                       )
+    
+    # Map penalty parameter coefficients (xhatid ---> penalty coefficient)
+    # This should be possible, since initialization message called
+    # _augment_subproblems, which created penalty_map
+    # And PHData has a mapping of variableid ---> xhatid
+    r = @timit(timo,
+                "Map penalty coefficients",
+                _map_penalty_coefficients(ph_data, 
+                                            worker_inf,
+                                            r
+                                        )
+                )
 
     # Initial values
     _set_initial_values(ph_data, worker_inf)
