@@ -92,25 +92,23 @@ function _set_initial_values(phd::PHData,
     return
 end
 
-function _map_penalty_coefficients(ph_data::PHData
+function _map_penalty_coefficients(ph_data::PHData,
                                     w::WorkerInf,
-                                    r::AbstractPenaltyParameter
                                     )::Nothing
     throw(UninmplementedError("_map_penalty_coefficients uninmplemented for penalty of type $(typeof(r))"))
 end
 
-function _map_penalty_coefficients(ph_data::PHData
+function _map_penalty_coefficients(ph_data::PHData,
                                     w::WorkerInf,
-                                    r::ScalarPenaltyParameter
                                     )::Nothing
     return 
 end
 
-function _map_penalty_coefficients(ph_data::PHData
+function _map_penalty_coefficients(ph_data::PHData,
                                     w::WorkerInf,
-                                    r::ProportionalPenaltyParameter
                                     )::Nothing
     # Wait for and process mapping replies
+    r = ph_data.r
     coefficient = r.coefficient
     remaining_maps = copy(scenarios(ph_data.scenario_tree))
     msg_waiting = Vector{Union{ReportBranch}}()
@@ -133,7 +131,7 @@ function _map_penalty_coefficients(ph_data::PHData
 
         else
 
-            error("Inconceivable!!!!")
+            error("Recieved unexpected message of type $(typeof(msg)).")
 
         end
 
@@ -202,11 +200,10 @@ function initialize(scen_tree::ScenarioTree,
     # This should be possible, since initialization message called
     # _augment_subproblems, which created penalty_map
     # And PHData has a mapping of variableid ---> xhatid
-    r = @timit(timo,
+    r = @timeit(timo,
                 "Map penalty coefficients",
                 _map_penalty_coefficients(ph_data, 
                                             worker_inf,
-                                            r
                                         )
                 )
 
