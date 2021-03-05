@@ -93,23 +93,10 @@ function _set_initial_values(phd::PHData,
 end
 
 function _map_penalty_coefficients(ph_data::PHData,
-                                    w::WorkerInf,
+                                    wi::WorkerInf,
                                     )::Nothing
-    throw(UninmplementedError("_map_penalty_coefficients uninmplemented for penalty of type $(typeof(r))"))
-end
 
-function _map_penalty_coefficients(ph_data::PHData,
-                                    w::WorkerInf,
-                                    )::Nothing
-    return 
-end
-
-function _map_penalty_coefficients(ph_data::PHData,
-                                    w::WorkerInf,
-                                    )::Nothing
     # Wait for and process mapping replies
-    r = ph_data.r
-    coefficient = r.coefficient
     remaining_maps = copy(scenarios(ph_data.scenario_tree))
     msg_waiting = Vector{Union{ReportBranch}}()
 
@@ -123,9 +110,11 @@ function _map_penalty_coefficients(ph_data::PHData,
 
         elseif typeof(msg) <: PenaltyMap
 
+            typeof(ph_data.r) <: ScalarPenaltyParameter && delete!(remaining_maps, msg.scen)
+
             for (var_id, coeff) in msg.var_penalties
                 xhat_id = convert_to_xhat_id(ph_data, var_id)
-                coefficient[xhat_id] = coeff
+                set_penalty_value!(ph_data.r, xhat_id, coeff)
             end
             delete!(remaining_maps, msg.scen)
 

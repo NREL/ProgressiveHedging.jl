@@ -134,8 +134,9 @@ function compute_and_save_w(phd::PHData)::Float64
             s = scenario(vid)
             p = phd.scenario_map[s].prob
             kx = branch_value(phd, vid) - xhat
+            r = get_penalty_value(phd.r, convert_to_xhat_id(phd, vid))
 
-            phd.scenario_map[s].w_vars[vid] += phd.r.value * kx
+            phd.scenario_map[s].w_vars[vid] += r * kx
 
             kxsq += p * kx^2
 

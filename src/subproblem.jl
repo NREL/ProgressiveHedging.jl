@@ -228,7 +228,7 @@ function add_ph_objective_terms(js::JuMPSubproblem,
         js.w_vars[vid] = w_ref
 
         xhat_ref = JuMP.add_variable(js.model, JuMP.build_variable(error, jvi))
-        penalty_map[vid] = rho = penalty_value(r, obj, var)
+        penalty_map[vid] = rho = get_penalty_value(r, obj, var)
         JuMP.add_to_expression!(obj, 0.5 * rho * (var - xhat_ref)^2)
         js.xhat_vars[vid] = xhat_ref
     end

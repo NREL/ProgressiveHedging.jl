@@ -89,11 +89,11 @@ end
 
     (br_vids, lf_vids) = PH._split_variables(st, collect(keys(vid_name_map)))
 
-    sts = PH.solve(js)
-
     r = PH.ScalarPenaltyParameter(10.0)
     @test (typeof(PH.add_ph_objective_terms(js, br_vids, r)) <: Dict{PH.VariableID, Float64})
 
     r = PH.ProportionalPenaltyParameter(10.0)
     @test (typeof(PH.add_ph_objective_terms(js, br_vids, r)) <: Dict{PH.VariableID, Float64})
+
+    sts = PH.solve(js)
 end

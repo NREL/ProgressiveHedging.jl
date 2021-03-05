@@ -14,10 +14,10 @@ end
 ## Proportional Penalty Implementation ##
 struct ProportionalPenaltyParameter <: AbstractPenaltyParameter
     constant::Float64
-    coefficient::Dict{XhatID,Float64}
+    coefficients::Dict{XhatID,Float64}
 end
 
-function ProportionalPenaltyParameter(constant::Float64)
+function ProportionalPenaltyParameter(constant::Real)
     return ProportionalPenaltyParameter(constant, Dict{XhatID,Float64}())
 end
 
@@ -30,18 +30,18 @@ function coefficient(q::JuMP.GenericQuadExpr{C,V}, v1::V, v2::V) where {C,V}
 end
 coefficient(q::JuMP.GenericQuadExpr{C,V}, v::V) where {C,V} = coefficient(q.aff, v)
 
-function penalty_value(r::AbstractPenaltyParameter, var)
-    throw(UnimplementedError("penalty_value is unimplemented for `r` of type $(typeof(r)) and `var` of type $(typeof(var))."))
+# Getting penalty value
+function get_penalty_value(r::AbstractPenaltyParameter, args...)
+    throw(UnimplementedError("get_penalty_value is unimplemented for `r` of type $(typeof(r)) and `var` of type $(typeof.(args))."))
 end
 
-function penalty_value(r::ScalarPenaltyParameter, 
-                        obj::JuMP.GenericQuadExpr,
-                        var::JuMP.VariableRef
+function get_penalty_value(r::ScalarPenaltyParameter,
+                        args...
                         )::Float64
     return r.value
 end
 
-function penalty_value(r::ProportionalPenaltyParameter, 
+function get_penalty_value(r::ProportionalPenaltyParameter, 
                         obj::JuMP.GenericQuadExpr,
                         var::JuMP.VariableRef
                         )::Float64
@@ -49,8 +49,31 @@ function penalty_value(r::ProportionalPenaltyParameter,
     return r.constant * coeff
 end
 
-function penalty_value(r::ProportionalPenaltyParameter,
+function get_penalty_value(r::ProportionalPenaltyParameter,
                        xhid::XhatID
                        )::Float64
-    return r.constant * r.coefficient[xhid]
+    return r.coefficients[xhid]
+end
+
+# Setting penalty value
+function set_penalty_value(r::AbstractPenaltyParameter, args...)
+    throw(UnimplementedError("set_penalty_value is unimplemented for `r` of type $(typeof(r)) and `args` of type $(typeof.(args))."))
+end
+
+function set_penalty_value!(r::ScalarPenaltyParameter,
+                            args...
+                            )::Nothing
+    return nothing
+end
+
+function set_penalty_value!(r::ProportionalPenaltyParameter,
+                            xhid::XhatID,
+                            coeff::Float64
+                            )::Nothing
+    if haskey(r.coefficients, xhid) && !isapprox(r.coefficients[xhid], coeff)
+        error("Penalty parameter must match across scenarios.")
+    else
+        r.coefficients[xhid] = coeff
+    end
+    return nothing
 end

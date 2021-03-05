@@ -237,7 +237,7 @@ end
         my_task = @async begin
             count = 0
             while count < length(PH.scenarios(st))
-                PH._retrieve_message_type(wi, PH.ReportBranch)
+                PH._retrieve_message_type(wi, Union{PH.ReportBranch,PH.PenaltyMap})
                 count += 1
             end
             return count

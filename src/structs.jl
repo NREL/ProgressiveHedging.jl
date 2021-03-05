@@ -268,6 +268,13 @@ end
 
 PHData(r::Real, args...) = PHData(ScalarPenaltyParameter(r), args...)
 
+# Pretty printing
+function Base.print(io::IO, phd::PHData)
+    println(io, "A Progressive Hedging Data structure.")
+end
+
+Base.show(io::IO, phd::PHData) = print(io, gep)
+
 function residuals(phd::PHData)::Vector{Float64}
     return residual_vector(phd.residual_info)
 end
