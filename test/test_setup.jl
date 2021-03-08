@@ -171,7 +171,7 @@ end
                                        st,
                                        create_model,
                                        (),
-                                       1.0,
+                                       PH.ScalarPenaltyParameter(1.0),
                                        false)
         end
 
@@ -236,8 +236,8 @@ end
 
         my_task = @async begin
             count = 0
-            while count < length(PH.scenarios(st))
-                PH._retrieve_message_type(wi, PH.ReportBranch)
+            while count < 2*length(PH.scenarios(st))
+                PH._retrieve_message_type(wi, Union{PH.ReportBranch,PH.PenaltyMap})
                 count += 1
             end
             return count

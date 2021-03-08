@@ -1,8 +1,3 @@
-
-struct UnimplementedError <: Exception
-    msg::String
-end
-
 #### PH Subproblem Interface ####
 
 """
@@ -22,7 +17,7 @@ abstract type AbstractSubproblem end
 """
     add_ph_objective_terms(as::AbstractSubproblem,
                            vids::Vector{VariableID},
-                           r::Real
+                           r::AbstractPenaltyParameter
                            )::Nothing
 
 Create model variables for Lagrange multipliers and hat variables and add lagrange and quadratic penalty terms to the objective function.
@@ -31,11 +26,11 @@ Create model variables for Lagrange multipliers and hat variables and add lagran
 
 * `as::AbstractSubproblem` : subproblem object (replace with appropriate type)
 * `vids::Vector{VariableID}` : list of `VariableIDs` which need ph terms created
-* `r::Real` : penalty parameter on quadratic term
+* `r::AbstractPenaltyParameter` : penalty parameter on quadratic term
 """
 function add_ph_objective_terms(as::AbstractSubproblem,
                                 vids::Vector{VariableID},
-                                r::Real
+                                r::AbstractPenaltyParameter
                                 )::Nothing
     throw(UnimplementedError("add_ph_objective_terms is unimplemented"))
 end
@@ -210,10 +205,27 @@ end
 
 ## Interface Functions ##
 
+# NOTE: temporary fcns for coefficients of expressions
+# Future JuMP versions will implement this
+coefficient(a::JuMP.GenericAffExpr{C,V}, v::V) where {C,V} = get(a.terms, v, zero(C))
+coefficient(a::JuMP.GenericAffExpr{C,V}, v1::V, v2::V) where {C,V} = zero(C)
+function coefficient(q::JuMP.GenericQuadExpr{C,V}, v1::V, v2::V) where {C,V}
+    return get(q.terms, UnorderedPair(v1,v2), zero(C))
+end
+coefficient(q::JuMP.GenericQuadExpr{C,V}, v::V) where {C,V} = coefficient(q.aff, v)
+
+function get_penalty_value(r::ProportionalPenaltyParameter, 
+                            obj::JuMP.GenericQuadExpr,
+                            var::JuMP.VariableRef
+                            )::Float64
+    coeff = coefficient(obj, var)
+    return r.constant * coeff
+end
+
 function add_ph_objective_terms(js::JuMPSubproblem,
                                 vids::Vector{VariableID},
-                                r::Real
-                                )::Nothing
+                                r::AbstractPenaltyParameter,
+                                )::Dict{VariableID,Float64}
 
     obj = JuMP.objective_function(js.model,
                                   JuMP.GenericQuadExpr{Float64, JuMP.VariableRef}
@@ -224,7 +236,7 @@ function add_ph_objective_terms(js::JuMPSubproblem,
                             true, 0.0,    # fixed
                             false, NaN,   # start value
                             false, false) # binary, integer
-
+    penalty_map = Dict{VariableID,Float64}()
     for vid in vids
         var = js.vars[vid]
 
@@ -233,13 +245,14 @@ function add_ph_objective_terms(js::JuMPSubproblem,
         js.w_vars[vid] = w_ref
 
         xhat_ref = JuMP.add_variable(js.model, JuMP.build_variable(error, jvi))
-        JuMP.add_to_expression!(obj, 0.5 * r * (var - xhat_ref)^2)
+        penalty_map[vid] = rho = get_penalty_value(r, obj, var)
+        JuMP.add_to_expression!(obj, 0.5 * rho * (var - xhat_ref)^2)
         js.xhat_vars[vid] = xhat_ref
     end
 
     JuMP.set_objective_function(js.model, obj)
 
-    return
+    return penalty_map
 end
 
 function update_ph_terms(js::JuMPSubproblem,

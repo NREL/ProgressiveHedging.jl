@@ -1,3 +1,6 @@
+struct UnimplementedError <: Exception
+    msg::String
+end
 
 struct Indexer
     next_index::Dict{NodeID, Index}
@@ -186,8 +189,8 @@ function save_residual(phrh::PHResidualHistory, iter::Int, res::Float64)::Nothin
     return
 end
 
-struct PHData
-    r::Float64
+struct PHData{R <: AbstractPenaltyParameter}
+    r::R
     scenario_tree::ScenarioTree
     scenario_map::Dict{ScenarioID, ScenarioInfo}
     xhat::Dict{XhatID, HatVariable}
@@ -197,7 +200,7 @@ struct PHData
     time_info::TimerOutputs.TimerOutput
 end
 
-function PHData(r::Real,
+function PHData(r::AbstractPenaltyParameter,
                 tree::ScenarioTree,
                 scen_proc_map::Dict{Int, Set{ScenarioID}},
                 var_map::Dict{ScenarioID, Dict{VariableID, String}},
@@ -252,7 +255,7 @@ function PHData(r::Real,
         end
     end
 
-    return PHData(float(r),
+    return PHData(r,
                   tree,
                   scenario_map,
                   xhat_dict,
@@ -262,6 +265,15 @@ function PHData(r::Real,
                   time_out,
                   )
 end
+
+PHData(r::Real, args...) = PHData(ScalarPenaltyParameter(r), args...)
+
+# Pretty printing
+function Base.print(io::IO, phd::PHData)
+    println(io, "A Progressive Hedging Data structure.")
+end
+
+Base.show(io::IO, phd::PHData) = print(io, gep)
 
 function residuals(phd::PHData)::Vector{Float64}
     return residual_vector(phd.residual_info)

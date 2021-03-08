@@ -1,13 +1,3 @@
-
-function invert_map(my_map::Dict{A,B})::Dict{B,A} where {A,B}
-    inv_map = Dict{B,A}()
-    for (k,v) in pairs(my_map)
-        inv_map[v] = k
-    end
-    @assert length(inv_map) == length(my_map)
-    return inv_map
-end
-
 @testset "Scenario Form" begin
     st = build_scen_tree()
 
@@ -49,7 +39,7 @@ end
         @test JuMP.value(var) == vals[ref_map[var]]
     end
 
-    r = 10.0
+    r = PH.ScalarPenaltyParameter(10.0)
     rhalf = 0.5 * 10.0
     PH.add_ph_objective_terms(js, br_vids, r)
     ph_obj_func = JuMP.objective_function(js.model, JuMP.QuadExpr)
@@ -61,7 +51,7 @@ end
     @test length(JuMP.quad_terms(diff)) == (4 * length(br_vids))
     for qt in JuMP.quad_terms(diff)
         coef = qt[1]
-        @test (isapprox(coef, rhalf) || isapprox(coef, -r) || isapprox(coef, 1.0))
+        @test (isapprox(coef, rhalf) || isapprox(coef, -r.value) || isapprox(coef, 1.0))
     end
 
     w_vals = Dict{PH.VariableID,Float64}()
@@ -88,4 +78,22 @@ end
 end
 
 @testset "Extensive Form" begin
+end
+
+@testset "Penalties" begin
+    st = build_scen_tree()
+
+    js = create_model(PH.scid(0))
+
+    vid_name_map = PH.report_variable_info(js, st)
+
+    (br_vids, lf_vids) = PH._split_variables(st, collect(keys(vid_name_map)))
+
+    r = PH.ScalarPenaltyParameter(10.0)
+    @test (typeof(PH.add_ph_objective_terms(js, br_vids, r)) <: Dict{PH.VariableID, Float64})
+
+    r = PH.ProportionalPenaltyParameter(10.0)
+    @test (typeof(PH.add_ph_objective_terms(js, br_vids, r)) <: Dict{PH.VariableID, Float64})
+
+    sts = PH.solve(js)
 end
