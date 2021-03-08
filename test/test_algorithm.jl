@@ -74,19 +74,18 @@ end
         @test isapprox(row[:value], var_vals[var], atol=1e-7)
     end
 
-    max_iter = 100
     (n, err, obj, soln, phd) = PH.solve(build_scen_tree(),
-        create_model,
-        PH.ProportionalPenaltyParameter(10),
-        opt=Ipopt.Optimizer,
-        opt_args=(print_level=0,tol=1e-12),
-        atol=atol,
-        rtol=rtol,
-        max_iter=max_iter,
-        report=0,
-        timing=false,
-        warm_start=false
-    )
+                                        create_model,
+                                        PH.ProportionalPenaltyParameter(10),
+                                        opt=Ipopt.Optimizer,
+                                        opt_args=(print_level=0,tol=1e-12),
+                                        atol=atol,
+                                        rtol=rtol,
+                                        max_iter=max_iter,
+                                        report=0,
+                                        timing=false,
+                                        warm_start=false
+                                        )
 
     # @test err < atol
     # @test isapprox(obj, obj_val)

@@ -245,7 +245,7 @@ end
 
         if timeout_wait(my_task, 90) && !istaskfailed(my_task)
             num_msgs = fetch(my_task)
-            @test num_msgs == length(PH.scenarios(st))
+            @test num_msgs == 2*length(PH.scenarios(st))
         elseif istaskfailed(my_task)
             throw(my_task.exception)
         else

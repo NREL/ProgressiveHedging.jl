@@ -13,6 +13,11 @@ struct Initialize{R <: AbstractPenaltyParameter} <: Message
     warm_start::Bool
 end
 
+struct PenaltyMap <: Message
+    scen::ScenarioID
+    var_penalties::Dict{VariableID,Float64}
+end
+
 struct Ping <: Message end
 
 struct ReportBranch <: Message
@@ -39,9 +44,4 @@ struct ShutDown <: Message end
 struct VariableMap <: Message
     scen::ScenarioID
     var_names::Dict{VariableID,String}
-end
-
-struct PenaltyMap <: Message
-    scen::ScenarioID
-    var_penalties::Dict{VariableID,Float64}
 end

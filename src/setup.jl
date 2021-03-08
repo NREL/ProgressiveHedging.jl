@@ -27,8 +27,6 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
 
     # Send initialization commands
     @sync for (wid, scenarios) in pairs(sp_map)
-        # println("......initializing worker $wid with scenarios $scenarios")
-        # flush(stdout)
         @async _send_message(wi,
                              wid,
                              Initialize(constructor,
@@ -56,14 +54,10 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
 
         if typeof(msg) <: ReportBranch || typeof(msg) <: PenaltyMap
 
-            # println("Got branch report for $(msg.scen).")
-            # _copy_values(init_vals[msg.scen], msg.vals)
-            # delete!(remaining_vals, msg.scen)
             push!(msg_waiting, msg)
 
         elseif typeof(msg) <: VariableMap
 
-            # println("Got variable map for $(msg.scen).")
             var_maps[msg.scen] = msg.var_names
             delete!(remaining_maps, msg.scen)
 
@@ -93,8 +87,8 @@ function _set_initial_values(phd::PHData,
 end
 
 function _map_penalty_coefficients(ph_data::PHData,
-                                    wi::WorkerInf,
-                                    )::Nothing
+                                   wi::WorkerInf,
+                                   )::Nothing
 
     # Wait for and process mapping replies
     remaining_maps = copy(scenarios(ph_data.scenario_tree))
@@ -114,7 +108,7 @@ function _map_penalty_coefficients(ph_data::PHData,
 
             for (var_id, coeff) in msg.var_penalties
                 xhat_id = convert_to_xhat_id(ph_data, var_id)
-                set_penalty_value!(ph_data.r, xhat_id, coeff)
+                set_penalty_value(ph_data.r, xhat_id, coeff)
             end
             delete!(remaining_maps, msg.scen)
 
@@ -192,8 +186,8 @@ function initialize(scen_tree::ScenarioTree,
     r = @timeit(timo,
                 "Map penalty coefficients",
                 _map_penalty_coefficients(ph_data, 
-                                            worker_inf,
-                                        )
+                                          worker_inf,
+                                          )
                 )
 
     # Initial values

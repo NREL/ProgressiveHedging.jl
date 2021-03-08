@@ -25,17 +25,12 @@ function worker_loop(id::Int,
                      output::RemoteChannel,
                      )::Int
 
-    # println("Worker $(myid()) launching...")
-    # flush(stdout)
-
     running = true
     my_record = WorkerRecord(id)
 
     try
 
         while running
-            # println("Worker $(myid()) waiting for message...")
-            # flush(stdout)
             msg = take!(input)
             running = process_message(msg, my_record, output)
         end
@@ -45,9 +40,6 @@ function worker_loop(id::Int,
         while isready(input)
             take!(input)
         end
-
-        # println("Caught an error: $e")
-        # flush(stdout)
 
         rethrow()
 
@@ -78,9 +70,6 @@ function process_message(msg::Initialize,
                          output::RemoteChannel
                          )::Bool
 
-    # println("Worker $(record.id) processing init message...")
-    # flush(stdout)
-
     record.warm_start = msg.warm_start
 
     # Master process needs the variable map messages to proceed. Initial solves are
@@ -102,9 +91,6 @@ function process_message(msg::Initialize,
     _augment_subproblems(output, record, msg.r)
 
     record.initialized = true
-
-    # println("Worker $(record.id) completed initialization.")
-    # flush(stdout)
 
     return true
 end
@@ -165,14 +151,6 @@ function process_message(msg::Solve,
                               var_vals)
          )
 
-    return true
-end
-
-function process_message(msg::PenaltyMap,
-                         record::WorkerRecord,
-                         output::RemoteChannel
-                         )
-    # WHAT HERE?
     return true
 end
 
@@ -255,15 +233,10 @@ function _augment_subproblems(output::RemoteChannel,
                               r::AbstractPenaltyParameter
                               )
 
-    penalty_map = Dict{ScenarioID,Dict{VariableID,Real}}()
     for (scen, sub) in record.subproblems
-        put!(output, PenaltyMap(
-                                scen,
-                                add_ph_objective_terms(sub.problem,
-                                                       sub.branch_vars,
-                                                       r
-                                                       ),
-                               )
-            )
+        penalty_map = add_ph_objective_terms(sub.problem,
+                                             sub.branch_vars,
+                                             r)
+        put!(output, PenaltyMap(scen, penalty_map))
     end
 end

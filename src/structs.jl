@@ -54,31 +54,6 @@ function VariableInfo(name::String,
     return VariableInfo(name, nid, 0.0)
 end
 
-# function id(vinfo::VariableInfo)::VariableID
-#     return vinfo.id
-# end
-
-# function value(vinfo::VariableInfo)::Float64
-#     return vinfo.value
-# end
-
-# function _generate_variable_info_map(idxr::Indexer,
-#                                      scen_tree::ScenarioTree
-#                                      )::Dict{VariableID,VariableInfo}
-#     # name_map = Dict{VariableID, String}()
-#     # for (nid, idx_map) in pairs(idxr.indices)
-#     #     my_node = node(scen_tree, nid)
-#     #     my_stage = stage(my_node)
-#     #     for s in scenario_bundle(my_node)
-#     #         for (name, idx) in pairs(idx_map)
-#     #             vid = VariableID(s, my_stage, idx)
-#     #             name_map[vid] = name
-#     #         end
-#     #     end
-#     # end
-#     # return name_map
-# end
-
 mutable struct HatVariable
     value::Float64 # Current value of variable
     vars::Set{VariableID} # All nonhat variable ids that contribute to this variable

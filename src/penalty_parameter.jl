@@ -22,37 +22,43 @@ function ProportionalPenaltyParameter(constant::Real)
 end
 
 # Getting penalty value
-function get_penalty_value(r::AbstractPenaltyParameter, args...)
+function get_penalty_value(r::AbstractPenaltyParameter,
+                           xhid::XhatID
+                           )::Float64
     throw(UnimplementedError("get_penalty_value is unimplemented for `r` of type $(typeof(r)) and `var` of type $(typeof.(args))."))
 end
 
 function get_penalty_value(r::ScalarPenaltyParameter,
-                        args...
-                        )::Float64
+                           xhid::XhatID,
+                           )::Float64
     return r.value
 end
 
 function get_penalty_value(r::ProportionalPenaltyParameter,
-                       xhid::XhatID
-                       )::Float64
+                           xhid::XhatID
+                           )::Float64
     return r.coefficients[xhid]
 end
 
 # Setting penalty value
-function set_penalty_value(r::AbstractPenaltyParameter, args...)
+function set_penalty_value(r::AbstractPenaltyParameter,
+                           xhid::XhatID,
+                           coeff::Float64,
+                           )::Nothing
     throw(UnimplementedError("set_penalty_value is unimplemented for `r` of type $(typeof(r)) and `args` of type $(typeof.(args))."))
 end
 
-function set_penalty_value!(r::ScalarPenaltyParameter,
-                            args...
-                            )::Nothing
+function set_penalty_value(r::ScalarPenaltyParameter,
+                           xhid::XhatID,
+                           coeff::Float64,
+                           )::Nothing
     return nothing
 end
 
-function set_penalty_value!(r::ProportionalPenaltyParameter,
-                            xhid::XhatID,
-                            coeff::Float64
-                            )::Nothing
+function set_penalty_value(r::ProportionalPenaltyParameter,
+                           xhid::XhatID,
+                           coeff::Float64
+                           )::Nothing
     if haskey(r.coefficients, xhid) && !isapprox(r.coefficients[xhid], coeff)
         error("Penalty parameter must match across scenarios.")
     else

@@ -214,10 +214,17 @@ function coefficient(q::JuMP.GenericQuadExpr{C,V}, v1::V, v2::V) where {C,V}
 end
 coefficient(q::JuMP.GenericQuadExpr{C,V}, v::V) where {C,V} = coefficient(q.aff, v)
 
+function get_penalty_value(r::ScalarPenaltyParameter,
+                           obvj::JuMP.GenericQuadExpr,
+                           var::JuMP.VariableRef,
+                           )::Float64
+    return r.value
+end
+
 function get_penalty_value(r::ProportionalPenaltyParameter, 
-                            obj::JuMP.GenericQuadExpr,
-                            var::JuMP.VariableRef
-                            )::Float64
+                           obj::JuMP.GenericQuadExpr,
+                           var::JuMP.VariableRef
+                           )::Float64
     coeff = coefficient(obj, var)
     return r.constant * coeff
 end
@@ -335,11 +342,6 @@ function ef_node_dict_constructor(::Type{JuMPSubproblem})
 end
 
 ## JuMPSubproblem Internal Functions ##
-
-# function _error(astr::String)::Nothing
-#     @error(astr)
-#     return
-# end
 
 function _build_var_info(vref::JuMP.VariableRef)
     hlb = JuMP.has_lower_bound(vref)
@@ -514,9 +516,9 @@ function _ef_copy_constraints(model::JuMP.Model,
             cobj = JuMP.constraint_object(cref)
             expr = zero(JuMP.QuadExpr)
             nodes = _ef_convert_and_add_expr(expr,
-                                            JuMP.jump_function(cobj),
-                                            s_var_map,
-                                            1)
+                                             JuMP.jump_function(cobj),
+                                             s_var_map,
+                                             1)
 
             # If all variables in the expression are from processed nodes,
             # then this constraint has already been added to the model
