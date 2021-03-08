@@ -205,6 +205,23 @@ end
 
 ## Interface Functions ##
 
+# NOTE: temporary fcns for coefficients of expressions
+# Future JuMP versions will implement this
+coefficient(a::JuMP.GenericAffExpr{C,V}, v::V) where {C,V} = get(a.terms, v, zero(C))
+coefficient(a::JuMP.GenericAffExpr{C,V}, v1::V, v2::V) where {C,V} = zero(C)
+function coefficient(q::JuMP.GenericQuadExpr{C,V}, v1::V, v2::V) where {C,V}
+    return get(q.terms, UnorderedPair(v1,v2), zero(C))
+end
+coefficient(q::JuMP.GenericQuadExpr{C,V}, v::V) where {C,V} = coefficient(q.aff, v)
+
+function get_penalty_value(r::ProportionalPenaltyParameter, 
+                            obj::JuMP.GenericQuadExpr,
+                            var::JuMP.VariableRef
+                            )::Float64
+    coeff = coefficient(obj, var)
+    return r.constant * coeff
+end
+
 function add_ph_objective_terms(js::JuMPSubproblem,
                                 vids::Vector{VariableID},
                                 r::AbstractPenaltyParameter,

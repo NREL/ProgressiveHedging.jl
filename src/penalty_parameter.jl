@@ -21,15 +21,6 @@ function ProportionalPenaltyParameter(constant::Real)
     return ProportionalPenaltyParameter(constant, Dict{XhatID,Float64}())
 end
 
-# NOTE: temporary fcns for coefficients of expressions
-# Future JuMP versions will implement this
-coefficient(a::JuMP.GenericAffExpr{C,V}, v::V) where {C,V} = get(a.terms, v, zero(C))
-coefficient(a::JuMP.GenericAffExpr{C,V}, v1::V, v2::V) where {C,V} = zero(C)
-function coefficient(q::JuMP.GenericQuadExpr{C,V}, v1::V, v2::V) where {C,V}
-    return get(q.terms, UnorderedPair(v1,v2), zero(C))
-end
-coefficient(q::JuMP.GenericQuadExpr{C,V}, v::V) where {C,V} = coefficient(q.aff, v)
-
 # Getting penalty value
 function get_penalty_value(r::AbstractPenaltyParameter, args...)
     throw(UnimplementedError("get_penalty_value is unimplemented for `r` of type $(typeof(r)) and `var` of type $(typeof.(args))."))
@@ -39,14 +30,6 @@ function get_penalty_value(r::ScalarPenaltyParameter,
                         args...
                         )::Float64
     return r.value
-end
-
-function get_penalty_value(r::ProportionalPenaltyParameter, 
-                        obj::JuMP.GenericQuadExpr,
-                        var::JuMP.VariableRef
-                        )::Float64
-    coeff = coefficient(obj, var)
-    return r.constant * coeff
 end
 
 function get_penalty_value(r::ProportionalPenaltyParameter,
