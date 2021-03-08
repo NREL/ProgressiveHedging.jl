@@ -104,11 +104,11 @@ function _map_penalty_coefficients(ph_data::PHData,
 
         elseif typeof(msg) <: PenaltyMap
 
-            typeof(ph_data.r) <: ScalarPenaltyParameter && delete!(remaining_maps, msg.scen)
-
-            for (var_id, coeff) in msg.var_penalties
-                xhat_id = convert_to_xhat_id(ph_data, var_id)
-                set_penalty_value(ph_data.r, xhat_id, coeff)
+            if typeof(ph_data.r) <: ProportionalPenaltyParameter
+                for (var_id, coeff) in msg.var_penalties
+                    xhat_id = convert_to_xhat_id(ph_data, var_id)
+                    set_penalty_value(ph_data.r, xhat_id, coeff)
+                end
             end
             delete!(remaining_maps, msg.scen)
 
