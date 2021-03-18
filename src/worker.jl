@@ -7,14 +7,12 @@ end
 
 mutable struct WorkerRecord
     id::Int
-    initialized::Bool
     warm_start::Bool
     subproblems::Dict{ScenarioID,SubproblemRecord}
 end
 
 function WorkerRecord(id::Int)
     return WorkerRecord(id,
-                        false,
                         false,
                         Dict{ScenarioID,SubproblemRecord}(),
                         )
@@ -44,7 +42,7 @@ function worker_loop(id::Int,
         rethrow()
 
     finally
-        ; # nothing for now
+        ; # intentional no-op
     end
 
     return 0
@@ -85,12 +83,27 @@ function process_message(msg::Initialize,
                        msg.create_subproblem_kwargs,
                        )
 
-    
     _initial_solve(output, record)
 
-    _augment_subproblems(output, record, msg.r)
+    _penalty_parameter_preprocess(output, record, msg.r)
 
-    record.initialized = true
+    return true
+end
+
+function process_message(msg::PenaltyInfo,
+                         record::WorkerRecord,
+                         output::RemoteChannel,
+                         )::Bool
+
+    if !haskey(record.subproblems, msg.scen)
+        error("Worker $(record.id) received solve command for scenario $(msg.scen). This worker was not assigned this scenario.")
+    end
+
+    sub = record.subproblems[msg.scen]
+
+    add_ph_objective_terms(sub.problem,
+                           sub.branch_vars,
+                           msg.penalty)
 
     return true
 end
@@ -103,32 +116,13 @@ function process_message(msg::Ping,
     return true
 end
 
-function process_message(msg::ShutDown,
-                         record::WorkerRecord,
-                         output::RemoteChannel
-                         )::Bool
-
-    for (s, sub) in pairs(record.subproblems)
-        leaf_vals = report_values(sub.problem, sub.leaf_vars)
-        put!(output, ReportLeaf(s, leaf_vals))
-    end
-
-    return false
-end
-
 function process_message(msg::Solve,
                          record::WorkerRecord,
                          output::RemoteChannel
                          )::Bool
 
-    # println("Worker $(record.id) received solve command for $(msg.scen).")
-
-    if !record.initialized
-        error("Worker $(record.id) received solve command before initialization")
-    end
-
     if !haskey(record.subproblems, msg.scen)
-        error("Worker $(record.id) received solve command for scenario $(msg.scen). This worker was not assigned this scenario")
+        error("Worker $(record.id) received solve command for scenario $(msg.scen). This worker was not assigned this scenario.")
     end
 
     sub = record.subproblems[msg.scen]
@@ -154,22 +148,17 @@ function process_message(msg::Solve,
     return true
 end
 
-function _split_variables(scen_tree::ScenarioTree,
-                          vars::Vector{VariableID},
-                          )::NTuple{2,Vector{VariableID}}
+function process_message(msg::ShutDown,
+                         record::WorkerRecord,
+                         output::RemoteChannel
+                         )::Bool
 
-    branch_vars = Vector{VariableID}()
-    leaf_vars = Vector{VariableID}()
-
-    for vid in vars
-        if is_leaf(scen_tree, vid)
-            push!(leaf_vars, vid)
-        else
-            push!(branch_vars, vid)
-        end
+    for (s, sub) in pairs(record.subproblems)
+        leaf_vals = report_values(sub.problem, sub.leaf_vars)
+        put!(output, ReportLeaf(s, leaf_vals))
     end
 
-    return (branch_vars, leaf_vars)
+    return false
 end
 
 function _build_subproblems(output::RemoteChannel,
@@ -228,15 +217,35 @@ function _initial_solve(output::RemoteChannel,
     return
 end
 
-function _augment_subproblems(output::RemoteChannel,
-                              record::WorkerRecord,
-                              r::AbstractPenaltyParameter
-                              )
+function _penalty_parameter_preprocess(output::RemoteChannel,
+                                       record::WorkerRecord,
+                                       r::Type{P},
+                                       ) where P <: AbstractPenaltyParameter
 
-    for (scen, sub) in record.subproblems
-        penalty_map = add_ph_objective_terms(sub.problem,
-                                             sub.branch_vars,
-                                             r)
-        put!(output, PenaltyMap(scen, penalty_map))
+    if is_subproblem_dependent(r)
+        for (scen, sub) in record.subproblems
+            pen_map = report_penalty_info(sub.problem, sub.branch_vars, r)
+            put!(output, PenaltyInfo(scen, pen_map))
+        end
     end
+
+    return
+end
+
+function _split_variables(scen_tree::ScenarioTree,
+                          vars::Vector{VariableID},
+                          )::NTuple{2,Vector{VariableID}}
+
+    branch_vars = Vector{VariableID}()
+    leaf_vars = Vector{VariableID}()
+
+    for vid in vars
+        if is_leaf(scen_tree, vid)
+            push!(leaf_vars, vid)
+        else
+            push!(branch_vars, vid)
+        end
+    end
+
+    return (branch_vars, leaf_vars)
 end

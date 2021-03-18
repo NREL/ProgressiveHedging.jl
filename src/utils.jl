@@ -156,7 +156,7 @@ function retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
 
     for vid in sort!(collect(keys(variable_map)))
         push!(vars, name(phd, vid))
-        push!(vals, variable_map[vid].value)
+        push!(vals, variable_map[vid])
         push!(stage, _value(vid.stage))
         push!(scenario, _value(vid.scenario))
         push!(index, _value(vid.index))
@@ -182,7 +182,6 @@ function retrieve_w(phd::PHData)::DataFrames.DataFrame
 
     for vid in sort!(collect(keys(variable_map)))
 
-        # push!(vars, "W_" * phd.scenario_map[vid.scenario].branch_vars[vid].name)
         push!(vars, "W_" * name(phd, vid))
         push!(vals, variable_map[vid])
         push!(stage, _value(vid.stage))

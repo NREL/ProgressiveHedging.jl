@@ -141,7 +141,7 @@ end
         @test length(my_var_map) == 24
     end
 
-    @testset "Initialize Subproblems" begin
+    @testset "Initialize Subproblems (Scalar)" begin
         st = build_scen_tree()
 
         sp_map = Dict(1 => Set([PH.ScenarioID(0), PH.ScenarioID(1), PH.ScenarioID(2)]),
@@ -205,7 +205,7 @@ end
 
         end
 
-        phd = PH.PHData(1.0,
+        phd = PH.PHData(PH.ScalarPenaltyParameter(1.0),
                         st,
                         sp_map,
                         var_map,
@@ -236,8 +236,8 @@ end
 
         my_task = @async begin
             count = 0
-            while count < 2*length(PH.scenarios(st))
-                PH._retrieve_message_type(wi, Union{PH.ReportBranch,PH.PenaltyMap})
+            while count < length(PH.scenarios(st))
+                PH._retrieve_message_type(wi, PH.ReportBranch)
                 count += 1
             end
             return count
@@ -245,11 +245,153 @@ end
 
         if timeout_wait(my_task, 90) && !istaskfailed(my_task)
             num_msgs = fetch(my_task)
-            @test num_msgs == 2*length(PH.scenarios(st))
+            @test num_msgs == length(PH.scenarios(st))
         elseif istaskfailed(my_task)
             throw(my_task.exception)
         else
             error("Test timed out")
+        end
+
+    end
+
+    @testset "Initialize Subproblems (Proportional)" begin
+        st = build_scen_tree()
+
+        sp_map = Dict(1 => Set([PH.ScenarioID(0), PH.ScenarioID(1), PH.ScenarioID(2)]),
+                      2 => Set([PH.ScenarioID(3)])
+                      )
+
+        worker_input_queues = Dict(1 => RemoteChannel(()->Channel{PH.Message}(10), myid()),
+                                   2 => RemoteChannel(()->Channel{PH.Message}(10), myid())
+                                   )
+        worker_output_queue = RemoteChannel(()->Channel{PH.Message}(10), myid())
+        futures = Dict(1 => remotecall(PH.worker_loop,
+                                       myid(),
+                                       1,
+                                       worker_input_queues[1],
+                                       worker_output_queue),
+                       2 => remotecall(PH.worker_loop,
+                                       myid(),
+                                       2,
+                                       worker_input_queues[2],
+                                       worker_output_queue),
+                       )
+        wi = PH.WorkerInf(worker_input_queues, worker_output_queue, futures)
+
+        my_task = @async begin
+            PH._initialize_subproblems(sp_map,
+                                       wi,
+                                       st,
+                                       create_model,
+                                       (),
+                                       PH.ProportionalPenaltyParameter(1.0),
+                                       false)
+        end
+
+        if timeout_wait(my_task, 90) && !istaskfailed(my_task)
+
+            var_map = fetch(my_task)
+
+            for scen in PH.scenarios(st)
+                for (vid, vname) in var_map[scen]
+                    @test vid.scenario == scen
+                    if vid.stage == PH.stid(1)
+                        @test occursin("x", vname)
+                    elseif vid.stage == PH.stid(2)
+                        @test vname == "y"
+                    elseif vid.stage == PH.stid(3)
+                        @test occursin("z", vname)
+                    else
+                        stage_int = PH._value(vid.stage)
+                        error("Stage $(stage_int)! There is no stage $(stage_int)!!")
+                    end
+                end
+            end
+
+        elseif istaskfailed(my_task)
+
+            throw(my_task.exception)
+
+        else
+
+            error("Test timed out")
+
+        end
+
+        phd = PH.PHData(PH.ProportionalPenaltyParameter(1.0),
+                        st,
+                        sp_map,
+                        var_map,
+                        TimerOutputs.TimerOutput()
+                        )
+
+        for (xhid, xhat) in pairs(phd.xhat)
+            vname = phd.variable_data[first(xhat.vars)].name
+            for vid in xhat.vars
+                @test xhid == phd.variable_data[vid].xhat_id
+                @test vname == phd.variable_data[vid].name
+            end
+        end
+
+        for (scen, sinfo) in phd.scenario_map
+            for vid in keys(sinfo.branch_vars)
+                if occursin("x", phd.variable_data[vid].name)
+                    @test vid.stage == PH.stid(1)
+                else
+                    @test vid.stage == PH.stid(2)
+                end
+            end
+
+            for vid in keys(sinfo.leaf_vars)
+                @test vid.stage == PH.stid(3)
+            end
+        end
+
+        my_task = @async begin
+            count = 0
+            messages = Vector{PH.PenaltyInfo}()
+            while count < 2*length(PH.scenarios(st))
+                msg = PH._retrieve_message_type(wi, Union{PH.ReportBranch,PH.PenaltyInfo})
+                if typeof(msg) <: PH.PenaltyInfo
+                    push!(messages, msg)
+                end
+                count += 1
+            end
+
+            for msg in messages
+                put!(wi.output, msg)
+            end
+            return count
+        end
+
+        if timeout_wait(my_task, 90) && !istaskfailed(my_task)
+            num_msgs = fetch(my_task)
+            @test num_msgs == 2 * length(PH.scenarios(st))
+        elseif istaskfailed(my_task)
+            throw(my_task.exception)
+        else
+            error("Test timed out")
+        end
+
+        PH._set_penalty_parameter(phd, wi)
+
+        for (xhid, xhat) in pairs(phd.xhat)
+            vid = first(PH.variables(xhat))
+            if vid.stage == PH.StageID(1)
+                if vid.index == PH.Index(1)
+                    @test isapprox(phd.r.penalties[xhid], 1.0)
+                elseif vid.index == PH.Index(2)
+                    @test isapprox(phd.r.penalties[xhid], 10.0)
+                elseif vid.index == PH.Index(3)
+                    @test isapprox(phd.r.penalties[xhid], 0.01)
+                else
+                    error("Unexpected variable id: $vid")
+                end
+            elseif vid.stage == PH.StageID(2) && vid.index == PH.Index(1)
+                @test isapprox(phd.r.penalties[xhid], 7.0)
+            else
+                error("Unexpected variable id: $vid")
+            end
         end
 
     end

@@ -134,7 +134,7 @@ function compute_and_save_w(phd::PHData)::Float64
             s = scenario(vid)
             p = phd.scenario_map[s].prob
             kx = branch_value(phd, vid) - xhat
-            r = get_penalty_value(phd.r, convert_to_xhat_id(phd, vid))
+            r = get_penalty_value(phd.r, xhid)
 
             phd.scenario_map[s].w_vars[vid] += r * kx
 
@@ -156,10 +156,10 @@ end
 
 function update_ph_variables(phd::PHData)::NTuple{2,Float64}
 
-    xhat_residual = compute_and_save_xhat(phd)
-    x_residual = compute_and_save_w(phd)
+    xhat_sq = compute_and_save_xhat(phd)
+    x_sq = compute_and_save_w(phd)
 
-    return (xhat_residual, x_residual)
+    return (xhat_sq, x_sq)
 end
 
 function solve_subproblems(phd::PHData,
@@ -219,14 +219,15 @@ function hedge(ph_data::PHData,
                rtol::Float64,
                report::Int,
                save_res::Bool,
-               )::Tuple{Int,Float64}
+               )::Tuple{Int,Float64,Float64}
 
     niter = 0
     report_flag = (report > 0)
 
-    (xhat_res_sq, x_res_sq) = @timeit(ph_data.time_info,
-                                      "Update PH Vars",
-                                      update_ph_variables(ph_data))
+    cr = ph_data.residual_info.residuals[-1]
+    delete!(ph_data.residual_info.residuals, -1)
+    xhat_res_sq = cr.xhat_sq
+    x_res_sq = cr.x_sq
 
     nsqrt = sqrt(length(ph_data.xhat))
     xmax = max(maximum(abs.(value.(values(ph_data.xhat)))), 1e-12)
@@ -234,14 +235,14 @@ function hedge(ph_data::PHData,
 
     if report_flag
         @printf("Iter: %4d   AbsR: %12.6e   RelR: %12.6e   Xhat: %12.6e   X: %12.6e\n",
-                niter, residual, residual/xmax,
+                niter, residual, residual / xmax,
                 sqrt(xhat_res_sq)/nsqrt, sqrt(x_res_sq)/nsqrt
                 )
         flush(stdout)
     end
 
     if save_res
-        save_residual(ph_data, 0, residual)
+        _save_residual(ph_data, 0, xhat_res_sq, x_res_sq, residual, residual/xmax)
     end
     
     while niter < max_iter && residual > atol && residual > rtol * xmax
@@ -249,12 +250,14 @@ function hedge(ph_data::PHData,
         # Solve subproblems
         @timeit(ph_data.time_info,
                 "Solve subproblems",
-                solve_subproblems(ph_data, worker_inf))
+                solve_subproblems(ph_data, worker_inf)
+                )
 
         # Update xhat and w
         (xhat_res_sq, x_res_sq) = @timeit(ph_data.time_info,
                                           "Update PH Vars",
-                                          update_ph_variables(ph_data))
+                                          update_ph_variables(ph_data)
+                                          )
 
         # Update stopping criteria -- xhat_res_sq measures the movement of
         # xhat values from k^th iteration to the (k+1)^th iteration while
@@ -268,26 +271,33 @@ function hedge(ph_data::PHData,
 
         if report_flag && niter % report == 0
             @printf("Iter: %4d   AbsR: %12.6e   RelR: %12.6e   Xhat: %12.6e   X: %12.6e\n",
-                    niter, residual, residual/xmax,
+                    niter, residual, residual / xmax,
                     sqrt(xhat_res_sq)/nsqrt, sqrt(x_res_sq)/nsqrt
                     )
             flush(stdout)
         end
 
         if save_res
-            save_residual(ph_data, niter, residual)
+            _save_residual(ph_data,
+                           niter,
+                           xhat_res_sq,
+                           x_res_sq,
+                           residual,
+                           residual/xmax
+                           )
         end
 
     end
 
     @timeit(ph_data.time_info,
             "Finishing",
-            finish(ph_data, worker_inf))
+            finish(ph_data, worker_inf)
+            )
 
-    if niter >= max_iter && residual > atol
+    if niter >= max_iter && residual > atol && residual > rtol * xmax
         @warn("Performed $niter iterations without convergence. " *
               "Consider increasing max_iter from $max_iter.")
     end
 
-    return (niter, residual)
+    return (niter, residual, residual/xmax)
 end

@@ -80,7 +80,7 @@ nv2 = 4
 st = two_stage_tree(nscen)
 (var_map, var_val) = build_var_map(nscen, nv1, nv2)
 
-phd = PH.PHData(1.0,
+phd = PH.PHData(PH.ScalarPenaltyParameter(1.0),
                 st,
                 Dict{Int,Set{PH.ScenarioID}}(1=>copy(PH.scenarios(st))),
                 var_map,

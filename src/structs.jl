@@ -1,6 +1,14 @@
+
+#### Exceptions ####
+
+"""
+Exception indicating that the specified method is not implemented for an interface.
+"""
 struct UnimplementedError <: Exception
     msg::String
 end
+
+#### Internal Types and Methods ####
 
 struct Indexer
     next_index::Dict{NodeID, Index}
@@ -141,28 +149,58 @@ function retrieve_variable_value(sinfo::ScenarioInfo, vid::VariableID)::Float64
     return vi
 end
 
+mutable struct PHResidual
+    abs_res::Float64
+    rel_res::Float64
+    xhat_sq::Float64
+    x_sq::Float64
+end
+
 struct PHResidualHistory
-    residuals::Dict{Int,Float64}
+    residuals::Dict{Int,PHResidual}
 end
 
 function PHResidualHistory()::PHResidualHistory
-    return PHResidualHistory(Dict{Int,Float64}())
+    return PHResidualHistory(Dict{Int,PHResidual}())
 end
 
 function residual_vector(phrh::PHResidualHistory)::Vector{Float64}
     if length(phrh.residuals) > 0
         max_iter = maximum(keys(phrh.residuals))
-        return [phrh.residuals[k] for k in sort!(collect(keys(phrh.residuals)))]
+        return [phrh.residuals[k].abs_res for k in sort!(collect(keys(phrh.residuals)))]
     else
         return Vector{Float64}()
     end
 end
 
-function save_residual(phrh::PHResidualHistory, iter::Int, res::Float64)::Nothing
-    @assert(!(iter in keys(phrh.residuals)))
+function relative_residual_vector(phrh::PHResidualHistory)::Vector{Float64}
+    if length(phrh.residuals) > 0
+        max_iter = maximum(keys(phrh.residuals))
+        return [phrh.residuals[k].rel_res for k in sort!(collect(keys(phrh.residuals)))]
+    else
+        return Vector{Float64}()
+    end
+end
+
+function residual_components(phrh::PHResidualHistory)::NTuple{2,Vector{Float64}}
+    if length(phrh.residuals) > 0
+        max_iter = maximum(keys(phrh.residuals))
+        sorted_keys = sort!(collect(keys(phrh.residuals)))
+        xhat_sq = [phrh.residuals[k].xhat_sq for k in sorted_keys]
+        x_sq = [phrh.residuals[k].x_sq for k in sorted_keys]
+        return (xhat_sq, x_sq)
+    else
+        return (Vector{Float64}(), Vector{Float64}())
+    end
+end
+
+function _save_residual(phrh::PHResidualHistory, iter::Int, res::PHResidual)::Nothing
+    # @assert(!(iter in keys(phrh.residuals)))
     phrh.residuals[iter] = res
     return
 end
+
+#### Primary PH Data Structure ####
 
 struct PHData{R <: AbstractPenaltyParameter}
     r::R
@@ -241,22 +279,42 @@ function PHData(r::AbstractPenaltyParameter,
                   )
 end
 
-PHData(r::Real, args...) = PHData(ScalarPenaltyParameter(r), args...)
-
-# Pretty printing
-function Base.print(io::IO, phd::PHData)
-    println(io, "A Progressive Hedging Data structure.")
+function Base.show(io::IO, phd::PHData)
+    print(io, "ProgressiveHedging.jl data structure")
+    return
 end
 
-Base.show(io::IO, phd::PHData) = print(io, gep)
+
+function convert_to_variable_ids(phd::PHData, xid::XhatID)
+    return variables(phd.xhat[xid])
+end
+
+function convert_to_xhat_id(phd::PHData, vid::VariableID)::XhatID
+    return phd.variable_data[vid].xhat_id
+end
+
+function name(phd::PHData, xid::XhatID)
+    return name(phd, first(convert_to_variable_ids(phd, xid)))
+end
+
+function ph_variables(phd::PHData)::Dict{XhatID,HatVariable}
+    return phd.xhat
+end
+
+function probability(phd::PHData, scenario::ScenarioID)::Float64
+    return phd.scenario_map[scenario].prob
+end
 
 function residuals(phd::PHData)::Vector{Float64}
     return residual_vector(phd.residual_info)
 end
 
-function save_residual(phd::PHData, iter::Int, res::Float64)::Nothing
-    save_residual(phd.residual_info, iter, res)
-    return
+function residual_components(phd::PHData)::NTuple{2,Vector{Float64}}
+    return residual_components(phd.residual_info)
+end
+
+function relative_residuals(phd::PHData)::Vector{Float64}
+    return relative_residual_vector(phd.residual_info)
 end
 
 function stage_id(phd::PHData, xid::XhatID)::StageID
@@ -271,10 +329,13 @@ function scenarios(phd::PHData)::Set{ScenarioID}
     return scenarios(phd.scenario_tree)
 end
 
-function convert_to_variable_ids(phd::PHData, xid::XhatID)
-    return variables(phd.xhat[xid])
-end
-
-function convert_to_xhat_id(phd::PHData, vid::VariableID)::XhatID
-    return phd.variable_data[vid].xhat_id
+function _save_residual(phd::PHData,
+                        iter::Int,
+                        xhat_sq::Float64,
+                        x_sq::Float64,
+                        absr::Float64,
+                        relr::Float64,
+                        )::Nothing
+    _save_residual(phd.residual_info, iter, PHResidual(absr, relr, xhat_sq, x_sq))
+    return
 end

@@ -72,10 +72,10 @@
 
     JuMP.@objective(model, Min, obj)
 
-    vdict = Dict{PH.StageID, Vector{JuMP.VariableRef}}([PH.stid(1) => stage1,
-                                                        PH.stid(2) => stage2,
-                                                        PH.stid(3) => stage3,
-                                                        ])
+    vdict = Dict{PH.StageID, Vector{JuMP.VariableRef}}(PH.stid(1) => stage1,
+                                                       PH.stid(2) => stage2,
+                                                       PH.stid(3) => stage3,
+                                                       )
     
     return JuMPSubproblem(model, scenario_id, vdict)
 end

@@ -65,17 +65,17 @@ end
 @testset "Distributed solve" begin
     
     # Solve the problem
-    (n, err, obj, soln, phd) = PH.solve(build_scen_tree(),
-                                        create_model,
-                                        r,
-                                        atol=atol,
-                                        rtol=rtol,
-                                        opt=Ipopt.Optimizer,
-                                        opt_args=(print_level=0,tol=1e-12),
-                                        max_iter=max_iter,
-                                        report=0,
-                                        timing=false,
-                                        warm_start=true)
+    (n, err, rerr, obj, soln, phd) = PH.solve(build_scen_tree(),
+                                              create_model,
+                                              r,
+                                              atol=atol,
+                                              rtol=rtol,
+                                              opt=Ipopt.Optimizer,
+                                              opt_args=(print_level=0,tol=1e-12),
+                                              max_iter=max_iter,
+                                              report=0,
+                                              timing=false,
+                                              warm_start=true)
 
     @test err < atol
     @test isapprox(obj, obj_val)

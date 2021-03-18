@@ -27,9 +27,11 @@ export residuals, retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_
 #### Includes ####
 
 include("id_types.jl")
-include("scenario_tree.jl")
 include("penalty_parameter.jl")
+include("scenario_tree.jl")
+
 include("subproblem.jl")
+include("jumpsubproblem.jl")
 
 include("message.jl")
 
@@ -118,11 +120,11 @@ function solve(tree::ScenarioTree,
     if report > 0
         println("Solving...")
     end
-    (niter, residual) = @timeit(timo, "Solution",
-                                hedge(phd, winf,
-                                      max_iter, atol, rtol,
-                                      report, save_residuals)
-                                )
+    (niter, abs_res, rel_res) = @timeit(timo, "Solution",
+                                        hedge(phd, winf,
+                                              max_iter, atol, rtol,
+                                              report, save_residuals)
+                                        )
 
     # Post Processing
     if report > 0
@@ -136,7 +138,7 @@ function solve(tree::ScenarioTree,
         println(timo)
     end
 
-    return (niter, residual, obj, soln_df, phd)
+    return (niter, abs_res, rel_res, obj, soln_df, phd)
 end
 
 """

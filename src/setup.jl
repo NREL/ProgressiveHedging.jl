@@ -32,7 +32,7 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
                              Initialize(constructor,
                                         constructor_args,
                                         (;kwargs...),
-                                        r,
+                                        typeof(r),
                                         scenarios,
                                         scen_tree,
                                         warm_start)
@@ -46,13 +46,13 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
     end
 
     remaining_maps = copy(scenarios(scen_tree))
-    msg_waiting = Vector{Union{ReportBranch,PenaltyMap}}()
+    msg_waiting = Vector{Union{ReportBranch,PenaltyInfo}}()
 
     while !isempty(remaining_maps)
 
-        msg = _retrieve_message_type(wi, Union{ReportBranch,VariableMap,PenaltyMap})
+        msg = _retrieve_message_type(wi, Union{ReportBranch,VariableMap,PenaltyInfo})
 
-        if typeof(msg) <: ReportBranch || typeof(msg) <: PenaltyMap
+        if typeof(msg) <: ReportBranch || typeof(msg) <: PenaltyInfo
 
             push!(msg_waiting, msg)
 
@@ -69,7 +69,7 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
 
     end
 
-    # Put any initial value messages back
+    # Put any other messages back
     for msg in msg_waiting
         put!(wi.output, msg)
     end
@@ -78,39 +78,27 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
 end
 
 function _set_initial_values(phd::PHData,
-                             winf::WorkerInf,
-                             )::Nothing
-
-    _process_reports(phd, winf, ReportBranch)
-
-    return
-end
-
-function _map_penalty_coefficients(ph_data::PHData,
-                                   wi::WorkerInf,
-                                   )::Nothing
+                             wi::WorkerInf,
+                             )::Float64
 
     # Wait for and process mapping replies
-    remaining_maps = copy(scenarios(ph_data.scenario_tree))
-    msg_waiting = Vector{Union{ReportBranch}}()
+    remaining_init = copy(scenarios(phd.scenario_tree))
+    msg_waiting = Vector{PenaltyInfo}()
 
-    while !isempty(remaining_maps)
+    while !isempty(remaining_init)
 
-        msg = _retrieve_message_type(wi, Union{ReportBranch,PenaltyMap})
+        msg = _retrieve_message_type(wi, Union{ReportBranch,PenaltyInfo})
 
-        if typeof(msg) <: ReportBranch
+        if typeof(msg) <: PenaltyInfo
 
             push!(msg_waiting, msg)
 
-        elseif typeof(msg) <: PenaltyMap
+        elseif typeof(msg) <: ReportBranch
 
-            if typeof(ph_data.r) <: ProportionalPenaltyParameter
-                for (var_id, coeff) in msg.var_penalties
-                    xhat_id = convert_to_xhat_id(ph_data, var_id)
-                    set_penalty_value(ph_data.r, xhat_id, coeff)
-                end
-            end
-            delete!(remaining_maps, msg.scen)
+            _verify_report(msg)
+            _update_values(phd, msg)
+
+            delete!(remaining_init, msg.scen)
 
         else
 
@@ -120,12 +108,81 @@ function _map_penalty_coefficients(ph_data::PHData,
 
     end
 
-    # Put any initial value messages back
+    # Put any penalty messages back
     for msg in msg_waiting
         put!(wi.output, msg)
     end
 
-    return 
+    # Start computation of initial PH values -- W values are computed at
+    # the end of `_set_penalty_parameter`.
+    xhat_res_sq = compute_and_save_xhat(phd)
+
+    return xhat_res_sq
+end
+
+function _set_penalty_parameter(phd::PHData,
+                                wi::WorkerInf,
+                                )::Float64
+
+    if is_subproblem_dependent(typeof(phd.r))
+
+        # Wait for and process penalty parameter messages
+        remaining_maps = copy(scenarios(phd.scenario_tree))
+
+        while !isempty(remaining_maps)
+
+            msg = _retrieve_message_type(wi, PenaltyInfo)
+
+            process_penalty_subproblem(phd.r, phd, msg.scen, msg.penalty)
+
+            delete!(remaining_maps, msg.scen)
+
+        end
+
+    end
+
+    if is_initial_value_dependent(typeof(phd.r))
+
+        # Compute penalty parameter values
+        process_penalty_initial_value(phd.r, phd)
+
+    end
+
+    if is_variable_dependent(typeof(phd.r))
+
+        # Convert dictionary to subproblem format
+        pen_map = Dict{ScenarioID,Dict{VariableID,Float64}}(
+            s => Dict{VariableID,Float64}() for s in scenarios(phd)
+        )
+
+        for (xhid,penalty) in pairs(penalty_map(phd.r))
+            for vid in convert_to_variable_ids(phd, xhid)
+                pen_map[scenario(vid)][vid] = penalty
+            end
+        end
+
+    else
+
+        pen_map = Dict{ScenarioID,Float64}(
+            s => get_penalty_value(phd.r) for s in scenarios(phd)
+        )
+
+    end
+
+    # Send penalty parameter values to workers
+    @sync for (scid, sinfo) in pairs(phd.scenario_map)
+        @async begin
+            wid = sinfo.pid
+            penalty = pen_map[scid]
+            _send_message(wi, wid, PenaltyInfo(scid, penalty))
+        end
+    end
+
+    # Complete computation of initial PH values -- Xhat values are computed at
+    # the end of `_set_initial_values`.
+    x_res_sq = compute_and_save_w(phd)
+
+    return x_res_sq
 end
 
 function initialize(scen_tree::ScenarioTree,
@@ -170,30 +227,32 @@ function initialize(scen_tree::ScenarioTree,
                       )
 
     # Construct master ph object
-    ph_data = @timeit(timo,
-                      "Other",
-                      PHData(r,
-                             scen_tree,
-                             scen_proc_map,
-                             var_map,
-                             timo)
-                      )
-    
-    # Map penalty parameter coefficients (xhatid ---> penalty coefficient)
-    # This should be possible, since initialization message called
-    # _augment_subproblems, which created penalty_map
-    # And PHData has a mapping of variableid ---> xhatid
-    r = @timeit(timo,
-                "Map penalty coefficients",
-                _map_penalty_coefficients(ph_data, 
-                                          worker_inf,
-                                          )
-                )
+    phd = @timeit(timo,
+                  "Other",
+                  PHData(r,
+                         scen_tree,
+                         scen_proc_map,
+                         var_map,
+                         timo)
+                  )
 
     # Initial values
-    _set_initial_values(ph_data, worker_inf)
+    xhat_res_sq = @timeit(timo,
+                          "Initial Values",
+                          _set_initial_values(phd, worker_inf)
+                          )
 
-    return (ph_data, worker_inf)
+    # Check for penalty parameter update
+    x_res_sq = @timeit(timo,
+                       "Penalty Parameter",
+                       _set_penalty_parameter(phd,
+                                              worker_inf)
+                       )
+
+    # Save residual
+    _save_residual(phd, -1, xhat_res_sq, x_res_sq, 0.0, 0.0)
+
+    return (phd, worker_inf)
 end
 
 function build_extensive_form(tree::ScenarioTree,

@@ -7,15 +7,15 @@ struct Initialize{R <: AbstractPenaltyParameter} <: Message
     create_subproblem::Function
     create_subproblem_args::Tuple
     create_subproblem_kwargs::NamedTuple
-    r::R
+    r::Type{R}
     scenarios::Set{ScenarioID}
     scenario_tree::ScenarioTree
     warm_start::Bool
 end
 
-struct PenaltyMap <: Message
+struct PenaltyInfo <: Message
     scen::ScenarioID
-    var_penalties::Dict{VariableID,Float64}
+    penalty::Union{Float64,Dict{VariableID,Float64}}
 end
 
 struct Ping <: Message end
