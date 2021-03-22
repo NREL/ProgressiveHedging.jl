@@ -149,7 +149,29 @@ function retrieve_variable_value(sinfo::ScenarioInfo, vid::VariableID)::Float64
     return vi
 end
 
-mutable struct PHResidual
+struct PHIterate
+    xhat::Dict{XhatID,Float64}
+    x::Dict{VariableID,Float64}
+    w::Dict{VariableID,Float64}
+end
+
+struct PHIterateHistory
+    iterates::Dict{Int,PHIterate}
+end
+
+function PHIterateHistory()
+    return PHIterateHistory(Dict{Int,PHIterate}())
+end
+
+function _save_iterate(phih::PHIterateHistory,
+                       iter::Int,
+                       phi::PHIterate,
+                       )::Nothing
+    phih.iterates[iter] = phi
+    return
+end
+
+struct PHResidual
     abs_res::Float64
     rel_res::Float64
     xhat_sq::Float64
@@ -209,7 +231,8 @@ struct PHData{R <: AbstractPenaltyParameter}
     xhat::Dict{XhatID, HatVariable}
     variable_data::Dict{VariableID, VariableInfo}
     indexer::Indexer
-    residual_info::PHResidualHistory
+    iterate_history::PHIterateHistory
+    residual_history::PHResidualHistory
     time_info::TimerOutputs.TimerOutput
 end
 
@@ -274,6 +297,7 @@ function PHData(r::AbstractPenaltyParameter,
                   xhat_dict,
                   var_data,
                   idxr,
+                  PHIterateHistory(),
                   PHResidualHistory(),
                   time_out,
                   )
@@ -284,13 +308,16 @@ function Base.show(io::IO, phd::PHData)
     return
 end
 
-
 function convert_to_variable_ids(phd::PHData, xid::XhatID)
     return variables(phd.xhat[xid])
 end
 
 function convert_to_xhat_id(phd::PHData, vid::VariableID)::XhatID
     return phd.variable_data[vid].xhat_id
+end
+
+function is_leaf(phd::PHData, xhid::XhatID)::Bool
+    return is_leaf(phd.scenario_tree, xhid.node)
 end
 
 function name(phd::PHData, xid::XhatID)
@@ -306,15 +333,15 @@ function probability(phd::PHData, scenario::ScenarioID)::Float64
 end
 
 function residuals(phd::PHData)::Vector{Float64}
-    return residual_vector(phd.residual_info)
+    return residual_vector(phd.residual_history)
 end
 
 function residual_components(phd::PHData)::NTuple{2,Vector{Float64}}
-    return residual_components(phd.residual_info)
+    return residual_components(phd.residual_history)
 end
 
 function relative_residuals(phd::PHData)::Vector{Float64}
-    return relative_residual_vector(phd.residual_info)
+    return relative_residual_vector(phd.residual_history)
 end
 
 function stage_id(phd::PHData, xid::XhatID)::StageID
@@ -327,15 +354,4 @@ end
 
 function scenarios(phd::PHData)::Set{ScenarioID}
     return scenarios(phd.scenario_tree)
-end
-
-function _save_residual(phd::PHData,
-                        iter::Int,
-                        xhat_sq::Float64,
-                        x_sq::Float64,
-                        absr::Float64,
-                        relr::Float64,
-                        )::Nothing
-    _save_residual(phd.residual_info, iter, PHResidual(absr, relr, xhat_sq, x_sq))
-    return
 end

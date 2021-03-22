@@ -51,11 +51,11 @@ include("setup.jl")
           subproblem_constructor::Function,
           r<:Real,
           other_args...;
-          subproblem_type<:AbstractSubproblem=JuMPSubproblem,
           max_iter::Int=1000,
           atol::Float64=1e-6,
           rtol::Float64=1e-6,
           report::Int=0,
+          save_iterates::Int=0,
           save_residuals::Bool=false,
           timing::Bool=true,
           args::Tuple=(),
@@ -76,7 +76,8 @@ Solve given problem using Progressive Hedging.
 * `atol::Float64` : Absolute error tolerance. Defaults to 1e-6.
 * `rtol::Float64` : Relative error tolerance. Defaults to 1e-6.
 * `report::Int` : Print progress to screen every `report` iterations. Any value <= 0 disables printing. Defaults to 0.
-* `save_residuals::Bool` : Flag indicating whether or not to save residuals from all iterations of the algorithm
+* `save_iterates::Int` : Save PH iterates every `save_iterates` steps. Any value <= 0 disables saving iterates. Defaults to 0.
+* `save_residuals::Int` : Save PH residuals every `save_residuals` steps. Any value <= 0 disables saving residuals. Defaults to 0.
 * `timing::Bool` : Flag indicating whether or not to record timing information. Defaults to true.
 * `warm_start::Bool` : Flag indicating that solver should be "warm started" by using the previous solution as the starting point (not compatible with all solvers)
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
@@ -90,7 +91,8 @@ function solve(tree::ScenarioTree,
                atol::Float64=1e-6,
                rtol::Float64=1e-6,
                report::Int=0,
-               save_residuals::Bool=false,
+               save_iterates::Int=0,
+               save_residuals::Int=0,
                timing::Bool=true,
                warm_start::Bool=false,
                args::Tuple=(),
@@ -121,9 +123,14 @@ function solve(tree::ScenarioTree,
         println("Solving...")
     end
     (niter, abs_res, rel_res) = @timeit(timo, "Solution",
-                                        hedge(phd, winf,
-                                              max_iter, atol, rtol,
-                                              report, save_residuals)
+                                        hedge(phd,
+                                              winf,
+                                              max_iter,
+                                              atol,
+                                              rtol,
+                                              report,
+                                              save_iterates,
+                                              save_residuals)
                                         )
 
     # Post Processing

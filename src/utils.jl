@@ -207,3 +207,91 @@ end
 function index(n::INDEX)::Index
     return Index(INDEX(n))
 end
+
+function retrieve_xhat_history(phd::PHData)::DataFrames.DataFrame
+
+    xhat_df = nothing
+    iterates = phd.iterate_history.iterates
+
+    for iter in sort!(collect(keys(iterates)))
+
+        data = Dict{String,Any}("iteration" => iter)
+
+        for xhid in sort!(collect(keys(phd.xhat)))
+            if !is_leaf(phd, xhid)
+                vname = name(phd, xhid) * "_" * stringify(_value.(scenario_bundle(phd, xhid)))
+                data[vname] = iterates[iter].xhat[xhid]
+            end
+        end
+
+        if xhat_df == nothing
+            xhat_df = DataFrames.DataFrame(data)
+        else
+            push!(xhat_df, data)
+        end
+    end
+
+    if xhat_df == nothing
+        xhat_df = DataFrames.DataFrame()
+    end
+
+    return xhat_df
+end
+
+function retrieve_no_hat_history(phd::PHData)::DataFrames.DataFrame
+
+    x_df = nothing
+    iterates = phd.iterate_history.iterates
+
+    for iter in sort!(collect(keys(iterates)))
+
+        current_iterate = iterates[iter]
+        data = Dict{String,Any}("iteration" => iter)
+
+        for vid in sort!(collect(keys(current_iterate.x)))
+            vname = name(phd, vid) * "_$(_value(scenario(vid)))"
+            data[vname] = current_iterate.x[vid]
+        end
+
+        if x_df == nothing
+            x_df = DataFrames.DataFrame(data)
+        else
+            push!(x_df, data)
+        end
+    end
+
+    if x_df == nothing
+        x_df = DataFrames.DataFrame()
+    end
+
+    return x_df
+end
+
+function retrieve_w_history(phd::PHData)::DataFrames.DataFrame
+
+    w_df = nothing
+    iterates = phd.iterate_history.iterates
+
+    for iter in sort!(collect(keys(iterates)))
+
+        current_iterate = iterates[iter]
+        data = Dict{String,Any}("iteration" => iter)
+
+        for vid in sort!(collect(keys(current_iterate.w)))
+            vname = "W_" * name(phd, vid) * "_$(_value(scenario(vid)))"
+            data[vname] = current_iterate.w[vid]
+        end
+
+        if w_df == nothing
+            w_df = DataFrames.DataFrame(data)
+        else
+            push!(w_df, data)
+        end
+    end
+
+    if w_df == nothing
+        w_df = DataFrames.DataFrame()
+    end
+
+    return w_df
+end

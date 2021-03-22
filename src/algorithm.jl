@@ -10,28 +10,6 @@ function _copy_values(target::Dict{VariableID,Float64},
     return
 end
 
-function _update_values(phd::PHData,
-                        msg::ReportBranch
-                        )::Nothing
-
-    sinfo = phd.scenario_map[msg.scen]
-
-    pd = sinfo.problem_data
-    pd.obj = msg.obj
-    pd.sts = msg.sts
-    pd.time = msg.time
-
-    _copy_values(sinfo.branch_vars, msg.vals)
-
-    return
-end
-
-function _update_values(phd::PHData,
-                        msg::ReportLeaf
-                        )::Nothing
-    return _copy_values(phd.scenario_map[msg.scen].leaf_vars, msg.vals)
-end
-
 function _process_reports(phd::PHData,
                           winf::WorkerInf,
                           report_type::Union{Type{ReportBranch},Type{ReportLeaf}},
@@ -48,6 +26,47 @@ function _process_reports(phd::PHData,
         delete!(waiting_on, msg.scen)
     end
 
+    return
+end
+
+function _save_iterate(phd::PHData,
+                       iter::Int,
+                       )::Nothing
+
+    xhd = Dict{XhatID,Float64}()
+    xd = Dict{VariableID,Float64}()
+    wd = Dict{VariableID,Float64}()
+
+    for (xhid, xhat) in pairs(phd.xhat)
+        xhd[xhid] = value(xhat)
+        for vid in variables(xhat)
+            xd[vid] = branch_value(phd, vid)
+            wd[vid] = w_value(phd, vid)
+        end
+    end
+
+    # for sinfo in values(phd.scenario_map)
+    #     for (vid, x) in pairs(sinfo.leaf_vars)
+    #         xd[vid] = x
+    #     end
+    # end
+
+    _save_iterate(phd.iterate_history,
+                  iter,
+                  PHIterate(xhd, xd, wd)
+                  )
+
+    return
+end
+
+function _save_residual(phd::PHData,
+                        iter::Int,
+                        xhat_sq::Float64,
+                        x_sq::Float64,
+                        absr::Float64,
+                        relr::Float64,
+                        )::Nothing
+    _save_residual(phd.residual_history, iter, PHResidual(absr, relr, xhat_sq, x_sq))
     return
 end
 
@@ -72,6 +91,28 @@ function _update_si_xhat(phd::PHData)::Nothing
     end
 
     return
+end
+
+function _update_values(phd::PHData,
+                        msg::ReportBranch
+                        )::Nothing
+
+    sinfo = phd.scenario_map[msg.scen]
+
+    pd = sinfo.problem_data
+    pd.obj = msg.obj
+    pd.sts = msg.sts
+    pd.time = msg.time
+
+    _copy_values(sinfo.branch_vars, msg.vals)
+
+    return
+end
+
+function _update_values(phd::PHData,
+                        msg::ReportLeaf
+                        )::Nothing
+    return _copy_values(phd.scenario_map[msg.scen].leaf_vars, msg.vals)
 end
 
 function _verify_report(msg::ReportBranch)::Nothing
@@ -218,14 +259,17 @@ function hedge(ph_data::PHData,
                atol::Float64,
                rtol::Float64,
                report::Int,
-               save_res::Bool,
+               save_iter::Int,
+               save_res::Int,
                )::Tuple{Int,Float64,Float64}
 
     niter = 0
     report_flag = (report > 0)
+    save_iter_flag = (save_iter > 0)
+    save_res_flag = (save_res > 0)
 
-    cr = ph_data.residual_info.residuals[-1]
-    delete!(ph_data.residual_info.residuals, -1)
+    cr = ph_data.residual_history.residuals[-1]
+    delete!(ph_data.residual_history.residuals, -1)
     xhat_res_sq = cr.xhat_sq
     x_res_sq = cr.x_sq
 
@@ -241,7 +285,11 @@ function hedge(ph_data::PHData,
         flush(stdout)
     end
 
-    if save_res
+    if save_iter_flag
+        _save_iterate(ph_data, 0)
+    end
+
+    if save_res_flag
         _save_residual(ph_data, 0, xhat_res_sq, x_res_sq, residual, residual/xmax)
     end
     
@@ -277,7 +325,11 @@ function hedge(ph_data::PHData,
             flush(stdout)
         end
 
-        if save_res
+        if save_iter_flag && niter % save_iter == 0
+            _save_iterate(ph_data, niter)
+        end
+
+        if save_res_flag && niter % save_res == 0
             _save_residual(ph_data,
                            niter,
                            xhat_res_sq,
