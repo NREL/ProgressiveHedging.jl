@@ -80,20 +80,116 @@ end
 @testset "Extensive Form" begin
 end
 
-# @testset "Penalties" begin
-#     st = build_scen_tree()
+@testset "Penalties" begin
+    st = build_scen_tree()
 
-#     js = create_model(PH.scid(0))
+    # Scalar Penalty
+    js = create_model(PH.scid(0))
+    vid_name_map = PH.report_variable_info(js, st)
+    (br_vids, lf_vids) = PH._split_variables(st, collect(keys(vid_name_map)))
+    obj = JuMP.objective_function(js.model)
 
-#     vid_name_map = PH.report_variable_info(js, st)
+    PH.add_ph_objective_terms(js, br_vids, 10.0)
 
-#     (br_vids, lf_vids) = PH._split_variables(st, collect(keys(vid_name_map)))
+    ph_obj_func = JuMP.objective_function(js.model, JuMP.QuadExpr)
+    diff = ph_obj_func - obj
+    JuMP.drop_zeros!(diff)
 
-#     r = PH.ScalarPenaltyParameter(10.0)
-#     @test (typeof(PH.add_ph_objective_terms(js, br_vids, r)) <: Dict{PH.VariableID, Float64})
+    @test length(JuMP.linear_terms(diff)) == 0
+    @test length(JuMP.quad_terms(diff)) == (4 * length(br_vids))
+    for vid in br_vids
+        x_ref = js.vars[vid]
+        w_ref = js.w_vars[vid]
+        xhat_ref = js.xhat_vars[vid]
+        for (c, v1, v2) in JuMP.quad_terms(diff)
+            if (x_ref == v1 && x_ref == v2) || (xhat_ref == v1 && xhat_ref == v2)
+                @test isapprox(c, 5.0)
+            elseif (x_ref == v1 && xhat_ref == v2) || (xhat_ref == v1 && x_ref == v2)
+                @test isapprox(c, -10.0)
+            elseif (x_ref == v1 && w_ref == v2) || (w_ref == v1 && x_ref == v2)
+                @test isapprox(c, 1.0)
+            end
+        end
+    end
 
-#     r = PH.ProportionalPenaltyParameter(10.0)
-#     @test (typeof(PH.add_ph_objective_terms(js, br_vids, r)) <: Dict{PH.VariableID, Float64})
+    # Proportional Penalty
+    js = create_model(PH.scid(0))
+    vid_name_map = PH.report_variable_info(js, st)
+    (br_vids, lf_vids) = PH._split_variables(st, collect(keys(vid_name_map)))
+    coef_dict = PH.report_penalty_info(js, br_vids, PH.ProportionalPenaltyParameter)
+    obj = JuMP.objective_function(js.model)
+    for (vid, coef) in pairs(coef_dict)
+        ref = js.vars[vid]
+        for lt in JuMP.linear_terms(obj)
+            if lt[2] == ref
+                @test lt[1] == coef
+                break
+            end
+        end
+        coef_dict[vid] = 10.0 * coef
+    end
+    PH.add_ph_objective_terms(js, br_vids, coef_dict)
 
-#     sts = PH.solve(js)
-# end
+    ph_obj_func = JuMP.objective_function(js.model, JuMP.QuadExpr)
+    diff = ph_obj_func - obj
+    JuMP.drop_zeros!(diff)
+
+    @test length(JuMP.linear_terms(diff)) == 0
+    @test length(JuMP.quad_terms(diff)) == (4 * length(br_vids))
+
+    for vid in br_vids
+        x_ref = js.vars[vid]
+        w_ref = js.w_vars[vid]
+        xhat_ref = js.xhat_vars[vid]
+        for (c, v1, v2) in JuMP.quad_terms(diff)
+            if (x_ref == v1 && x_ref == v2) || (xhat_ref == v1 && xhat_ref == v2)
+                @test isapprox(c, 0.5 * coef_dict[vid])
+            elseif (x_ref == v1 && xhat_ref == v2) || (xhat_ref == v1 && x_ref == v2)
+                @test isapprox(c, -1.0 * coef_dict[vid])
+            elseif (x_ref == v1 && w_ref == v2) || (w_ref == v1 && x_ref == v2)
+                @test isapprox(c, 1.0)
+            end
+        end
+    end
+
+    # SEP Penalty
+    js = create_model(PH.scid(0))
+    vid_name_map = PH.report_variable_info(js, st)
+    (br_vids, lf_vids) = PH._split_variables(st, collect(keys(vid_name_map)))
+    coef_dict = PH.report_penalty_info(js, br_vids, PH.SEPPenaltyParameter)
+    obj = JuMP.objective_function(js.model)
+    for (vid, coef) in pairs(coef_dict)
+        ref = js.vars[vid]
+        for lt in JuMP.linear_terms(obj)
+            if lt[2] == ref
+                @test lt[1] == coef
+                break
+            end
+        end
+        coef_dict[vid] = rand() * coef
+    end
+    PH.add_ph_objective_terms(js, br_vids, coef_dict)
+
+    ph_obj_func = JuMP.objective_function(js.model, JuMP.QuadExpr)
+    diff = ph_obj_func - obj
+    JuMP.drop_zeros!(diff)
+
+    @test length(JuMP.linear_terms(diff)) == 0
+    @test length(JuMP.quad_terms(diff)) == (4 * length(br_vids))
+
+    for vid in br_vids
+        x_ref = js.vars[vid]
+        w_ref = js.w_vars[vid]
+        xhat_ref = js.xhat_vars[vid]
+        for (c, v1, v2) in JuMP.quad_terms(diff)
+            if (x_ref == v1 && x_ref == v2) || (xhat_ref == v1 && xhat_ref == v2)
+                @test isapprox(c, 0.5 * coef_dict[vid])
+            elseif (x_ref == v1 && xhat_ref == v2) || (xhat_ref == v1 && x_ref == v2)
+                @test isapprox(c, -1.0 * coef_dict[vid])
+            elseif (x_ref == v1 && w_ref == v2) || (w_ref == v1 && x_ref == v2)
+                @test isapprox(c, 1.0)
+            end
+        end
+    end
+
+end

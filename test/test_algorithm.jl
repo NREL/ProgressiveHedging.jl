@@ -52,7 +52,7 @@ var_vals = Dict([
                  )
 end
 
-@testset "Solve" begin
+@testset "Solve (Scalar)" begin
     (n, err, rerr, obj, soln, phd) = PH.solve(build_scen_tree(),
                                               create_model,
                                               r,
@@ -75,16 +75,14 @@ end
     end
 end
 
-@testset "Proportional Solve" begin
-    prop_max_iter = 1500
-    prop_atol = 5e-5
-    (n, err, rerr, obj, soln, phd) = PH.solve(build_scen_tree(),
-                                              create_model,
-                                              PH.ProportionalPenaltyParameter(25.0),
-                                              opt=Ipopt.Optimizer,
-                                              opt_args=(print_level=0,tol=1e-12),
+@testset "Solve (Proportional)" begin
+    prop_max_iter = 500
+    prop_atol = 1e-8
+    (n, err, rerr, obj, soln, phd) = PH.solve(PH.two_stage_tree(2),
+                                              two_stage_model,
+                                              PH.SEPPenaltyParameter(),
                                               atol=prop_atol,
-                                              rtol=1e-8,
+                                              rtol=1e-12,
                                               max_iter=prop_max_iter,
                                               report=0,
                                               timing=false,
@@ -92,14 +90,36 @@ end
                                               )
 
     @test err < prop_atol
-    @test isapprox(obj, obj_val, atol=1e-2)
+    @test isapprox(obj, 8.25, atol=1e-6)
     @test n < prop_max_iter
 
-    for row in eachrow(soln)
-        var = row[:variable] * "_{" * row[:scenarios] * "}"
-        @test isapprox(row[:value], var_vals[var], atol=1e-3)
-    end
+    @test (soln[1,:variable] == "x" && isapprox(soln[1,:value], 3.0))
+    @test (soln[2,:variable] == "y" && isapprox(soln[2,:value], 7.0))
+    @test (soln[3,:variable] == "y" && isapprox(soln[3,:value], 0.0, atol=1e-8))
 
+end
+
+@testset "Solve (SEP)" begin
+    prop_max_iter = 500
+    prop_atol = 1e-8
+    (n, err, rerr, obj, soln, phd) = PH.solve(PH.two_stage_tree(2),
+                                              two_stage_model,
+                                              PH.SEPPenaltyParameter(),
+                                              atol=prop_atol,
+                                              rtol=1e-12,
+                                              max_iter=prop_max_iter,
+                                              report=0,
+                                              timing=false,
+                                              warm_start=false
+                                              )
+
+    @test err < prop_atol
+    @test isapprox(obj, 8.25, atol=1e-6)
+    @test n < prop_max_iter
+
+    @test (soln[1,:variable] == "x" && isapprox(soln[1,:value], 3.0))
+    @test (soln[2,:variable] == "y" && isapprox(soln[2,:value], 7.0))
+    @test (soln[3,:variable] == "y" && isapprox(soln[3,:value], 0.0, atol=1e-8))
 end
 
 @testset "Warm-start" begin

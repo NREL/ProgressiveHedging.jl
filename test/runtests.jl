@@ -16,11 +16,20 @@ using TimerOutputs
 
 include("common.jl")
 
+@testset "Scenario Tree" begin
+    include("test_tree.jl")
+end
 @testset "Utils" begin
     include("test_utils.jl")
 end
 @testset "JuMP Subproblem" begin
     include("test_jumpsp.jl")
+end
+@testset "Workers" begin
+    include("test_worker.jl")
+end
+@testset "Penalty Parameters" begin
+    include("test_penalty.jl")
 end
 @testset "Setup" begin
     include("test_setup.jl")

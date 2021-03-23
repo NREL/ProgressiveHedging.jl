@@ -119,3 +119,29 @@ function invert_map(my_map::Dict{A,B})::Dict{B,A} where {A,B}
     @assert length(inv_map) == length(my_map)
     return inv_map
 end
+
+function two_stage_model(scenario_id::PH.ScenarioID)
+    model = JuMP.Model(()->Ipopt.Optimizer())
+    JuMP.set_optimizer_attribute(model, "print_level", 0)
+    JuMP.set_optimizer_attribute(model, "tol", 1e-12)
+    JuMP.set_optimizer_attribute(model, "acceptable_tol", 1e-12)
+
+    scen = PH._value(scenario_id)
+
+    ref = JuMP.@variable(model, x >= 0.0)
+    stage1 = [ref]
+
+    ref = JuMP.@variable(model, y >= 0.0)
+    stage2 = [ref]
+
+    val = scen == 0 ? 10.0 : 3.0
+
+    JuMP.@constraint(model, x + y == val)
+
+    c_y = scen == 0 ? 1.5 : 2.0
+    JuMP.@objective(model, Min, 1.0*x + c_y * y)
+
+    return PH.JuMPSubproblem(model, scenario_id, Dict(PH.stid(1) => stage1,
+                                                      PH.stid(2) => stage2)
+                             )
+end

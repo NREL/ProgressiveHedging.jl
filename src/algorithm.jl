@@ -230,9 +230,7 @@ function finish(phd::PHData,
                 )::Nothing
 
     # Send shutdown command to workers
-    @sync for rchan in values(winf.inputs)
-        @async put!(rchan, ShutDown())
-    end
+    _shutdown(winf)
 
     # Wait for and process replies
     _process_reports(phd, winf, ReportLeaf)

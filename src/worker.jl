@@ -96,7 +96,7 @@ function process_message(msg::PenaltyInfo,
                          )::Bool
 
     if !haskey(record.subproblems, msg.scen)
-        error("Worker $(record.id) received solve command for scenario $(msg.scen). This worker was not assigned this scenario.")
+        error("Worker $(record.id) received penalty parameter values for scenario $(msg.scen). This worker was not assigned this scenario.")
     end
 
     sub = record.subproblems[msg.scen]
