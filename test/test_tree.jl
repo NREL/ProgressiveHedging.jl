@@ -59,6 +59,6 @@ end
     @test PH.last_stage(st) == PH.stid(2)
     @test length(st.tree_map) == N + 1
     for (scen, prob) in pairs(st.prob_map)
-        @test prob == p[PH._value(scen) + 1]
+        @test prob == p[PH.value(scen) + 1]
     end
 end

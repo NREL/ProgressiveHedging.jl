@@ -241,7 +241,9 @@ function finish(phd::PHData,
         for (vid, vinfo) in pairs(sinfo.leaf_vars)
             xhid = convert_to_xhat_id(phd, vid)
             @assert(!haskey(phd.xhat, xhid))
-            phd.xhat[xhid] = HatVariable(value(phd, vid), vid)
+            # TODO: Correctly assign whether leaf variables are integers. For now,
+            # just say they aren't because it doesn't really matter.
+            phd.xhat[xhid] = HatVariable(value(phd, vid), vid, false)
         end
     end
 

@@ -10,8 +10,8 @@ Unique identifier for a `ScenarioNode` in a `ScenarioTree`.
 struct NodeID
     value::NODE_ID
 end
-_value(nid::NodeID)::NODE_ID = nid.value
-Base.isless(a::NodeID, b::NodeID) = _value(a) < _value(b)
+value(nid::NodeID)::NODE_ID = nid.value
+Base.isless(a::NodeID, b::NodeID) = value(a) < value(b)
 
 """
 Unique identifier for a scenario.
@@ -19,8 +19,8 @@ Unique identifier for a scenario.
 struct ScenarioID
     value::SCENARIO_ID
 end
-_value(scid::ScenarioID)::SCENARIO_ID = scid.value
-Base.isless(a::ScenarioID, b::ScenarioID) = _value(a) < _value(b)
+value(scid::ScenarioID)::SCENARIO_ID = scid.value
+Base.isless(a::ScenarioID, b::ScenarioID) = value(a) < value(b)
 
 """
 Unique identifier for a stage.
@@ -28,9 +28,9 @@ Unique identifier for a stage.
 struct StageID
     value::STAGE_ID
 end
-_value(sid::StageID)::STAGE_ID = sid.value
-_increment(sid::StageID)::StageID = StageID(_value(sid) + one(STAGE_ID))
-Base.isless(a::StageID, b::StageID) = _value(a) < _value(b)
+value(sid::StageID)::STAGE_ID = sid.value
+_increment(sid::StageID)::StageID = StageID(value(sid) + one(STAGE_ID))
+Base.isless(a::StageID, b::StageID) = value(a) < value(b)
 
 """
 Unique identifier for variables associated with the same scenario tree node.
@@ -38,9 +38,9 @@ Unique identifier for variables associated with the same scenario tree node.
 struct Index
     value::INDEX
 end
-_value(idx::Index)::INDEX = idx.value
-_increment(index::Index)::Index = Index(_value(index) + one(INDEX))
-Base.isless(a::Index, b::Index) = _value(a) < _value(b)
+value(idx::Index)::INDEX = idx.value
+_increment(index::Index)::Index = Index(value(index) + one(INDEX))
+Base.isless(a::Index, b::Index) = value(a) < value(b)
 
 """
 Unique identifier for any variable in a (multi-stage) stochastic programming problem.  Composed of a `ScenarioID`, a `StageID` and an `Index`.

@@ -1,3 +1,10 @@
+#### PH Types Used in Interface ####
+
+struct VariableInfo
+    name::String
+    is_integer::Bool # true if variable is integer or binary
+end
+
 #### PH Subproblem Interface ####
 
 """
@@ -80,7 +87,7 @@ end
 """
     report_variable_info(as::AbstractSubproblem,
                          st::ScenarioTree
-                         )::Dict{VariableID, String}
+                         )::Dict{VariableID, VariableInfo}
 
 Assign `VariableID`s to all model variables and build a map from those ids to the variable name.
 
@@ -91,7 +98,7 @@ Assign `VariableID`s to all model variables and build a map from those ids to th
 """
 function report_variable_info(as::AbstractSubproblem,
                               st::ScenarioTree
-                              )::Dict{VariableID, String}
+                              )::Dict{VariableID, VariableInfo}
     throw(UnimplementedError("report_variable_info is unimplemented"))
 end
 

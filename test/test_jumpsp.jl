@@ -6,13 +6,13 @@
 
     vid_name_map = PH.report_variable_info(js, st)
     @test length(vid_name_map) == length(JuMP.all_variables(js.model))
-    for (vid, vname) in pairs(vid_name_map)
+    for (vid, vinfo) in pairs(vid_name_map)
         if vid.stage == PH.stid(1)
-            @test occursin("x", vname)
+            @test occursin("x", vinfo.name)
         elseif vid.stage == PH.stid(2)
-            @test vname == "y"
+            @test vinfo.name == "y"
         else
-            @test occursin("z", vname)
+            @test occursin("z", vinfo.name)
         end
     end
 

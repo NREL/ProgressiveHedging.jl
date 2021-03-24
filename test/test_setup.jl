@@ -8,7 +8,7 @@
         (branch_ids, leaf_ids) = PH._split_variables(st, collect(keys(vid_name_map)))
 
         for br_vid in branch_ids
-            vname = vid_name_map[br_vid]
+            vname = vid_name_map[br_vid].name
             @test (vname == "y") || occursin("x", vname)
             if vname == "y"
                 @test br_vid.stage == PH.stid(2)
@@ -18,7 +18,7 @@
         end
 
         for lf_vid in leaf_ids
-            vname = vid_name_map[lf_vid]
+            vname = vid_name_map[lf_vid].name
             @test occursin("z", vname)
             @test lf_vid.stage == PH.stid(3)
         end
@@ -43,13 +43,13 @@
         end
 
         count = 0
-        my_var_map = Dict{PH.VariableID,String}()
+        my_var_map = Dict{PH.VariableID,PH.VariableInfo}()
         while isready(rc)
             count += 1
             msg = take!(rc)
             @test typeof(msg) <: PH.VariableMap
-            merge!(my_var_map, msg.var_names)
-            for (vid,vname) in pairs(msg.var_names)
+            merge!(my_var_map, msg.var_info)
+            for (vid,vinfo) in pairs(msg.var_info)
                 @test vid.scenario == msg.scen
             end
         end
@@ -95,7 +95,8 @@
             var_map = fetch(my_task)
 
             for scen in PH.scenarios(st)
-                for (vid, vname) in var_map[scen]
+                for (vid, vinfo) in var_map[scen]
+                    vname = vinfo.name
                     @test vid.scenario == scen
                     if vid.stage == PH.stid(1)
                         @test occursin("x", vname)
@@ -104,7 +105,7 @@
                     elseif vid.stage == PH.stid(3)
                         @test occursin("z", vname)
                     else
-                        stage_int = PH._value(vid.stage)
+                        stage_int = PH.value(vid.stage)
                         error("Stage $(stage_int)! There is no stage $(stage_int)!!")
                     end
                 end
@@ -254,7 +255,8 @@
             var_map = fetch(my_task)
 
             for scen in PH.scenarios(st)
-                for (vid, vname) in var_map[scen]
+                for (vid, vinfo) in var_map[scen]
+                    vname = vinfo.name
                     @test vid.scenario == scen
                     if vid.stage == PH.stid(1)
                         @test occursin("x", vname)
@@ -263,7 +265,7 @@
                     elseif vid.stage == PH.stid(3)
                         @test occursin("z", vname)
                     else
-                        stage_int = PH._value(vid.stage)
+                        stage_int = PH.value(vid.stage)
                         error("Stage $(stage_int)! There is no stage $(stage_int)!!")
                     end
                 end
@@ -424,7 +426,8 @@
             var_map = fetch(my_task)
 
             for scen in PH.scenarios(st)
-                for (vid, vname) in var_map[scen]
+                for (vid, vinfo) in var_map[scen]
+                    vname = vinfo.name
                     @test vid.scenario == scen
                     if vid.stage == PH.stid(1)
                         @test occursin("x", vname)
@@ -433,7 +436,7 @@
                     elseif vid.stage == PH.stid(3)
                         @test occursin("z", vname)
                     else
-                        stage_int = PH._value(vid.stage)
+                        stage_int = PH.value(vid.stage)
                         error("Stage $(stage_int)! There is no stage $(stage_int)!!")
                     end
                 end

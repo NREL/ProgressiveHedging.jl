@@ -176,15 +176,41 @@ function process_penalty_initial_value(r::SEPPenaltyParameter,
 
     for (xhid, xhat) in pairs(ph_variables(phd))
 
-        denom = 0.0
+        if is_integer(xhat)
 
-        for vid in variables(xhat)
-            p = probability(phd, scenario(vid))
-            xs = branch_value(phd, vid)
-            denom += p * abs(xs - value(xhat))
+            xmin = typemax(Int)
+            xmax = typemin(Int)
+
+            for vid in variables(xhat)
+
+                xs = branch_value(phd, vid)
+
+                if xs < xmin
+                    xmin = xs
+                end
+
+                if xs > xmax
+                    xmax = xs
+                end
+
+            end
+
+            denom = xmax - xmin + 1
+
+        else
+
+            denom = 0.0
+
+            for vid in variables(xhat)
+                p = probability(phd, scenario(vid))
+                xs = branch_value(phd, vid)
+                denom += p * abs(xs - value(xhat))
+            end
+
+            denom = max(denom, 1.0)
+
         end
 
-        denom = max(denom, 1.0)
         r.penalties[xhid] = r.penalties[xhid]/denom
 
     end

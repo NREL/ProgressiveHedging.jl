@@ -43,5 +43,5 @@ struct ShutDown <: Message end
 
 struct VariableMap <: Message
     scen::ScenarioID
-    var_names::Dict{VariableID,String}
+    var_info::Dict{VariableID,VariableInfo} # VariableInfo definition in subproblem.jl
 end

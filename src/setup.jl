@@ -40,11 +40,7 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
     end
 
     # Wait for and process initialization replies
-    var_maps = Dict{ScenarioID,Dict{VariableID,String}}()
-    for s in scenarios(scen_tree)
-        var_maps[s] = Dict{VariableID,String}()
-    end
-
+    var_maps = Dict{ScenarioID,Dict{VariableID,VariableInfo}}()
     remaining_maps = copy(scenarios(scen_tree))
     msg_waiting = Vector{Union{ReportBranch,PenaltyInfo}}()
 
@@ -58,7 +54,7 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
 
         elseif typeof(msg) <: VariableMap
 
-            var_maps[msg.scen] = msg.var_names
+            var_maps[msg.scen] = msg.var_info
             delete!(remaining_maps, msg.scen)
 
         else

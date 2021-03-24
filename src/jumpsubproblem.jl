@@ -116,18 +116,22 @@ end
 
 function report_variable_info(js::JuMPSubproblem,
                               st::ScenarioTree
-                              )::Dict{VariableID, String}
+                              )::Dict{VariableID, VariableInfo}
 
-    var_info = Dict{VariableID, String}()
+    var_info = Dict{VariableID, VariableInfo}()
 
     for node in scenario_nodes(st, js.scenario)
+
         stid = stage(node)
 
         for (k, var) in enumerate(js.stage_map[stid])
             vid = VariableID(js.scenario, stid, Index(k))
             js.vars[vid] = var
-            var_info[vid] = JuMP.name(var)
+            var_info[vid] = VariableInfo(JuMP.name(var),
+                                         JuMP.is_integer(var) || JuMP.is_binary(var),
+                                         )
         end
+
     end
 
     return var_info
@@ -229,7 +233,7 @@ function _ef_add_variables(model::JuMP.Model,
     for vref in js.stage_map[node.stage]
         info = _build_var_info(vref)
         var = JuMP.name(vref)
-        vname = var * "_{" * stringify(_value.(scenario_bundle(node))) * "}"
+        vname = var * "_{" * stringify(value.(scenario_bundle(node))) * "}"
         new_vref = JuMP.add_variable(model,
                                      JuMP.build_variable(error, info),
                                      vname)

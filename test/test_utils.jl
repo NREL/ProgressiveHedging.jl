@@ -1,8 +1,8 @@
 @testset "Struct accessors" begin
-    @test PH._value(PH.ScenarioID(1)) == 1
-    @test PH._value(PH.StageID(2)) == 2
-    @test PH._value(PH.Index(3)) == 3
-    @test PH._value(PH.NodeID(4)) == 4
+    @test PH.value(PH.ScenarioID(1)) == 1
+    @test PH.value(PH.StageID(2)) == 2
+    @test PH.value(PH.Index(3)) == 3
+    @test PH.value(PH.NodeID(4)) == 4
 end
 
 @testset "Convenience constructors" begin
@@ -49,28 +49,29 @@ end
 function build_var_map(n::Int,
                        m1::Int,
                        m2::Int)
-    vmap = Dict{PH.ScenarioID, Dict{PH.VariableID, String}}()
+    vmap = Dict{PH.ScenarioID, Dict{PH.VariableID, PH.VariableInfo}}()
     vval = Dict{PH.ScenarioID, Dict{PH.VariableID, Float64}}()
     for k in 1:n
         scid = PH.scid(k-1)
 
-        vars = Dict{PH.VariableID, String}()
+        vars = Dict{PH.VariableID, PH.VariableInfo}()
         vals = Dict{PH.VariableID, Float64}()
         for j in 1:m1
             vid = PH.VariableID(scid, PH.stid(1), PH.index(j + k - 1))
-            vars[vid] = "a$j" # convert(Float64, j)
+            vars[vid] = PH.VariableInfo("a$j",false) # convert(Float64, j)
             vals[vid] = convert(Float64, j)
         end
 
         for j in 1:m2
             vid = PH.VariableID(scid, PH.stid(2), PH.index(j-1))
-            vars[vid] = "b$j" # convert(Float64, k*j + n)
+            vars[vid] = PH.VariableInfo("b$j", false) # convert(Float64, k*j + n)
             vals[vid] = convert(Float64, k*j + n)
         end
 
         vmap[scid] = vars
         vval[scid] = vals
     end
+
     return (vmap, vval)
 end
 
@@ -98,7 +99,7 @@ for (scid, sinfo) in pairs(phd.scenario_map)
     for vid in keys(sinfo.leaf_vars)
         xhid = PH.convert_to_xhat_id(phd, vid)
         sinfo.leaf_vars[vid] = var_val[scid][vid]
-        phd.xhat[xhid] = PH.HatVariable(var_val[scid][vid], vid)
+        phd.xhat[xhid] = PH.HatVariable(var_val[scid][vid], vid, false)
     end
 end
 
@@ -108,7 +109,7 @@ end
     index = PH.index(2)
     vid = PH.VariableID(scid, stid, index)
     @test PH.name(phd, vid) == "a2"
-    val = convert(Float64, PH._value(index) - PH._value(scid))
+    val = convert(Float64, PH.value(index) - PH.value(scid))
     @test PH.value(phd, vid) == val
     @test PH.value(phd, scid, stid, index) == val
     @test PH.branch_value(phd, vid) == val
@@ -119,7 +120,7 @@ end
     index = PH.index(3)
     vid = PH.VariableID(scid, stid, index)
     @test PH.name(phd, vid) == "b4"
-    val = convert(Float64, nscen + (PH._value(index) + 1)*(PH._value(scid) + 1))
+    val = convert(Float64, nscen + (PH.value(index) + 1)*(PH.value(scid) + 1))
     @test PH.value(phd, vid) == val
     @test PH.value(phd, scid, stid, index) == val
     @test PH.leaf_value(phd, vid) == val

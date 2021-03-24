@@ -17,7 +17,7 @@ end
 
     N = 2
     st = PH.two_stage_tree(N)
-    var_map = Dict{PH.ScenarioID,Dict{PH.VariableID,String}}()
+    var_map = Dict{PH.ScenarioID,Dict{PH.VariableID,PH.VariableInfo}}()
     coef_map = Dict{Int,Dict{PH.VariableID,Float64}}()
     for s in 0:(N-1)
         js = two_stage_model(PH.scid(s))
@@ -55,7 +55,7 @@ end
 
     N = 2
     st = PH.two_stage_tree(N)
-    var_map = Dict{PH.ScenarioID,Dict{PH.VariableID,String}}()
+    var_map = Dict{PH.ScenarioID,Dict{PH.VariableID,PH.VariableInfo}}()
     var_vals = Dict{Int,Dict{PH.VariableID,Float64}}()
     coef_map = Dict{Int,Dict{PH.VariableID,Float64}}()
     for s in 0:(N-1)

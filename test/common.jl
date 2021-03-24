@@ -9,7 +9,7 @@
         JuMP.set_optimizer_attribute(model, string(key), value)
     end
 
-    scid = PH._value(scenario_id)
+    scid = PH.value(scenario_id)
     
     c = [1.0, 10.0, 0.01]
     d = 7.0
@@ -126,7 +126,7 @@ function two_stage_model(scenario_id::PH.ScenarioID)
     JuMP.set_optimizer_attribute(model, "tol", 1e-12)
     JuMP.set_optimizer_attribute(model, "acceptable_tol", 1e-12)
 
-    scen = PH._value(scenario_id)
+    scen = PH.value(scenario_id)
 
     ref = JuMP.@variable(model, x >= 0.0)
     stage1 = [ref]

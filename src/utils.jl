@@ -79,8 +79,8 @@ function retrieve_soln(phd::PHData)::DataFrames.DataFrame
 
         push!(vars, name(phd, vid))
         push!(vals, xhat_value(phd, xid))
-        push!(stages, _value(stage_id(phd, xid)))
-        push!(scens, stringify(_value.(scenario_bundle(phd, xid))))
+        push!(stages, value(stage_id(phd, xid)))
+        push!(scens, stringify(value.(scenario_bundle(phd, xid))))
 
     end
 
@@ -157,9 +157,9 @@ function retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
     for vid in sort!(collect(keys(variable_map)))
         push!(vars, name(phd, vid))
         push!(vals, variable_map[vid])
-        push!(stage, _value(vid.stage))
-        push!(scenario, _value(vid.scenario))
-        push!(index, _value(vid.index))
+        push!(stage, value(vid.stage))
+        push!(scenario, value(vid.scenario))
+        push!(index, value(vid.index))
     end
 
     soln_df = DataFrames.DataFrame(variable=vars, value=vals, stage=stage,
@@ -184,9 +184,9 @@ function retrieve_w(phd::PHData)::DataFrames.DataFrame
 
         push!(vars, "W_" * name(phd, vid))
         push!(vals, variable_map[vid])
-        push!(stage, _value(vid.stage))
-        push!(scenario, _value(vid.scenario))
-        push!(index, _value(vid.index))
+        push!(stage, value(vid.stage))
+        push!(scenario, value(vid.scenario))
+        push!(index, value(vid.index))
 
     end
 
@@ -219,7 +219,7 @@ function retrieve_xhat_history(phd::PHData)::DataFrames.DataFrame
 
         for xhid in sort!(collect(keys(phd.xhat)))
             if !is_leaf(phd, xhid)
-                vname = name(phd, xhid) * "_" * stringify(_value.(scenario_bundle(phd, xhid)))
+                vname = name(phd, xhid) * "_" * stringify(value.(scenario_bundle(phd, xhid)))
                 data[vname] = iterates[iter].xhat[xhid]
             end
         end
@@ -249,7 +249,7 @@ function retrieve_no_hat_history(phd::PHData)::DataFrames.DataFrame
         data = Dict{String,Any}("iteration" => iter)
 
         for vid in sort!(collect(keys(current_iterate.x)))
-            vname = name(phd, vid) * "_$(_value(scenario(vid)))"
+            vname = name(phd, vid) * "_$(value(scenario(vid)))"
             data[vname] = current_iterate.x[vid]
         end
 
@@ -278,7 +278,7 @@ function retrieve_w_history(phd::PHData)::DataFrames.DataFrame
         data = Dict{String,Any}("iteration" => iter)
 
         for vid in sort!(collect(keys(current_iterate.w)))
-            vname = "W_" * name(phd, vid) * "_$(_value(scenario(vid)))"
+            vname = "W_" * name(phd, vid) * "_$(value(scenario(vid)))"
             data[vname] = current_iterate.w[vid]
         end
 

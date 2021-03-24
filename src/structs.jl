@@ -51,24 +51,31 @@ function index(idxr::Indexer, nid::NodeID, name::String)::Index
     return idx
 end
 
-mutable struct VariableInfo
+mutable struct VariableData
     name::String
     xhat_id::XhatID
 end
 
-function VariableInfo(name::String,
+function VariableData(name::String,
                       nid::NodeID
-                      )::VariableInfo
-    return VariableInfo(name, nid, 0.0)
+                      )::VariableData
+    return VariableData(name, nid, 0.0)
 end
 
 mutable struct HatVariable
     value::Float64 # Current value of variable
     vars::Set{VariableID} # All nonhat variable ids that contribute to this variable
+    is_integer::Bool # Flag indicating that the variable is integer (includes binary)
 end
 
-HatVariable()::HatVariable = HatVariable(0.0, Set{VariableID}())
-HatVariable(val::Float64, vid::VariableID) = HatVariable(val, Set{VariableID}([vid]))
+HatVariable(is_int::Bool)::HatVariable = HatVariable(0.0, Set{VariableID}(),is_int)
+function HatVariable(val::Float64,vid::VariableID, is_int::Bool)
+    return HatVariable(val, Set{VariableID}([vid]), is_int)
+end
+
+function is_integer(a::HatVariable)::Bool
+    return a.is_integer
+end
 
 function value(a::HatVariable)::Float64
     return a.value
@@ -229,7 +236,7 @@ struct PHData{R <: AbstractPenaltyParameter}
     scenario_tree::ScenarioTree
     scenario_map::Dict{ScenarioID, ScenarioInfo}
     xhat::Dict{XhatID, HatVariable}
-    variable_data::Dict{VariableID, VariableInfo}
+    variable_data::Dict{VariableID, VariableData}
     indexer::Indexer
     iterate_history::PHIterateHistory
     residual_history::PHResidualHistory
@@ -239,11 +246,11 @@ end
 function PHData(r::AbstractPenaltyParameter,
                 tree::ScenarioTree,
                 scen_proc_map::Dict{Int, Set{ScenarioID}},
-                var_map::Dict{ScenarioID, Dict{VariableID, String}},
+                var_map::Dict{ScenarioID, Dict{VariableID, VariableInfo}},
                 time_out::TimerOutputs.TimerOutput
                 )::PHData
 
-    var_data = Dict{VariableID,VariableInfo}()
+    var_data = Dict{VariableID,VariableData}()
     xhat_dict = Dict{XhatID, HatVariable}()
     idxr = Indexer()
 
@@ -254,18 +261,18 @@ function PHData(r::AbstractPenaltyParameter,
             branch_ids = Set{VariableID}()
             leaf_ids = Set{VariableID}()
 
-            for (vid, vname) in pairs(var_map[scen])
+            for (vid, vinfo) in pairs(var_map[scen])
 
                 vnode = node(tree, vid.scenario, vid.stage)
 
                 if vnode == nothing
-                    error("Unable to locate node for variable id $vid.")
+                    error("Unable to locate scenario tree node for variable '$(vinfo.name)' occuring in scenario $(vid.scenario) and stage $(vid.stage).")
                 end
 
-                idx = index(idxr, vnode.id, vname)
+                idx = index(idxr, vnode.id, vinfo.name)
                 xhid = XhatID(vnode.id, idx)
-                var_info = VariableInfo(vname, xhid)
-                var_data[vid] = var_info
+                vdata = VariableData(vinfo.name, xhid)
+                var_data[vid] = vdata
 
                 if is_leaf(vnode)
 
@@ -275,8 +282,12 @@ function PHData(r::AbstractPenaltyParameter,
 
                     push!(branch_ids, vid)
 
-                    if !haskey(xhat_dict, xhid)
-                        xhat_dict[xhid] = HatVariable()
+                    if haskey(xhat_dict, xhid)
+                        if is_integer(xhat_dict[xhid]) != vinfo.is_integer
+                            error("Variable '$(vinfo.name)' must be integer or non-integer in all scenarios in which it is used.")
+                        end
+                    else
+                        xhat_dict[xhid] = HatVariable(vinfo.is_integer)
                     end
                     add_variable(xhat_dict[xhid], vid)
 
