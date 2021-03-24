@@ -145,3 +145,28 @@ function two_stage_model(scenario_id::PH.ScenarioID)
                                                       PH.stid(2) => stage2)
                              )
 end
+
+if isdefined(Main, :Xpress)
+    function two_stage_int(scenario_id::PH.ScenarioID)
+        model = JuMP.Model(()->Xpress.Optimizer())
+        JuMP.set_optimizer_attribute(model, "OUTPUTLOG", 0)
+
+        scen = PH.value(scenario_id)
+
+        ref = JuMP.@variable(model, 4 <= k <= 10, Int)
+        stage1 = [ref]
+
+        ref = JuMP.@variable(model, y)
+        stage2 = [ref]
+
+        val = 2.0 * scen
+        JuMP.@constraint(model, k + y == val)
+
+        c_y = (scen % 2 == 0 ? 1.0 : 5.0)
+        JuMP.@objective(model, Min, c_y * y^2 + 2.0*k)
+
+        return PH.JuMPSubproblem(model, scenario_id, Dict(PH.stid(1) => stage1,
+                                                          PH.stid(2) => stage2)
+                                 )
+    end
+end

@@ -145,7 +145,7 @@ function is_variable_dependent(::Type{ScalarPenaltyParameter})::Bool
 end
 
 """
-Penalty parameter set with Watson-Woodruff heuristic TODO: put paper reference
+Penalty parameter set with Watson-Woodruff heuristic TODO: put paper reference, add default
 """
 
 struct SEPPenaltyParameter <: AbstractPenaltyParameter

@@ -14,6 +14,22 @@ const MOI = MathOptInterface
 
 using TimerOutputs
 
+macro optional_using(pkg)
+    quote
+        try
+            using $pkg
+        catch e
+            if typeof(e) != ArgumentError
+                rethrow(e)
+            # else
+            #     println("Failed to find package $pkg")
+            end
+        end
+    end
+end
+
+@optional_using(Xpress)
+
 include("common.jl")
 
 @testset "Scenario Tree" begin
