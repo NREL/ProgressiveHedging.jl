@@ -186,9 +186,11 @@ function compute_and_save_w(phd::PHData)::Float64
         end
 
         if abs(exp) > 1e-6
+            vname = name(phd, xhid)
             @warn("Conditional expectation of " *
-                  "W[$(scenario(vid)),$(stage(vid)),$(index(vid))] " *
-                  "is non-zero: " * string(exp/norm))
+                  "W[$(vname)] occurring in stage " * stage_id(phd, xhid) *
+                  " for scenarios " * stringify(scenario_bundle(phd, xhid)) *
+                  " is non-zero: " * string(exp/norm))
         end
     end
 
@@ -273,8 +275,10 @@ function hedge(ph_data::PHData,
     xhat_res_sq = cr.xhat_sq
     x_res_sq = cr.x_sq
 
-    nsqrt = sqrt(length(ph_data.xhat))
-    xmax = max(maximum(abs.(value.(values(ph_data.xhat)))), 1e-12)
+    nsqrt = max(sqrt(length(ph_data.xhat)), 1.0)
+    xmax = (length(ph_data.xhat) > 0
+            ? max(maximum(abs.(value.(values(ph_data.xhat)))), 1e-12)
+            : 1.0)
     residual = sqrt(xhat_res_sq + x_res_sq) / nsqrt
 
     if report_flag

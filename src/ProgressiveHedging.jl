@@ -101,6 +101,17 @@ function solve(tree::ScenarioTree,
                
     timo = TimerOutputs.TimerOutput()
 
+    if length(scenarios(tree)) == 1
+        @warn("Given scenario tree indicates a deterministic problem (only one scenario).")
+    elseif length(scenarios(tree)) <= 0
+        error("Given scenario tree has no scenarios specified. Make sure 'add_leaf' is being called on leaves of the scenario tree.")
+    end
+
+    psum = sum(values(tree.prob_map))
+    if psum > 1.0 || psum < 1.0
+        error("Total probability of scenarios in given scenario tree is $psum.")
+    end
+
     # Initialization
     if report > 0
         println("Initializing...")
@@ -183,6 +194,12 @@ function solve_extensive(tree::ScenarioTree,
                          args::Tuple=(),
                          kwargs...
                          ) where {S <: AbstractSubproblem}
+
+    if length(scenarios(tree)) == 1
+        @warn("Given scenario tree indicates a deterministic problem (only one scenario).")
+    elseif length(scenarios(tree)) <= 0
+        error("Given scenario tree has no scenarios specified. Make sure 'add_leaf' is being called on leaves of the scenario tree.")
+    end
 
     model = build_extensive_form(tree,
                                  subproblem_constructor,

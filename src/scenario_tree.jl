@@ -166,6 +166,10 @@ function add_leaf(tree::ScenarioTree,
                   probability::R,
                   )::ScenarioID where R <: Real
 
+    if probability < 0.0 || probability > 1.0
+        error("Invalid probability value: $probability")
+    end
+
     leaf = add_node(tree, parent)
     scid = _assign_scenario_id(tree)
     tree.prob_map[scid] = probability
