@@ -1,4 +1,9 @@
 
+@testset "Scenario Tree Errors" begin
+    st = PH.ScenarioTree()
+    @test_throws(ErrorException, PH.add_leaf(st, PH.root(st), -1.0))
+end
+
 @testset "Scenario Tree Functions" begin
 
     # First stage -- Creates root/first stage node automatically

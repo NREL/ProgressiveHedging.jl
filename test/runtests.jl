@@ -19,6 +19,9 @@ include("common.jl")
 @testset "Scenario Tree" begin
     include("test_tree.jl")
 end
+@testset "Sanity Checks" begin
+    include("test_sanity.jl")
+end
 @testset "Utils" begin
     include("test_utils.jl")
 end
