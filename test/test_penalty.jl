@@ -30,7 +30,7 @@ end
                                              )
     end
 
-    c_rho = 10.0 * rand()
+    c_rho = 10.0 * (rand() + 1e-12) # Avoid the possibility of c_rho == 0.0
     phd = PH.PHData(PH.ProportionalPenaltyParameter(c_rho),
                     st,
                     Dict(1 => Set([PH.scid(0), PH.scid(1)])),
@@ -44,7 +44,7 @@ end
 
     for (xhid, rho) in pairs(phd.r.penalties)
         @test st.tree_map[xhid.node].stage == PH.stid(1)
-        @test isapprox(rho, c_rho)
+        @test isapprox(rho, c_rho) || isapprox(rho, phd.r.constant)
     end
 end
 
@@ -91,7 +91,7 @@ end
     rho_val = 1.0 / value
     for (xhid, rho) in pairs(phd.r.penalties)
         @test st.tree_map[xhid.node].stage == PH.stid(1)
-        @test isapprox(rho, rho_val)
+        @test isapprox(rho, rho_val) || isapprox(rho, phd.r.default)
     end
 
     if isdefined(Main, :Xpress)

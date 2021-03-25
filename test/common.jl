@@ -130,13 +130,14 @@ function two_stage_model(scenario_id::PH.ScenarioID)
 
     ref = JuMP.@variable(model, x >= 0.0)
     stage1 = [ref]
+    push!(stage1, JuMP.@variable(model, 0.0 <= u <= 1.0))
 
     ref = JuMP.@variable(model, y >= 0.0)
     stage2 = [ref]
 
-    val = scen == 0 ? 10.0 : 3.0
+    val = scen == 0 ? 11.0 : 4.0
 
-    JuMP.@constraint(model, x + y == val)
+    JuMP.@constraint(model, x + y + u == val)
 
     c_y = scen == 0 ? 1.5 : 2.0
     JuMP.@objective(model, Min, 1.0*x + c_y * y)

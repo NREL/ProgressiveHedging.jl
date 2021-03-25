@@ -93,9 +93,19 @@ end
     @test isapprox(obj, 8.25, atol=1e-6)
     @test n < prop_max_iter
 
-    @test (soln[1,:variable] == "x" && isapprox(soln[1,:value], 3.0))
-    @test (soln[2,:variable] == "y" && isapprox(soln[2,:value], 7.0))
-    @test (soln[3,:variable] == "y" && isapprox(soln[3,:value], 0.0, atol=1e-8))
+    for row in eachrow(soln)
+        if row[:variable] == "x"
+            @test isapprox(row[:value], 3.0)
+        elseif row[:variable] == "u"
+            @test isapprox(row[:value], 1.0)
+        elseif row[:variable] == "y"
+            if row[:scenarios] == "0"
+                @test isapprox(row[:value], 7.0)
+            else
+                @test isapprox(row[:value], 0.0, atol=1e-8)
+            end
+        end
+    end
 
 end
 
@@ -117,9 +127,20 @@ end
     @test isapprox(obj, 8.25, atol=1e-6)
     @test n < prop_max_iter
 
-    @test (soln[1,:variable] == "x" && isapprox(soln[1,:value], 3.0))
-    @test (soln[2,:variable] == "y" && isapprox(soln[2,:value], 7.0))
-    @test (soln[3,:variable] == "y" && isapprox(soln[3,:value], 0.0, atol=1e-8))
+    for row in eachrow(soln)
+        if row[:variable] == "x"
+            @test isapprox(row[:value], 3.0)
+        elseif row[:variable] == "u"
+            @test isapprox(row[:value], 1.0)
+        elseif row[:variable] == "y"
+            if row[:scenarios] == "0"
+                @test isapprox(row[:value], 7.0)
+            else
+                @test isapprox(row[:value], 0.0, atol=1e-8)
+            end
+        end
+    end
+
 end
 
 @testset "Warm-start" begin

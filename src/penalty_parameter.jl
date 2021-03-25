@@ -59,7 +59,7 @@ end
 #### Concrete Types (Alphabetical Order) ####
 
 """
-Variable dependent penalty parameter given by `k * c_i` where `c_i` is the linear coefficient of variable `i` in the objective function.
+Variable dependent penalty parameter given by `k * c_i` where `c_i` is the linear coefficient of variable `i` in the objective function.  If `c_i == 0` (that is, the variable has no linear coefficient in the objective function), then the penalty value is taken to be `k`.
 """
 struct ProportionalPenaltyParameter <: AbstractPenaltyParameter
     constant::Float64
@@ -89,13 +89,14 @@ function process_penalty_subproblem(r::ProportionalPenaltyParameter,
     for (vid, penalty) in pairs(penalties)
 
         xhid = convert_to_xhat_id(phd, vid)
+        r_value = penalty == 0.0 ? r.constant : abs(penalty) * r.constant
 
         if haskey(r.penalties, xhid)
-            if !isapprox(r.penalties[xhid], penalty * r.constant)
+            if !isapprox(r.penalties[xhid], r_value)
                 error("Penalty parameter must match across scenarios.")
             end
         else
-            r.penalties[xhid] = penalty * r.constant
+            r.penalties[xhid] = r_value
         end
 
     end
@@ -149,11 +150,12 @@ Penalty parameter set with Watson-Woodruff heuristic TODO: put paper reference, 
 """
 
 struct SEPPenaltyParameter <: AbstractPenaltyParameter
+    default::Float64
     penalties::Dict{XhatID,Float64}
 end
 
-function SEPPenaltyParameter()
-    return SEPPenaltyParameter(Dict{XhatID,Float64}())
+function SEPPenaltyParameter(default::Float64=1.0)
+    return SEPPenaltyParameter(default, Dict{XhatID,Float64}())
 end
 
 function get_penalty_value(r::SEPPenaltyParameter,
@@ -211,7 +213,8 @@ function process_penalty_initial_value(r::SEPPenaltyParameter,
 
         end
 
-        r.penalties[xhid] = r.penalties[xhid]/denom
+        obj_coeff = r.penalties[xhid]
+        r.penalties[xhid] = obj_coeff == 0.0 ? r.default : abs(obj_coeff)/denom
 
     end
 
