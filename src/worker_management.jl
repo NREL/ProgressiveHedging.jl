@@ -1,4 +1,4 @@
-
+# Type containing information on workers.
 struct WorkerInf
     inputs::Dict{Int,RemoteChannel}
     output::RemoteChannel
@@ -42,7 +42,7 @@ function _monitor_workers(wi::WorkerInf)::Nothing
                 elseif typeof(e) <: Exception
                     throw(e)
                 else
-                    error("Unecpected return code from worker: $e")
+                    error("Unexpected return code from worker: $e")
                 end
             catch e
                 _abort(wi)
@@ -121,5 +121,12 @@ function _send_message(wi::WorkerInf,
                        msg::M,
                        ) where M <: Message
     put!(wi.inputs[wid], msg)
+    return
+end
+
+function _shutdown(wi::WorkerInf)
+    @sync for rchan in values(wi.inputs)
+        @async put!(rchan, ShutDown())
+    end
     return
 end

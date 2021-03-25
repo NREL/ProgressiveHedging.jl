@@ -1,5 +1,5 @@
 
-r = 25.0
+r = PH.ScalarPenaltyParameter(25.0)
 atol = 1e-8
 rtol = 1e-12
 max_iter = 500
@@ -52,18 +52,18 @@ var_vals = Dict([
                  )
 end
 
-@testset "Solve" begin
-    (n, err, obj, soln, phd) = PH.solve(build_scen_tree(),
-                                        create_model,
-                                        r,
-                                        opt=Ipopt.Optimizer,
-                                        opt_args=(print_level=0,tol=1e-12),
-                                        atol=atol,
-                                        rtol=rtol,
-                                        max_iter=max_iter,
-                                        report=0,
-                                        timing=false,
-                                        warm_start=false)
+@testset "Solve (Scalar)" begin
+    (n, err, rerr, obj, soln, phd) = PH.solve(build_scen_tree(),
+                                              create_model,
+                                              r,
+                                              opt=Ipopt.Optimizer,
+                                              opt_args=(print_level=0,tol=1e-12),
+                                              atol=atol,
+                                              rtol=rtol,
+                                              max_iter=max_iter,
+                                              report=0,
+                                              timing=false,
+                                              warm_start=false)
 
     @test err < atol
     @test isapprox(obj, obj_val)
@@ -73,11 +73,78 @@ end
         var = row[:variable] * "_{" * row[:scenarios] * "}"
         @test isapprox(row[:value], var_vals[var], atol=1e-7)
     end
+end
+
+@testset "Solve (Proportional)" begin
+    prop_max_iter = 500
+    prop_atol = 1e-8
+    (n, err, rerr, obj, soln, phd) = PH.solve(PH.two_stage_tree(2),
+                                              two_stage_model,
+                                              PH.SEPPenaltyParameter(),
+                                              atol=prop_atol,
+                                              rtol=1e-12,
+                                              max_iter=prop_max_iter,
+                                              report=0,
+                                              timing=false,
+                                              warm_start=false
+                                              )
+
+    @test err < prop_atol
+    @test isapprox(obj, 8.25, atol=1e-6)
+    @test n < prop_max_iter
+
+    for row in eachrow(soln)
+        if row[:variable] == "x"
+            @test isapprox(row[:value], 3.0)
+        elseif row[:variable] == "u"
+            @test isapprox(row[:value], 1.0)
+        elseif row[:variable] == "y"
+            if row[:scenarios] == "0"
+                @test isapprox(row[:value], 7.0)
+            else
+                @test isapprox(row[:value], 0.0, atol=1e-8)
+            end
+        end
+    end
+
+end
+
+@testset "Solve (SEP)" begin
+    prop_max_iter = 500
+    prop_atol = 1e-8
+    (n, err, rerr, obj, soln, phd) = PH.solve(PH.two_stage_tree(2),
+                                              two_stage_model,
+                                              PH.SEPPenaltyParameter(),
+                                              atol=prop_atol,
+                                              rtol=1e-12,
+                                              max_iter=prop_max_iter,
+                                              report=0,
+                                              timing=false,
+                                              warm_start=false
+                                              )
+
+    @test err < prop_atol
+    @test isapprox(obj, 8.25, atol=1e-6)
+    @test n < prop_max_iter
+
+    for row in eachrow(soln)
+        if row[:variable] == "x"
+            @test isapprox(row[:value], 3.0)
+        elseif row[:variable] == "u"
+            @test isapprox(row[:value], 1.0)
+        elseif row[:variable] == "y"
+            if row[:scenarios] == "0"
+                @test isapprox(row[:value], 7.0)
+            else
+                @test isapprox(row[:value], 0.0, atol=1e-8)
+            end
+        end
+    end
 
 end
 
 @testset "Warm-start" begin
-    (n, err, obj, soln, phd) = PH.solve(build_scen_tree(),
+    (n, err, rerr, obj, soln, phd) = PH.solve(build_scen_tree(),
                                         create_model,
                                         r,
                                         opt=Ipopt.Optimizer,
@@ -104,25 +171,26 @@ end
     max_iter = 4
     regex = r".*"
     @info "Ignore the following warning."
-    (n, err, obj, soln, phd) = @test_warn(regex,
-                                          PH.solve(build_scen_tree(),
-                                                   create_model,
-                                                   r,
-                                                   opt=Ipopt.Optimizer,
-                                                   opt_args=(print_level=0,tol=1e-12),
-                                                   atol=atol,
-                                                   rtol=rtol,
-                                                   max_iter=max_iter,
-                                                   report=0,
-                                                   timing=false)
-                                          )
+    (n, err, rerr, obj, soln, phd) = @test_warn(regex,
+                                                PH.solve(build_scen_tree(),
+                                                         create_model,
+                                                         r,
+                                                         opt=Ipopt.Optimizer,
+                                                         opt_args=(print_level=0,tol=1e-12),
+                                                         atol=atol,
+                                                         rtol=rtol,
+                                                         max_iter=max_iter,
+                                                         report=0,
+                                                         timing=false)
+                                                )
     @test err > atol
+    @test rerr > rtol
     @test n == max_iter
 end
 
 @testset "Relative tolerance termination" begin
     rtol = 1e-6
-    (n, err, obj, soln, phd) = PH.solve(build_scen_tree(),
+    (n, err, rerr, obj, soln, phd) = PH.solve(build_scen_tree(),
                                         create_model,
                                         r,
                                         opt=Ipopt.Optimizer,
@@ -134,8 +202,9 @@ end
                                         timing=false,
                                         warm_start=true)
 
-    xmax = maximum(soln[soln[:,:stage] .!= 3,:value])
+    # xmax = maximum(soln[soln[:,:stage] .!= 3,:value])
     @test err > atol
     @test n < max_iter
-    @test err < rtol * xmax
+    #@test err < rtol * xmax
+    @test rerr < rtol
 end

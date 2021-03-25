@@ -27,8 +27,11 @@ export residuals, retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_
 #### Includes ####
 
 include("id_types.jl")
+include("penalty_parameter.jl")
 include("scenario_tree.jl")
+
 include("subproblem.jl")
+include("jumpsubproblem.jl")
 
 include("message.jl")
 
@@ -48,11 +51,11 @@ include("setup.jl")
           subproblem_constructor::Function,
           r<:Real,
           other_args...;
-          subproblem_type<:AbstractSubproblem=JuMPSubproblem,
           max_iter::Int=1000,
           atol::Float64=1e-6,
           rtol::Float64=1e-6,
           report::Int=0,
+          save_iterates::Int=0,
           save_residuals::Bool=false,
           timing::Bool=true,
           args::Tuple=(),
@@ -73,7 +76,8 @@ Solve given problem using Progressive Hedging.
 * `atol::Float64` : Absolute error tolerance. Defaults to 1e-6.
 * `rtol::Float64` : Relative error tolerance. Defaults to 1e-6.
 * `report::Int` : Print progress to screen every `report` iterations. Any value <= 0 disables printing. Defaults to 0.
-* `save_residuals::Bool` : Flag indicating whether or not to save residuals from all iterations of the algorithm
+* `save_iterates::Int` : Save PH iterates every `save_iterates` steps. Any value <= 0 disables saving iterates. Defaults to 0.
+* `save_residuals::Int` : Save PH residuals every `save_residuals` steps. Any value <= 0 disables saving residuals. Defaults to 0.
 * `timing::Bool` : Flag indicating whether or not to record timing information. Defaults to true.
 * `warm_start::Bool` : Flag indicating that solver should be "warm started" by using the previous solution as the starting point (not compatible with all solvers)
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
@@ -87,14 +91,26 @@ function solve(tree::ScenarioTree,
                atol::Float64=1e-6,
                rtol::Float64=1e-6,
                report::Int=0,
-               save_residuals::Bool=false,
+               save_iterates::Int=0,
+               save_residuals::Int=0,
                timing::Bool=true,
                warm_start::Bool=false,
                args::Tuple=(),
                kwargs...
-               ) where {R <: Real}
-
+               ) where {R <: AbstractPenaltyParameter}
+               
     timo = TimerOutputs.TimerOutput()
+
+    if length(scenarios(tree)) == 1
+        @warn("Given scenario tree indicates a deterministic problem (only one scenario).")
+    elseif length(scenarios(tree)) <= 0
+        error("Given scenario tree has no scenarios specified. Make sure 'add_leaf' is being called on leaves of the scenario tree.")
+    end
+
+    psum = sum(values(tree.prob_map))
+    if psum > 1.0 || psum < 1.0
+        error("Total probability of scenarios in given scenario tree is $psum.")
+    end
 
     # Initialization
     if report > 0
@@ -117,11 +133,16 @@ function solve(tree::ScenarioTree,
     if report > 0
         println("Solving...")
     end
-    (niter, residual) = @timeit(timo, "Solution",
-                                hedge(phd, winf,
-                                      max_iter, atol, rtol,
-                                      report, save_residuals)
-                                )
+    (niter, abs_res, rel_res) = @timeit(timo, "Solution",
+                                        hedge(phd,
+                                              winf,
+                                              max_iter,
+                                              atol,
+                                              rtol,
+                                              report,
+                                              save_iterates,
+                                              save_residuals)
+                                        )
 
     # Post Processing
     if report > 0
@@ -135,7 +156,7 @@ function solve(tree::ScenarioTree,
         println(timo)
     end
 
-    return (niter, residual, obj, soln_df, phd)
+    return (niter, abs_res, rel_res, obj, soln_df, phd)
 end
 
 """
@@ -173,6 +194,17 @@ function solve_extensive(tree::ScenarioTree,
                          args::Tuple=(),
                          kwargs...
                          ) where {S <: AbstractSubproblem}
+
+    if length(scenarios(tree)) == 1
+        @warn("Given scenario tree indicates a deterministic problem (only one scenario).")
+    elseif length(scenarios(tree)) <= 0
+        error("Given scenario tree has no scenarios specified. Make sure 'add_leaf' is being called on leaves of the scenario tree.")
+    end
+
+    psum = sum(values(tree.prob_map))
+    if psum > 1.0 || psum < 1.0
+        error("Total probability of scenarios in given scenario tree is $psum.")
+    end
 
     model = build_extensive_form(tree,
                                  subproblem_constructor,

@@ -1,4 +1,15 @@
 
+#### Exceptions ####
+
+"""
+Exception indicating that the specified method is not implemented for an interface.
+"""
+struct UnimplementedError <: Exception
+    msg::String
+end
+
+#### Internal Types and Methods ####
+
 struct Indexer
     next_index::Dict{NodeID, Index}
     indices::Dict{NodeID, Dict{String, Index}}
@@ -40,49 +51,31 @@ function index(idxr::Indexer, nid::NodeID, name::String)::Index
     return idx
 end
 
-mutable struct VariableInfo
+mutable struct VariableData
     name::String
     xhat_id::XhatID
 end
 
-function VariableInfo(name::String,
+function VariableData(name::String,
                       nid::NodeID
-                      )::VariableInfo
-    return VariableInfo(name, nid, 0.0)
+                      )::VariableData
+    return VariableData(name, nid, 0.0)
 end
-
-# function id(vinfo::VariableInfo)::VariableID
-#     return vinfo.id
-# end
-
-# function value(vinfo::VariableInfo)::Float64
-#     return vinfo.value
-# end
-
-# function _generate_variable_info_map(idxr::Indexer,
-#                                      scen_tree::ScenarioTree
-#                                      )::Dict{VariableID,VariableInfo}
-#     # name_map = Dict{VariableID, String}()
-#     # for (nid, idx_map) in pairs(idxr.indices)
-#     #     my_node = node(scen_tree, nid)
-#     #     my_stage = stage(my_node)
-#     #     for s in scenario_bundle(my_node)
-#     #         for (name, idx) in pairs(idx_map)
-#     #             vid = VariableID(s, my_stage, idx)
-#     #             name_map[vid] = name
-#     #         end
-#     #     end
-#     # end
-#     # return name_map
-# end
 
 mutable struct HatVariable
     value::Float64 # Current value of variable
     vars::Set{VariableID} # All nonhat variable ids that contribute to this variable
+    is_integer::Bool # Flag indicating that the variable is integer (includes binary)
 end
 
-HatVariable()::HatVariable = HatVariable(0.0, Set{VariableID}())
-HatVariable(val::Float64, vid::VariableID) = HatVariable(val, Set{VariableID}([vid]))
+HatVariable(is_int::Bool)::HatVariable = HatVariable(0.0, Set{VariableID}(),is_int)
+function HatVariable(val::Float64,vid::VariableID, is_int::Bool)
+    return HatVariable(val, Set{VariableID}([vid]), is_int)
+end
+
+function is_integer(a::HatVariable)::Bool
+    return a.is_integer
+end
 
 function value(a::HatVariable)::Float64
     return a.value
@@ -163,48 +156,101 @@ function retrieve_variable_value(sinfo::ScenarioInfo, vid::VariableID)::Float64
     return vi
 end
 
+struct PHIterate
+    xhat::Dict{XhatID,Float64}
+    x::Dict{VariableID,Float64}
+    w::Dict{VariableID,Float64}
+end
+
+struct PHIterateHistory
+    iterates::Dict{Int,PHIterate}
+end
+
+function PHIterateHistory()
+    return PHIterateHistory(Dict{Int,PHIterate}())
+end
+
+function _save_iterate(phih::PHIterateHistory,
+                       iter::Int,
+                       phi::PHIterate,
+                       )::Nothing
+    phih.iterates[iter] = phi
+    return
+end
+
+struct PHResidual
+    abs_res::Float64
+    rel_res::Float64
+    xhat_sq::Float64
+    x_sq::Float64
+end
+
 struct PHResidualHistory
-    residuals::Dict{Int,Float64}
+    residuals::Dict{Int,PHResidual}
 end
 
 function PHResidualHistory()::PHResidualHistory
-    return PHResidualHistory(Dict{Int,Float64}())
+    return PHResidualHistory(Dict{Int,PHResidual}())
 end
 
 function residual_vector(phrh::PHResidualHistory)::Vector{Float64}
     if length(phrh.residuals) > 0
         max_iter = maximum(keys(phrh.residuals))
-        return [phrh.residuals[k] for k in sort!(collect(keys(phrh.residuals)))]
+        return [phrh.residuals[k].abs_res for k in sort!(collect(keys(phrh.residuals)))]
     else
         return Vector{Float64}()
     end
 end
 
-function save_residual(phrh::PHResidualHistory, iter::Int, res::Float64)::Nothing
-    @assert(!(iter in keys(phrh.residuals)))
+function relative_residual_vector(phrh::PHResidualHistory)::Vector{Float64}
+    if length(phrh.residuals) > 0
+        max_iter = maximum(keys(phrh.residuals))
+        return [phrh.residuals[k].rel_res for k in sort!(collect(keys(phrh.residuals)))]
+    else
+        return Vector{Float64}()
+    end
+end
+
+function residual_components(phrh::PHResidualHistory)::NTuple{2,Vector{Float64}}
+    if length(phrh.residuals) > 0
+        max_iter = maximum(keys(phrh.residuals))
+        sorted_keys = sort!(collect(keys(phrh.residuals)))
+        xhat_sq = [phrh.residuals[k].xhat_sq for k in sorted_keys]
+        x_sq = [phrh.residuals[k].x_sq for k in sorted_keys]
+        return (xhat_sq, x_sq)
+    else
+        return (Vector{Float64}(), Vector{Float64}())
+    end
+end
+
+function _save_residual(phrh::PHResidualHistory, iter::Int, res::PHResidual)::Nothing
+    # @assert(!(iter in keys(phrh.residuals)))
     phrh.residuals[iter] = res
     return
 end
 
-struct PHData
-    r::Float64
+#### Primary PH Data Structure ####
+
+struct PHData{R <: AbstractPenaltyParameter}
+    r::R
     scenario_tree::ScenarioTree
     scenario_map::Dict{ScenarioID, ScenarioInfo}
     xhat::Dict{XhatID, HatVariable}
-    variable_data::Dict{VariableID, VariableInfo}
+    variable_data::Dict{VariableID, VariableData}
     indexer::Indexer
-    residual_info::PHResidualHistory
+    iterate_history::PHIterateHistory
+    residual_history::PHResidualHistory
     time_info::TimerOutputs.TimerOutput
 end
 
-function PHData(r::Real,
+function PHData(r::AbstractPenaltyParameter,
                 tree::ScenarioTree,
                 scen_proc_map::Dict{Int, Set{ScenarioID}},
-                var_map::Dict{ScenarioID, Dict{VariableID, String}},
+                var_map::Dict{ScenarioID, Dict{VariableID, VariableInfo}},
                 time_out::TimerOutputs.TimerOutput
                 )::PHData
 
-    var_data = Dict{VariableID,VariableInfo}()
+    var_data = Dict{VariableID,VariableData}()
     xhat_dict = Dict{XhatID, HatVariable}()
     idxr = Indexer()
 
@@ -215,18 +261,18 @@ function PHData(r::Real,
             branch_ids = Set{VariableID}()
             leaf_ids = Set{VariableID}()
 
-            for (vid, vname) in pairs(var_map[scen])
+            for (vid, vinfo) in pairs(var_map[scen])
 
                 vnode = node(tree, vid.scenario, vid.stage)
 
                 if vnode == nothing
-                    error("Unable to locate node for variable id $vid.")
+                    error("Unable to locate scenario tree node for variable '$(vinfo.name)' occuring in scenario $(vid.scenario) and stage $(vid.stage).")
                 end
 
-                idx = index(idxr, vnode.id, vname)
+                idx = index(idxr, vnode.id, vinfo.name)
                 xhid = XhatID(vnode.id, idx)
-                var_info = VariableInfo(vname, xhid)
-                var_data[vid] = var_info
+                vdata = VariableData(vinfo.name, xhid)
+                var_data[vid] = vdata
 
                 if is_leaf(vnode)
 
@@ -236,8 +282,12 @@ function PHData(r::Real,
 
                     push!(branch_ids, vid)
 
-                    if !haskey(xhat_dict, xhid)
-                        xhat_dict[xhid] = HatVariable()
+                    if haskey(xhat_dict, xhid)
+                        if is_integer(xhat_dict[xhid]) != vinfo.is_integer
+                            error("Variable '$(vinfo.name)' must be integer or non-integer in all scenarios in which it is used.")
+                        end
+                    else
+                        xhat_dict[xhid] = HatVariable(vinfo.is_integer)
                     end
                     add_variable(xhat_dict[xhid], vid)
 
@@ -252,24 +302,57 @@ function PHData(r::Real,
         end
     end
 
-    return PHData(float(r),
+    return PHData(r,
                   tree,
                   scenario_map,
                   xhat_dict,
                   var_data,
                   idxr,
+                  PHIterateHistory(),
                   PHResidualHistory(),
                   time_out,
                   )
 end
 
-function residuals(phd::PHData)::Vector{Float64}
-    return residual_vector(phd.residual_info)
+function Base.show(io::IO, phd::PHData)
+    print(io, "ProgressiveHedging.jl data structure")
+    return
 end
 
-function save_residual(phd::PHData, iter::Int, res::Float64)::Nothing
-    save_residual(phd.residual_info, iter, res)
-    return
+function convert_to_variable_ids(phd::PHData, xid::XhatID)
+    return variables(phd.xhat[xid])
+end
+
+function convert_to_xhat_id(phd::PHData, vid::VariableID)::XhatID
+    return phd.variable_data[vid].xhat_id
+end
+
+function is_leaf(phd::PHData, xhid::XhatID)::Bool
+    return is_leaf(phd.scenario_tree, xhid.node)
+end
+
+function name(phd::PHData, xid::XhatID)
+    return name(phd, first(convert_to_variable_ids(phd, xid)))
+end
+
+function ph_variables(phd::PHData)::Dict{XhatID,HatVariable}
+    return phd.xhat
+end
+
+function probability(phd::PHData, scenario::ScenarioID)::Float64
+    return phd.scenario_map[scenario].prob
+end
+
+function residuals(phd::PHData)::Vector{Float64}
+    return residual_vector(phd.residual_history)
+end
+
+function residual_components(phd::PHData)::NTuple{2,Vector{Float64}}
+    return residual_components(phd.residual_history)
+end
+
+function relative_residuals(phd::PHData)::Vector{Float64}
+    return relative_residual_vector(phd.residual_history)
 end
 
 function stage_id(phd::PHData, xid::XhatID)::StageID
@@ -282,12 +365,4 @@ end
 
 function scenarios(phd::PHData)::Set{ScenarioID}
     return scenarios(phd.scenario_tree)
-end
-
-function convert_to_variable_ids(phd::PHData, xid::XhatID)
-    return variables(phd.xhat[xid])
-end
-
-function convert_to_xhat_id(phd::PHData, vid::VariableID)::XhatID
-    return phd.variable_data[vid].xhat_id
 end

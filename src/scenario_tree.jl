@@ -27,18 +27,22 @@ struct ScenarioNode
     id::NodeID # id of this node
     stage::StageID # stage of this node
     scenario_bundle::Set{ScenarioID} # scenarios that are indistiguishable
-    parent::Union{Nothing, ScenarioNode}
+    parent::Union{Nothing,ScenarioNode}
     children::Set{ScenarioNode}
 end
 
-Base.show(io::IO, sn::ScenarioNode) = print("ScenarioNode($(sn.id), $(sn.stage), $(sn.scenario_bundle))")
+Base.show(io::IO, sn::ScenarioNode) = print(io, "ScenarioNode($(sn.id), $(sn.stage), $(sn.scenario_bundle))")
 
-function _add_child(parent::ScenarioNode, child::ScenarioNode)::Nothing
+function _add_child(parent::ScenarioNode,
+                    child::ScenarioNode,
+                    )::Nothing
     push!(parent.children, child)
     return
 end
 
-function _create_node(gen::Generator, parent::Union{Nothing, ScenarioNode})::ScenarioNode
+function _create_node(gen::Generator,
+                      parent::Union{Nothing,ScenarioNode}
+                      )::ScenarioNode
     nid = _generate_node_id(gen)
     stage = (parent==nothing ? StageID(1) : _increment(parent.stage))
     sn = ScenarioNode(nid, stage,
@@ -77,7 +81,9 @@ struct ScenarioTree
     id_gen::Generator
 end
 
-function ScenarioTree(root_node::ScenarioNode, gen::Generator)::ScenarioTree
+function ScenarioTree(root_node::ScenarioNode,
+                      gen::Generator,
+                      )::ScenarioTree
 
     tree_map = Dict{NodeID, ScenarioNode}()
     prob_map = Dict{ScenarioID, Float64}()
@@ -134,13 +140,18 @@ end
 
 Add a node to the ScenarioTree `tree` with parent node `parent`. Return the added node. If the node to add is a leaf, use `add_leaf` instead.
 """
-function add_node(tree::ScenarioTree, parent::ScenarioNode)::ScenarioNode
+function add_node(tree::ScenarioTree,
+                  parent::ScenarioNode,
+                  )::ScenarioNode
     new_node = _create_node(tree.id_gen, parent)
     _add_node(tree, new_node)
     return new_node
 end
 
-function _add_scenario_to_bundle(tree::ScenarioTree, nid::NodeID, scid::ScenarioID)::Nothing
+function _add_scenario_to_bundle(tree::ScenarioTree,
+                                 nid::NodeID,
+                                 scid::ScenarioID,
+                                 )::Nothing
     push!(tree.tree_map[nid].scenario_bundle, scid)
     return
 end
@@ -150,8 +161,15 @@ end
 
 Add a leaf to the ScenarioTree `tree` with parent node `parent`. The probability of this scenario occuring is given by `probability`. Returns the ScenarioID representing the scenario.
 """
-function add_leaf(tree::ScenarioTree, parent::ScenarioNode, probability::R
+function add_leaf(tree::ScenarioTree,
+                  parent::ScenarioNode,
+                  probability::R,
                   )::ScenarioID where R <: Real
+
+    if probability < 0.0 || probability > 1.0
+        error("Invalid probability value: $probability")
+    end
+
     leaf = add_node(tree, parent)
     scid = _assign_scenario_id(tree)
     tree.prob_map[scid] = probability
@@ -162,6 +180,7 @@ function add_leaf(tree::ScenarioTree, parent::ScenarioNode, probability::R
         _add_scenario_to_bundle(tree, id, scid)
         node = node.parent
     end
+
     return scid
 end
 

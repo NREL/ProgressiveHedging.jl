@@ -9,7 +9,7 @@
         JuMP.set_optimizer_attribute(model, string(key), value)
     end
 
-    scid = PH._value(scenario_id)
+    scid = PH.value(scenario_id)
     
     c = [1.0, 10.0, 0.01]
     d = 7.0
@@ -72,10 +72,10 @@
 
     JuMP.@objective(model, Min, obj)
 
-    vdict = Dict{PH.StageID, Vector{JuMP.VariableRef}}([PH.stid(1) => stage1,
-                                                        PH.stid(2) => stage2,
-                                                        PH.stid(3) => stage3,
-                                                        ])
+    vdict = Dict{PH.StageID, Vector{JuMP.VariableRef}}(PH.stid(1) => stage1,
+                                                       PH.stid(2) => stage2,
+                                                       PH.stid(3) => stage3,
+                                                       )
     
     return JuMPSubproblem(model, scenario_id, vdict)
 end
@@ -109,4 +109,65 @@ function timeout_wait(t::Task, limit::Real=10, interval::Real=1)
         end
     end
     return success
+end
+
+function invert_map(my_map::Dict{A,B})::Dict{B,A} where {A,B}
+    inv_map = Dict{B,A}()
+    for (k,v) in pairs(my_map)
+        inv_map[v] = k
+    end
+    @assert length(inv_map) == length(my_map)
+    return inv_map
+end
+
+function two_stage_model(scenario_id::PH.ScenarioID)
+    model = JuMP.Model(()->Ipopt.Optimizer())
+    JuMP.set_optimizer_attribute(model, "print_level", 0)
+    JuMP.set_optimizer_attribute(model, "tol", 1e-12)
+    JuMP.set_optimizer_attribute(model, "acceptable_tol", 1e-12)
+
+    scen = PH.value(scenario_id)
+
+    ref = JuMP.@variable(model, x >= 0.0)
+    stage1 = [ref]
+    push!(stage1, JuMP.@variable(model, 0.0 <= u <= 1.0))
+
+    ref = JuMP.@variable(model, y >= 0.0)
+    stage2 = [ref]
+
+    val = scen == 0 ? 11.0 : 4.0
+
+    JuMP.@constraint(model, x + y + u == val)
+
+    c_y = scen == 0 ? 1.5 : 2.0
+    JuMP.@objective(model, Min, 1.0*x + c_y * y)
+
+    return PH.JuMPSubproblem(model, scenario_id, Dict(PH.stid(1) => stage1,
+                                                      PH.stid(2) => stage2)
+                             )
+end
+
+if isdefined(Main, :Xpress)
+    function two_stage_int(scenario_id::PH.ScenarioID)
+        model = JuMP.Model(()->Xpress.Optimizer())
+        JuMP.set_optimizer_attribute(model, "OUTPUTLOG", 0)
+
+        scen = PH.value(scenario_id)
+
+        ref = JuMP.@variable(model, 4 <= k <= 10, Int)
+        stage1 = [ref]
+
+        ref = JuMP.@variable(model, y)
+        stage2 = [ref]
+
+        val = 2.0 * scen
+        JuMP.@constraint(model, k + y == val)
+
+        c_y = (scen % 2 == 0 ? 1.0 : 5.0)
+        JuMP.@objective(model, Min, c_y * y^2 + 2.0*k)
+
+        return PH.JuMPSubproblem(model, scenario_id, Dict(PH.stid(1) => stage1,
+                                                          PH.stid(2) => stage2)
+                                 )
+    end
 end

@@ -20,21 +20,19 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
                                  scen_tree::ScenarioTree,
                                  constructor::Function,
                                  constructor_args::Tuple,
-                                 r::R,
+                                 r::AbstractPenaltyParameter,
                                  warm_start::Bool;
                                  kwargs...
-                                 ) where R <: Real
+                                 )
 
     # Send initialization commands
     @sync for (wid, scenarios) in pairs(sp_map)
-        # println("......initializing worker $wid with scenarios $scenarios")
-        # flush(stdout)
         @async _send_message(wi,
                              wid,
                              Initialize(constructor,
                                         constructor_args,
                                         (;kwargs...),
-                                        r,
+                                        typeof(r),
                                         scenarios,
                                         scen_tree,
                                         warm_start)
@@ -42,29 +40,21 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
     end
 
     # Wait for and process initialization replies
-    var_maps = Dict{ScenarioID,Dict{VariableID,String}}()
-    for s in scenarios(scen_tree)
-        var_maps[s] = Dict{VariableID,String}()
-    end
-
+    var_maps = Dict{ScenarioID,Dict{VariableID,VariableInfo}}()
     remaining_maps = copy(scenarios(scen_tree))
-    msg_waiting = Vector{ReportBranch}()
+    msg_waiting = Vector{Union{ReportBranch,PenaltyInfo}}()
 
     while !isempty(remaining_maps)
 
-        msg = _retrieve_message_type(wi, Union{ReportBranch,VariableMap})
+        msg = _retrieve_message_type(wi, Union{ReportBranch,VariableMap,PenaltyInfo})
 
-        if typeof(msg) <: ReportBranch
+        if typeof(msg) <: ReportBranch || typeof(msg) <: PenaltyInfo
 
-            # println("Got branch report for $(msg.scen).")
-            # _copy_values(init_vals[msg.scen], msg.vals)
-            # delete!(remaining_vals, msg.scen)
             push!(msg_waiting, msg)
 
         elseif typeof(msg) <: VariableMap
 
-            # println("Got variable map for $(msg.scen).")
-            var_maps[msg.scen] = msg.var_names
+            var_maps[msg.scen] = msg.var_info
             delete!(remaining_maps, msg.scen)
 
         else
@@ -75,7 +65,7 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
 
     end
 
-    # Put any initial value messages back
+    # Put any other messages back
     for msg in msg_waiting
         put!(wi.output, msg)
     end
@@ -84,23 +74,122 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
 end
 
 function _set_initial_values(phd::PHData,
-                             winf::WorkerInf,
-                             )::Nothing
+                             wi::WorkerInf,
+                             )::Float64
 
-    _process_reports(phd, winf, ReportBranch)
+    # Wait for and process mapping replies
+    remaining_init = copy(scenarios(phd.scenario_tree))
+    msg_waiting = Vector{PenaltyInfo}()
 
-    return
+    while !isempty(remaining_init)
+
+        msg = _retrieve_message_type(wi, Union{ReportBranch,PenaltyInfo})
+
+        if typeof(msg) <: PenaltyInfo
+
+            push!(msg_waiting, msg)
+
+        elseif typeof(msg) <: ReportBranch
+
+            _verify_report(msg)
+            _update_values(phd, msg)
+
+            delete!(remaining_init, msg.scen)
+
+        else
+
+            error("Recieved unexpected message of type $(typeof(msg)).")
+
+        end
+
+    end
+
+    # Put any penalty messages back
+    for msg in msg_waiting
+        put!(wi.output, msg)
+    end
+
+    # Start computation of initial PH values -- W values are computed at
+    # the end of `_set_penalty_parameter`.
+    xhat_res_sq = compute_and_save_xhat(phd)
+
+    return xhat_res_sq
+end
+
+function _set_penalty_parameter(phd::PHData,
+                                wi::WorkerInf,
+                                )::Float64
+
+    if is_subproblem_dependent(typeof(phd.r))
+
+        # Wait for and process penalty parameter messages
+        remaining_maps = copy(scenarios(phd.scenario_tree))
+
+        while !isempty(remaining_maps)
+
+            msg = _retrieve_message_type(wi, PenaltyInfo)
+
+            process_penalty_subproblem(phd.r, phd, msg.scen, msg.penalty)
+
+            delete!(remaining_maps, msg.scen)
+
+        end
+
+    end
+
+    if is_initial_value_dependent(typeof(phd.r))
+
+        # Compute penalty parameter values
+        process_penalty_initial_value(phd.r, phd)
+
+    end
+
+    if is_variable_dependent(typeof(phd.r))
+
+        # Convert dictionary to subproblem format
+        pen_map = Dict{ScenarioID,Dict{VariableID,Float64}}(
+            s => Dict{VariableID,Float64}() for s in scenarios(phd)
+        )
+
+        for (xhid,penalty) in pairs(penalty_map(phd.r))
+            for vid in convert_to_variable_ids(phd, xhid)
+                pen_map[scenario(vid)][vid] = penalty
+            end
+        end
+
+    else
+
+        pen_map = Dict{ScenarioID,Float64}(
+            s => get_penalty_value(phd.r) for s in scenarios(phd)
+        )
+
+    end
+
+    # Send penalty parameter values to workers
+    @sync for (scid, sinfo) in pairs(phd.scenario_map)
+        @async begin
+            wid = sinfo.pid
+            penalty = pen_map[scid]
+            _send_message(wi, wid, PenaltyInfo(scid, penalty))
+        end
+    end
+
+    # Complete computation of initial PH values -- Xhat values are computed at
+    # the end of `_set_initial_values`.
+    x_res_sq = compute_and_save_w(phd)
+
+    return x_res_sq
 end
 
 function initialize(scen_tree::ScenarioTree,
                     model_constructor::Function,
-                    r::R,
+                    r::AbstractPenaltyParameter,
                     warm_start::Bool,
                     timo::TimerOutputs.TimerOutput,
                     report::Int,
                     constructor_args::Tuple,;
                     kwargs...
-                    )::Tuple{PHData,WorkerInf} where R <: Real
+                    )::Tuple{PHData,WorkerInf}
 
     # Assign scenarios to processes
     scen_proc_map = assign_scenarios_to_procs(scen_tree)
@@ -134,19 +223,32 @@ function initialize(scen_tree::ScenarioTree,
                       )
 
     # Construct master ph object
-    ph_data = @timeit(timo,
-                      "Other",
-                      PHData(r,
-                             scen_tree,
-                             scen_proc_map,
-                             var_map,
-                             timo)
-                      )
+    phd = @timeit(timo,
+                  "Other",
+                  PHData(r,
+                         scen_tree,
+                         scen_proc_map,
+                         var_map,
+                         timo)
+                  )
 
     # Initial values
-    _set_initial_values(ph_data, worker_inf)
+    xhat_res_sq = @timeit(timo,
+                          "Initial Values",
+                          _set_initial_values(phd, worker_inf)
+                          )
 
-    return (ph_data, worker_inf)
+    # Check for penalty parameter update
+    x_res_sq = @timeit(timo,
+                       "Penalty Parameter",
+                       _set_penalty_parameter(phd,
+                                              worker_inf)
+                       )
+
+    # Save residual
+    _save_residual(phd, -1, xhat_res_sq, x_res_sq, 0.0, 0.0)
+
+    return (phd, worker_inf)
 end
 
 function build_extensive_form(tree::ScenarioTree,

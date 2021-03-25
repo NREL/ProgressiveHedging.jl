@@ -79,8 +79,8 @@ function retrieve_soln(phd::PHData)::DataFrames.DataFrame
 
         push!(vars, name(phd, vid))
         push!(vals, xhat_value(phd, xid))
-        push!(stages, _value(stage_id(phd, xid)))
-        push!(scens, stringify(_value.(scenario_bundle(phd, xid))))
+        push!(stages, value(stage_id(phd, xid)))
+        push!(scens, stringify(value.(scenario_bundle(phd, xid))))
 
     end
 
@@ -113,7 +113,8 @@ function retrieve_obj_value(phd::PHData)::Float64
         for (vid, x_val) in pairs(sinfo.branch_vars)
             w_val = sinfo.w_vars[vid]
             xhat_val = xhat_value(phd, vid)
-            obj_s -= w_val * x_val + 0.5 * phd.r * (x_val - xhat_val)^2
+            r = get_penalty_value(phd.r, convert_to_xhat_id(phd, vid))
+            obj_s -= w_val * x_val + 0.5 * r * (x_val - xhat_val)^2
         end
 
         obj_value += sinfo.prob * obj_s
@@ -155,10 +156,10 @@ function retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
 
     for vid in sort!(collect(keys(variable_map)))
         push!(vars, name(phd, vid))
-        push!(vals, variable_map[vid].value)
-        push!(stage, _value(vid.stage))
-        push!(scenario, _value(vid.scenario))
-        push!(index, _value(vid.index))
+        push!(vals, variable_map[vid])
+        push!(stage, value(vid.stage))
+        push!(scenario, value(vid.scenario))
+        push!(index, value(vid.index))
     end
 
     soln_df = DataFrames.DataFrame(variable=vars, value=vals, stage=stage,
@@ -181,12 +182,11 @@ function retrieve_w(phd::PHData)::DataFrames.DataFrame
 
     for vid in sort!(collect(keys(variable_map)))
 
-        # push!(vars, "W_" * phd.scenario_map[vid.scenario].branch_vars[vid].name)
         push!(vars, "W_" * name(phd, vid))
         push!(vals, variable_map[vid])
-        push!(stage, _value(vid.stage))
-        push!(scenario, _value(vid.scenario))
-        push!(index, _value(vid.index))
+        push!(stage, value(vid.stage))
+        push!(scenario, value(vid.scenario))
+        push!(index, value(vid.index))
 
     end
 
@@ -206,4 +206,92 @@ end
 
 function index(n::INDEX)::Index
     return Index(INDEX(n))
+end
+
+function retrieve_xhat_history(phd::PHData)::DataFrames.DataFrame
+
+    xhat_df = nothing
+    iterates = phd.iterate_history.iterates
+
+    for iter in sort!(collect(keys(iterates)))
+
+        data = Dict{String,Any}("iteration" => iter)
+
+        for xhid in sort!(collect(keys(phd.xhat)))
+            if !is_leaf(phd, xhid)
+                vname = name(phd, xhid) * "_" * stringify(value.(scenario_bundle(phd, xhid)))
+                data[vname] = iterates[iter].xhat[xhid]
+            end
+        end
+
+        if xhat_df == nothing
+            xhat_df = DataFrames.DataFrame(data)
+        else
+            push!(xhat_df, data)
+        end
+    end
+
+    if xhat_df == nothing
+        xhat_df = DataFrames.DataFrame()
+    end
+
+    return xhat_df
+end
+
+function retrieve_no_hat_history(phd::PHData)::DataFrames.DataFrame
+
+    x_df = nothing
+    iterates = phd.iterate_history.iterates
+
+    for iter in sort!(collect(keys(iterates)))
+
+        current_iterate = iterates[iter]
+        data = Dict{String,Any}("iteration" => iter)
+
+        for vid in sort!(collect(keys(current_iterate.x)))
+            vname = name(phd, vid) * "_$(value(scenario(vid)))"
+            data[vname] = current_iterate.x[vid]
+        end
+
+        if x_df == nothing
+            x_df = DataFrames.DataFrame(data)
+        else
+            push!(x_df, data)
+        end
+    end
+
+    if x_df == nothing
+        x_df = DataFrames.DataFrame()
+    end
+
+    return x_df
+end
+
+function retrieve_w_history(phd::PHData)::DataFrames.DataFrame
+
+    w_df = nothing
+    iterates = phd.iterate_history.iterates
+
+    for iter in sort!(collect(keys(iterates)))
+
+        current_iterate = iterates[iter]
+        data = Dict{String,Any}("iteration" => iter)
+
+        for vid in sort!(collect(keys(current_iterate.w)))
+            vname = "W_" * name(phd, vid) * "_$(value(scenario(vid)))"
+            data[vname] = current_iterate.w[vid]
+        end
+
+        if w_df == nothing
+            w_df = DataFrames.DataFrame(data)
+        else
+            push!(w_df, data)
+        end
+    end
+
+    if w_df == nothing
+        w_df = DataFrames.DataFrame()
+    end
+
+    return w_df
 end

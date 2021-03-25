@@ -3,14 +3,19 @@ abstract type Message end
 
 struct Abort <: Message end
 
-struct Initialize <: Message
+struct Initialize{R <: AbstractPenaltyParameter} <: Message
     create_subproblem::Function
     create_subproblem_args::Tuple
     create_subproblem_kwargs::NamedTuple
-    r::Float64
+    r::Type{R}
     scenarios::Set{ScenarioID}
     scenario_tree::ScenarioTree
     warm_start::Bool
+end
+
+struct PenaltyInfo <: Message
+    scen::ScenarioID
+    penalty::Union{Float64,Dict{VariableID,Float64}}
 end
 
 struct Ping <: Message end
@@ -38,5 +43,5 @@ struct ShutDown <: Message end
 
 struct VariableMap <: Message
     scen::ScenarioID
-    var_names::Dict{VariableID,String}
+    var_info::Dict{VariableID,VariableInfo} # VariableInfo definition in subproblem.jl
 end
