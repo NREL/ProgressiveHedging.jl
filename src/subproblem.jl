@@ -1,5 +1,13 @@
 #### PH Types Used in Interface ####
 
+"""
+Struct containing all information needed by PH about a variable (along with the variable id) to run the PH algorithm.
+
+**Fields**
+
+* `name::String` : User specified name of the variable
+* `is_integer::Bool` : True if the variable is an integer or binary
+"""
 struct VariableInfo
     name::String
     is_integer::Bool # true if variable is integer or binary
@@ -31,6 +39,10 @@ To use the extensive form functionality, the concrete subtype must implement
 * `ef_copy_model(destination::JuMP.Model, original::<ConcreteSubtype>, scid::ScenarioID, scen_tree::ScenarioTree, node_dict::Dict{NodeID,Any})
 * `ef_node_dict_constructor(::Type{S}) where S <: AbstractSubproblem`
 See the help on the functions for more details. See JuMPSubproblem for an example using JuMP. Note that the extensive form model is always constructed as a `JuMP.Model` object.
+
+To use penalty parameter types other than `ScalarPenaltyParameter`, concrete subproblem types may also need to implement
+* `report_penalty_info(as::AbstractSubproblem, pp<:AbstractPenaltyParameter)::Dict{VariableID,Float64}`
+See the help on individual penalty parameter types and `report_penalty_info` for more details.
 """
 abstract type AbstractSubproblem end
 
@@ -76,7 +88,18 @@ function objective_value(as::AbstractSubproblem)::Float64
 end
 
 """
-TODO: Add documentation for this function!!!!
+    report_penalty_info(as::AbstractSubproblem,
+                        pp<:AbstractPenaltyParameter,
+                        )::Dict{VariableID,Float64}
+
+Returns mapping of variable to a value used to compute the penalty parameter.
+
+This function must be implemented for any concrete penalty parameter type for which `is_subproblem_dependent` returns true and any concrete subproblem type wishing to use that penalty parameter. The mapping must contain all subproblem values needed for processing by `process_penalty_subproblem`. The returned mapping is handed unaltered to `process_penalty_subproblem` as the `subproblem_dict` argument.
+
+**Arguments**
+
+*`as::AbstractSubproblem` : subproblem object (replace with appropriate type)
+*`pp<:AbstractPenaltyParameter` : penalty parameter type
 """
 function report_penalty_info(as::AbstractSubproblem,
                              pp::Type{P},
@@ -89,7 +112,7 @@ end
                          st::ScenarioTree
                          )::Dict{VariableID, VariableInfo}
 
-Assign `VariableID`s to all model variables and build a map from those ids to the variable name.
+Assign `VariableID`s to all model variables and build a map from those ids to the required variable information (e.g., variable name).  See `VariableInfo` help for details on required variable information.
 
 **Arguments**
 
