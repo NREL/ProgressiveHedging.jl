@@ -29,8 +29,6 @@ For more details, see the help on the individual functions.
 """
 abstract type AbstractPenaltyParameter end
 
-# TODO: Document these functions
-
 """
 Returns the constant penalty parameter value. Only required if `is_variable_dependent` returns false.
 """

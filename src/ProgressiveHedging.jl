@@ -11,17 +11,29 @@ using TimerOutputs
 
 #### Exports ####
 
-## Types
+# High-level Functions
+export solve, solve_extensive
 
+# Subproblems types and functions
 export AbstractSubproblem, JuMPSubproblem
 
-## Functions
-
-# Functions for solving the problem
-export solve, solve_extensive
-# Functions for building the scenario tree
+# Scenario tree types and functions
+export ScenarioTree
 export add_node, add_leaf, root, two_stage_tree
-# Functions for interacting with the returned PHData struct
+
+# ID types and functions
+export Index, NodeID, ScenarioID, StageID, VariableID, XhatID
+export index, scenario, stage, value
+
+# Penalty Parameter types and functions
+export AbstractPenaltyParameter
+export ProportionalPenaltyParameter, ScalarPenaltyParameter, SEPPenaltyParameter
+
+# PHData interaction function
+export convert_to_variable_ids, convert_to_xhat_id
+export is_leaf, name, ph_variables, probability
+
+# Result retrieval functions
 export residuals, retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_w
 
 #### Includes ####

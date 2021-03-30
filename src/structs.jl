@@ -62,6 +62,15 @@ function VariableData(name::String,
     return VariableData(name, nid, 0.0)
 end
 
+"""
+Struct for a consensus variable.
+
+**Fields**
+
+*`value::Float64` : Current value of the consensus variable
+*`vars::Set{VariableID}` : Individual scenario variables contributing to this consensus variable
+*`is_integer::Bool` : Flag indicating that this variable is an integer (or binary)
+"""
 mutable struct HatVariable
     value::Float64 # Current value of variable
     vars::Set{VariableID} # All nonhat variable ids that contribute to this variable
@@ -231,6 +240,9 @@ end
 
 #### Primary PH Data Structure ####
 
+"""
+Data structure used to store information and results for a stochastic programming problem.
+"""
 struct PHData{R <: AbstractPenaltyParameter}
     r::R
     scenario_tree::ScenarioTree
@@ -319,50 +331,120 @@ function Base.show(io::IO, phd::PHData)
     return
 end
 
-function convert_to_variable_ids(phd::PHData, xid::XhatID)
+"""
+    `convert_to_variable_ids(phd::PHData, xid::XhatID)::Set{VariableID}`
+
+Convert the given consensus variable id to the contributing individual subproblem variable ids.
+
+**Arguments**
+
+* `phd::PHData` : PH data structure for the corresponding problem
+* `xid::XhatID` : consensus variable id to convert
+"""
+function convert_to_variable_ids(phd::PHData, xid::XhatID)::Set{VariableID}
     return variables(phd.xhat[xid])
 end
 
+"""
+    `convert_to_xhat_id(phd::PHData, vid::VariableID)::XhatID`
+
+Convert the given `VariableID` to the consensus variable id (`XhatID`).
+
+**Arguments**
+
+* `phd::PHData` : PH data structure for the corresponding problem
+* `vid::VariableID` : variable id to convert
+"""
 function convert_to_xhat_id(phd::PHData, vid::VariableID)::XhatID
     return phd.variable_data[vid].xhat_id
 end
 
+"""
+    `is_leaf(phd::PHData, xhid::XhatID)::Bool`
+
+Returns true if the given consensus variable id belongs to a leaf vertex in the scenario tree.
+"""
 function is_leaf(phd::PHData, xhid::XhatID)::Bool
     return is_leaf(phd.scenario_tree, xhid.node)
 end
 
-function name(phd::PHData, xid::XhatID)
+"""
+    `name(phd::PHData, xid::XhatID)::String`
+
+Returns the name of the consensus variable for the given `XhatID`. The name is the same given to the individual scenario variables.
+"""
+function name(phd::PHData, xid::XhatID)::String
     return name(phd, first(convert_to_variable_ids(phd, xid)))
 end
 
+"""
+    `ph_variables(phd::PHData)::Dict{XhatID,HatVariable}`
+
+Returns the collection of consensus variables for the problem.
+"""
 function ph_variables(phd::PHData)::Dict{XhatID,HatVariable}
     return phd.xhat
 end
 
+"""
+    `probability(phd::PHData, scenario::ScenarioID)::Float64`
+
+Returns the probability of the given scenario.
+"""
 function probability(phd::PHData, scenario::ScenarioID)::Float64
     return phd.scenario_map[scenario].prob
 end
 
+"""
+    `residuals(phd::PHData)::Vector{Float64}`
+
+Returns the absolute residuals at the iterations specified by the user.
+"""
 function residuals(phd::PHData)::Vector{Float64}
     return residual_vector(phd.residual_history)
 end
 
+"""
+    `residual_components(phd::PHData)::NTuple{2,Vector{Float64}}`
+
+Returns the components of the absolute residual at the iterations specified by the user.
+"""
 function residual_components(phd::PHData)::NTuple{2,Vector{Float64}}
     return residual_components(phd.residual_history)
 end
 
+"""
+    `relative_residuals(phd::PHData)::Vector{Float64}`
+
+Returns the relative residuals at the iterations specified by the user.
+"""
 function relative_residuals(phd::PHData)::Vector{Float64}
     return relative_residual_vector(phd.residual_history)
 end
 
-function stage_id(phd::PHData, xid::XhatID)::StageID
-    return phd.scenario_tree.tree_map[xid.node].stage
-end
+"""
+    `scenario_bundle(phd::PHData, xid::XhatID)::Set{ScenarioID}`
 
+Returns the scenarios contributing to the consensus variable associated with `xid`.
+"""
 function scenario_bundle(phd::PHData, xid::XhatID)::Set{ScenarioID}
     return scenario_bundle(phd.scenario_tree, xid.node)
 end
 
+"""
+    `scenarios(phd::PHData)::Set{ScenarioID}`
+
+Returns the set of all scenarios for the stochastic problem.
+"""
 function scenarios(phd::PHData)::Set{ScenarioID}
     return scenarios(phd.scenario_tree)
+end
+
+"""
+    `stage_id(phd::PHData, xid::XhatID)::StageID`
+
+Returns the `StageID` in which the given consensus variable is.
+"""
+function stage_id(phd::PHData, xid::XhatID)::StageID
+    return phd.scenario_tree.tree_map[xid.node].stage
 end

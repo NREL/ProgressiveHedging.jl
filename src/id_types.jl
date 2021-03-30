@@ -81,7 +81,7 @@ function Base.isless(a::VariableID, b::VariableID)
 end
 
 """
-Unique identifier for hat variables.  Used internally by PH.
+Unique identifier for consensus variables. The scenario variables being driven to consensus with this variable is given by `convert_to_variable_ids`.
 """
 struct XhatID
     node::NodeID
