@@ -198,6 +198,17 @@ function objective_coefficients(js::JuMPSubproblem,
     return pen_dict
 end
 
+function fix_variables(js::JuMPSubproblem,
+                       vids::Dict{VariableID,Float64}
+                       )::Nothing
+
+    for (vid, val) in pairs(vids)
+        JuMP.fix(js.vars[vid], val, force=true)
+    end
+
+    return
+end
+
 ## JuMPSubproblem Internal Functions ##
 
 function _build_var_info(vref::JuMP.VariableRef)

@@ -33,13 +33,20 @@ struct ReportLeaf <: Message
     vals::Dict{VariableID,Float64}
 end
 
+struct ShutDown <: Message end
+
 struct Solve <: Message
     scen::ScenarioID
     w_vals::Dict{VariableID,Float64}
     xhat_vals::Dict{VariableID,Float64}
 end
 
-struct ShutDown <: Message end
+struct SubproblemAction <: Message
+    scen::ScenarioID
+    action::Function
+    args::Tuple
+    kwargs::NamedTuple
+end
 
 struct VariableMap <: Message
     scen::ScenarioID

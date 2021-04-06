@@ -232,7 +232,7 @@ function process_penalty_initial_value(r::SEPPenaltyParameter,
                                        phd,
                                        )::Nothing
 
-    for (xhid, xhat) in pairs(ph_variables(phd))
+    for (xhid, xhat) in pairs(consensus_variables(phd))
 
         if is_integer(xhat)
 

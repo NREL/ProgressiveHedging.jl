@@ -14,12 +14,9 @@ using TimerOutputs
 # High-level Functions
 export solve, solve_extensive
 
-# Subproblems types and functions
-export AbstractSubproblem, JuMPSubproblem
-
-# Scenario tree types and functions
-export ScenarioTree
-export add_node, add_leaf, root, two_stage_tree
+# Callbacks
+export Callback
+export variable_reduction
 
 # ID types and functions
 export Index, NodeID, ScenarioID, StageID, VariableID, XhatID
@@ -36,6 +33,13 @@ export is_leaf, name, ph_variables, probability
 # Result retrieval functions
 export residuals, retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_w
 
+# Scenario tree types and functions
+export ScenarioTree
+export add_node, add_leaf, root, two_stage_tree
+
+# Subproblems types and functions
+export AbstractSubproblem, JuMPSubproblem
+
 #### Includes ####
 
 include("id_types.jl")
@@ -46,15 +50,17 @@ include("subproblem.jl")
 include("jumpsubproblem.jl")
 
 include("message.jl")
-
-include("structs.jl")
 include("worker.jl")
 include("worker_management.jl")
+
+include("structs.jl")
 
 include("utils.jl")
 
 include("algorithm.jl")
 include("setup.jl")
+
+include("callbacks.jl")
 
 #### Functions ####
 
@@ -70,17 +76,18 @@ include("setup.jl")
           save_iterates::Int=0,
           save_residuals::Bool=false,
           timing::Bool=true,
+          callbacks::Vector{Callback}=Vector{Callback}(),
           args::Tuple=(),
           kwargs...)
 
-Solve given problem using Progressive Hedging.
+Solve the stochastic programming problem described by `tree` and the models created by `subproblem_constructor` using Progressive Hedging.
 
 **Arguments**
 
 * `tree::ScenararioTree` : Scenario tree describing the structure of the problem to be solved.
-* `subproblem_constructor::Function` : User created function to construct a subproblem. Should accept a `ScenarioID` (a unique identifier for each scenario subproblem) as an argument and returns a subtype of `AbstractSubproblem` specified by `subproblem_type`.
-* `r<:Real` : Parameter to use on quadratic penalty term.
-* `other_args` : Other arguments that should be passed to `subproblem_constructor`. See also keyword arguments `args` and `kwargs`
+* `subproblem_constructor::Function` : User created function to construct a subproblem. Should accept a `ScenarioID` (a unique identifier for each scenario subproblem) as an argument and returns a subtype of `AbstractSubproblem`.
+* `r<:AbstractPenaltyParameter` : PH penalty parameter
+* `other_args` : Other arguments that should be passed to `subproblem_constructor`. See also keyword arguments `args` and `kwargs`.
 
 **Keyword Arguments**
 
@@ -92,6 +99,7 @@ Solve given problem using Progressive Hedging.
 * `save_residuals::Int` : Save PH residuals every `save_residuals` steps. Any value <= 0 disables saving residuals. Defaults to 0.
 * `timing::Bool` : Flag indicating whether or not to record timing information. Defaults to true.
 * `warm_start::Bool` : Flag indicating that solver should be "warm started" by using the previous solution as the starting point (not compatible with all solvers)
+* `callbacks::Vector{Callback}` : Collection of `Callback` structs to call after each PH iteration. See `Callback` struct for more info. Defaults to empty vector.
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
 * `kwargs` : Any keyword arguments not specified here that need to be passed to `subproblem_constructor`.  See also `other_args` and `args`.
 """
@@ -107,6 +115,7 @@ function solve(tree::ScenarioTree,
                save_residuals::Int=0,
                timing::Bool=true,
                warm_start::Bool=false,
+               callbacks=Vector{Callback}(),
                args::Tuple=(),
                kwargs...
                ) where {R <: AbstractPenaltyParameter}
@@ -140,6 +149,11 @@ function solve(tree::ScenarioTree,
                                      (other_args...,args...);
                                      kwargs...)
                           )
+
+    for cb in callbacks
+        _add_callback(phd, cb)
+        cb.initialize(cb.ext, phd)
+    end
 
     # Solution
     if report > 0
