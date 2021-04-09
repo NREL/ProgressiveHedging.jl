@@ -141,3 +141,51 @@ end
     @test cb_ext[:iter] == 1
 
 end
+
+@testset "Variable Fixing Callback" begin
+
+    phd = fake_phdata(3, 4; add_leaves=false)
+    winf = fake_worker_info()
+    nscen = length(PH.scenarios(phd))
+    lag = 2
+
+    PH._add_callback(phd, PH.variable_fixing(lag=lag))
+
+    phd.scenario_map[PH.scid(0)].branch_vars[PH.VariableID(PH.scid(0), PH.stid(1), PH.index(1))] = -1.0
+    PH.compute_and_save_xhat(phd)
+
+    for niter in 1:(2*lag*nscen)
+        PH._execute_callbacks(phd, winf, niter)
+    end
+    cb_ext = phd.callbacks[1].ext
+
+    for (xhid, xhat) in pairs(PH.consensus_variables(phd))
+        if PH.name(phd, xhid) == "a1"
+            @test !(xhid in cb_ext[:fixed])
+        else
+            @test xhid in cb_ext[:fixed]
+        end
+    end
+
+    msg_count = 0
+    while isready(winf.inputs[1])
+
+        msg = take!(winf.inputs[1])
+        msg_count += 1
+
+        @test typeof(msg) == PH.SubproblemAction
+        @test string(msg.action) == "fix_variables"
+
+        s = msg.scen
+        value_dict = msg.args[1]
+
+        for (vid, value) in pairs(value_dict)
+            xhid = PH.convert_to_xhat_id(phd, vid)
+            xhat = phd.xhat[xhid]
+            @test value == PH.value(xhat)
+            @test xhid in cb_ext[:fixed]
+        end
+    end
+
+    @test msg_count == nscen
+end

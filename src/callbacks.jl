@@ -2,17 +2,17 @@
 
 #### Canned Callbacks ####
 
-function variable_reduction(; lag=2, eq_tol=1e-8)::Callback
+function variable_fixing(; lag=2, eq_tol=1e-8)::Callback
     ext = Dict{Symbol,Any}()
     ext[:lag] = lag
     ext[:eq_tol] = eq_tol
-    return Callback("variable_reduction",
-                    _variable_reduction,
-                    _variable_reduction_init,
+    return Callback("variable_fixing",
+                    _variable_fixing,
+                    _variable_fixing_init,
                     ext)
 end
 
-function _variable_reduction_init(external::Dict{Symbol,Any}, phd::PHData)
+function _variable_fixing_init(external::Dict{Symbol,Any}, phd::PHData)
 
     # Between iterations
     external[:value_count] = Dict{XhatID,Int}(
@@ -26,10 +26,10 @@ function _variable_reduction_init(external::Dict{Symbol,Any}, phd::PHData)
     return
 end
 
-function _variable_reduction(external::Dict{Symbol,Any},
-                             phd::PHData,
-                             winf::WorkerInf,
-                             niter::Int)::Bool
+function _variable_fixing(external::Dict{Symbol,Any},
+                          phd::PHData,
+                          winf::WorkerInf,
+                          niter::Int)::Bool
 
     lag = external[:lag]
     nscen = length(scenarios(phd))

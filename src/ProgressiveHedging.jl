@@ -152,7 +152,6 @@ function solve(tree::ScenarioTree,
 
     for cb in callbacks
         _add_callback(phd, cb)
-        cb.initialize(cb.ext, phd)
     end
 
     # Solution

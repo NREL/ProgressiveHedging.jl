@@ -349,6 +349,7 @@ function _add_callback(phd::PHData,
                        )::Nothing
 
     push!(phd.callbacks, cb)
+    cb.initialize(cb.ext, phd)
 
     return
 end

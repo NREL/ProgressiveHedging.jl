@@ -6,7 +6,7 @@ ch_size = 10
     worker_inf = PH._launch_workers(ch_size, ch_size)
 
     @test PH._number_workers(worker_inf) == 1
-    @test PH._isrunning(worker_inf)
+    @test PH._is_running(worker_inf)
 
     my_task = @async begin
         PH._send_message(worker_inf, myid(), Ping())
@@ -20,7 +20,7 @@ ch_size = 10
     end
     @test timeout_wait(my_task)
 
-    @test !PH._isrunning(worker_inf)
+    @test !PH._is_running(worker_inf)
     @test PH._number_workers(worker_inf) == 0
 end
 
