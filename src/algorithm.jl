@@ -15,7 +15,7 @@ function _execute_callbacks(phd::PHData, winf::WorkerInf, niter::Int)::Bool
     running = true
 
     for cb in phd.callbacks
-        running |= cb.h(cb.ext, phd, winf, niter)
+        running &= cb.h(cb.ext, phd, winf, niter)
     end
 
     return running

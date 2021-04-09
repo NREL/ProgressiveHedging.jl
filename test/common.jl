@@ -121,6 +121,7 @@ function invert_map(my_map::Dict{A,B})::Dict{B,A} where {A,B}
 end
 
 function two_stage_model(scenario_id::PH.ScenarioID)
+
     model = JuMP.Model(()->Ipopt.Optimizer())
     JuMP.set_optimizer_attribute(model, "print_level", 0)
     JuMP.set_optimizer_attribute(model, "tol", 1e-12)
