@@ -129,7 +129,7 @@ function solve(tree::ScenarioTree,
     end
 
     psum = sum(values(tree.prob_map))
-    if psum > 1.0 || psum < 1.0
+    if !isapprox(psum, 1.0, atol=1e-8)
         error("Total probability of scenarios in given scenario tree is $psum.")
     end
 
