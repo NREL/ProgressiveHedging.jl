@@ -291,6 +291,11 @@ function hedge(ph_data::PHData,
             : 1.0)
     residual = sqrt(xhat_res_sq + x_res_sq) / nsqrt
 
+    user_continue = @timeit(ph_data.time_info,
+                            "User Callbacks",
+                            _execute_callbacks(ph_data, worker_inf, niter)
+                            )
+
     if report_flag
         @printf("Iter: %4d   AbsR: %12.6e   RelR: %12.6e   Xhat: %12.6e   X: %12.6e\n",
                 niter, residual, residual / xmax,
