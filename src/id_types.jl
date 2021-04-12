@@ -53,6 +53,8 @@ end
 
 
 """
+    scenario(vid::VariableID)::ScenarioID
+
 Returns the `ScenarioID` of the specified `VariableID`.
 """
 function scenario(vid::VariableID)::ScenarioID
@@ -60,6 +62,8 @@ function scenario(vid::VariableID)::ScenarioID
 end
 
 """
+    stage(vid::VariableID)::StageID
+
 Returns the `StageID` of the specified `VariableID`.
 """
 function stage(vid::VariableID)::StageID
@@ -67,6 +71,8 @@ function stage(vid::VariableID)::StageID
 end
 
 """
+    index(vid::VariableID)::Index
+
 Returns the `Index` of the specified `VariableID`.
 """
 function index(vid::VariableID)::Index
@@ -78,6 +84,33 @@ function Base.isless(a::VariableID, b::VariableID)
             (a.stage == b.stage &&
              (a.scenario < b.scenario ||
               (a.scenario == b.scenario && a.index < b.index))))
+end
+
+"""
+    scid(n::$(SCENARIO_ID))::ScenarioID
+
+Create `ScenarioID` from `n`.
+"""
+function scid(n::SCENARIO_ID)::ScenarioID
+    return ScenarioID(SCENARIO_ID(n))
+end
+
+"""
+    stid(n::$(STAGE_ID))::StageID
+
+Create `StageID` from `n`.
+"""
+function stid(n::STAGE_ID)::StageID
+    return StageID(STAGE_ID(n))
+end
+
+"""
+    index(n::$(INDEX))::Index
+
+Create `Index` from `n`.
+"""
+function index(n::INDEX)::Index
+    return Index(INDEX(n))
 end
 
 """

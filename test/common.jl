@@ -217,15 +217,17 @@ function fake_phdata(nv1::Int, nv2::Int; add_leaves=true)
                     TimerOutputs.TimerOutput()
                     )
 
-    if add_leaves
-        # Create entries for leaf variables.  This is normally done at the end of the solve call
-        # but since we aren't calling that here...
-        for (scid, sinfo) in pairs(phd.scenario_map)
-            for vid in keys(sinfo.branch_vars)
-                xhid = PH.convert_to_xhat_id(phd, vid)
-                sinfo.branch_vars[vid] = var_val[scid][vid]
-                phd.xhat[xhid].value = var_val[scid][vid]
-            end
+    for (scid, sinfo) in pairs(phd.scenario_map)
+
+        for vid in keys(sinfo.branch_vars)
+            xhid = PH.convert_to_xhat_id(phd, vid)
+            sinfo.branch_vars[vid] = var_val[scid][vid]
+            phd.xhat[xhid].value = var_val[scid][vid]
+        end
+
+        if add_leaves
+            # Create entries for leaf variables.  This is normally done at the end of the
+            # solve call but since we aren't calling that here...
             for vid in keys(sinfo.leaf_vars)
                 xhid = PH.convert_to_xhat_id(phd, vid)
                 sinfo.leaf_vars[vid] = var_val[scid][vid]

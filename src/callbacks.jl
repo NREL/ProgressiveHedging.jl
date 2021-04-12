@@ -92,9 +92,41 @@ function _variable_fixing(external::Dict{Symbol,Any},
     return true
 end
 
-function mean_absolute_deviation(external::Dict{Symbol,Any},
-                                 phd::PHData,
-                                 niter::Int)::Bool
-    # TODO: Implement this function
-    return true
+function mean_deviation(;tol::Float64=1e-8,
+                        save_deviations::Bool=false
+                        )::Callback
+    ext = Dict{Symbol,Any}(:tol => tol, :save => save_deviations)
+
+    if save_deviations
+        ext[:deviations] = Dict{Int,Float64}()
+    end
+
+    return Callback("mean_deviation",
+                    _mean_deviation,
+                    ext
+                    )
+end
+
+function _mean_deviation(external::Dict{Symbol,Any},
+                         phd::PHData,
+                         winf::WorkerInf,
+                         niter::Int)::Bool
+
+    nscen = length(scenarios(phd))
+
+    td = 0.0
+    for (xhid, xhat) in consensus_variables(phd)
+        deviation = 0.0
+        for vid in variables(xhat)
+            deviation += abs(branch_value(phd, vid) - value(xhat))
+        end
+        td += deviation / (value(xhat))
+    end
+    td /= nscen
+
+    if external[:save]
+        external[:deviations][niter] = td
+    end
+
+    return external[:tol] < td
 end

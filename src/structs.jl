@@ -359,6 +359,8 @@ end
 ## Callback Functions ##
 
 """
+    Callback(f::Function)
+
 Creates a `Callback` structure for function `f`.
 """
 function Callback(f::Function)
@@ -366,11 +368,15 @@ function Callback(f::Function)
 end
 
 """
+    cb(f::Function)
+
 Shorthand for `Callback(f)`.
 """
 cb(f::Function) = Callback(f)
 
 """
+    Callback(f::Function, ext::Dict{Symbol,Any})
+
 Creates a `Callback` structure for function `f` with the external data dictionary `ext`.
 """
 function Callback(f::Function, ext::Dict{Symbol,Any})
@@ -378,6 +384,8 @@ function Callback(f::Function, ext::Dict{Symbol,Any})
 end
 
 """
+    Callback(f::Function, initialize::Function)
+
 Creates a `Callback` structure for function `f` with initializer `initialize`.
 """
 function Callback(f::Function, initialize::Function)
@@ -385,6 +393,17 @@ function Callback(f::Function, initialize::Function)
 end
 
 """
+    Callback(name::String, f::Function, ext::Dict{Symbol,Any})
+
+Creates a `Callback` structure for function `f` with the name `name` and the external data dictionary `ext`.
+"""
+function Callback(name::String, f::Function, ext::Dict{Symbol,Any})
+    return Callback(name, f, (::Dict{Symbol,Any},::PHData)->(), ext)
+end
+
+"""
+    Callback(f::Function, initialize::Function, ext::Dict{Symbol,Any})
+
 Creates a `Callback` structure for function `f` with the external data dictionary `ext` which will be initialized with `initialize`.
 """
 function Callback(f::Function, initialize::Function, ext::Dict{Symbol,Any})
@@ -421,6 +440,18 @@ function variables(a::HatVariable)::Set{VariableID}
 end
 
 ## PHData Interaction Functions ##
+
+"""
+    apply_to_subproblem(to_apply::Function,
+                        phd::PHData,
+                        winf::WorkerInf,
+                        scid::ScenarioID,
+                        args::Tuple=(),
+                        kwargs::NamedTuple=NamedTuple(),
+                        )
+
+Applies the function `to_apply` to the subproblem with scenario id `scid`.
+"""
 
 function apply_to_subproblem(to_apply::Function,
                              phd::PHData,
@@ -476,6 +507,26 @@ Convert the given `VariableID` to the consensus variable id (`XhatID`).
 """
 function convert_to_xhat_id(phd::PHData, vid::VariableID)::XhatID
     return phd.variable_data[vid].xhat_id
+end
+
+function get_callback(phd::PHData, name::String)::Callback
+    return_cb = nothing
+    for cb in phd.callbacks
+        if cb.name == name
+            return_cb = cb
+        end
+    end
+
+    if return_cb === nothing
+        error("Unable to find callback $name.")
+    end
+
+    return return_cb
+end
+
+function get_callback_ext(phd::PHData, name::String)::Dict{Symbol,Any}
+    cb = get_callback(phd, name)
+    return cb.ext
 end
 
 """

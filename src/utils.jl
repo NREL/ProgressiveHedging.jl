@@ -196,18 +196,6 @@ function retrieve_w(phd::PHData)::DataFrames.DataFrame
     return soln_df
 end
 
-function scid(n::SCENARIO_ID)::ScenarioID
-    return ScenarioID(SCENARIO_ID(n))
-end
-
-function stid(n::STAGE_ID)::StageID
-    return StageID(STAGE_ID(n))
-end
-
-function index(n::INDEX)::Index
-    return Index(INDEX(n))
-end
-
 function retrieve_xhat_history(phd::PHData)::DataFrames.DataFrame
 
     xhat_df = nothing

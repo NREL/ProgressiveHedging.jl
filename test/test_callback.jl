@@ -189,3 +189,36 @@ end
 
     @test msg_count == nscen
 end
+
+@testset "Mean Deviation Callback" begin
+
+    phd = fake_phdata(3, 4; add_leaves=false)
+    winf = fake_worker_info()
+    nscen = length(PH.scenarios(phd))
+    tol = 1e-8
+
+    PH._add_callback(phd, PH.mean_deviation(tol=tol, save_deviations=true))
+    PH.compute_and_save_xhat(phd)
+    user_continue = PH._execute_callbacks(phd, winf, 1)
+
+    @test user_continue == false
+    md_ext = PH.get_callback_ext(phd, "mean_deviation")
+    @test isapprox(md_ext[:deviations][1], 0.0, atol=1e-8)
+    @test md_ext[:tol] == tol
+
+    phd.scenario_map[PH.scid(0)].branch_vars[PH.VariableID(PH.scid(0), PH.stid(1), PH.index(1))] = 4.0
+    PH.compute_and_save_xhat(phd)
+    user_continue = PH._execute_callbacks(phd, winf, 2)
+
+    @test user_continue == true
+    @test isapprox(md_ext[:deviations][2], 0.6)
+
+    phd = fake_phdata(3, 4; add_leaves=false)
+    phd.scenario_map[PH.scid(0)].branch_vars[PH.VariableID(PH.scid(0), PH.stid(1), PH.index(1))] = 4.0
+    PH._add_callback(phd, PH.mean_deviation(tol=1.0, save_deviations=false))
+    PH.compute_and_save_xhat(phd)
+    user_continue = PH._execute_callbacks(phd, winf, 1)
+
+    @test user_continue == false
+
+end
