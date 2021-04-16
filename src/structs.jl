@@ -223,6 +223,10 @@ struct Callback
     ext::Dict{Symbol,Any}
 end
 
+function Base.show(io::IO, cb::Callback)
+    print(io, cb.name)
+    return
+end
 
 """
 Struct for a consensus variable.
@@ -243,16 +247,6 @@ end
 
 """
 Data structure used to store information and results for a stochastic programming problem.
-
-Users may interact with this structure using the following functions:
-Anytime:
-
-
-In Callbacks:
-
-
-After Solution:
-
 """
 struct PHData
     r::AbstractPenaltyParameter
@@ -340,17 +334,8 @@ function PHData(r::AbstractPenaltyParameter,
 end
 
 function Base.show(io::IO, phd::PHData)
-    print(io, "ProgressiveHedging.jl data structure")
-    return
-end
-
-function _add_callback(phd::PHData,
-                       cb::Callback
-                       )::Nothing
-
-    push!(phd.callbacks, cb)
-    cb.initialize(cb.ext, phd)
-
+    nscen = length(scenarios(phd))
+    print(io, "PH structure for a stochastic program with $(nscen) scenarios.")
     return
 end
 
@@ -442,6 +427,23 @@ end
 ## PHData Interaction Functions ##
 
 """
+    add_callback(phd::PHData,
+                 cb::Callback
+                 )::Nothing
+
+Adds the callback `cb` to the given PH problem.
+"""
+function add_callback(phd::PHData,
+                      cb::Callback
+                      )::Nothing
+
+    push!(phd.callbacks, cb)
+    cb.initialize(cb.ext, phd)
+
+    return
+end
+
+"""
     apply_to_subproblem(to_apply::Function,
                         phd::PHData,
                         winf::WorkerInf,
@@ -509,6 +511,11 @@ function convert_to_xhat_id(phd::PHData, vid::VariableID)::XhatID
     return phd.variable_data[vid].xhat_id
 end
 
+"""
+    get_callback(phd::PHData, name::String)::Callback
+
+Retrieve the callback with name `name`.
+"""
 function get_callback(phd::PHData, name::String)::Callback
     return_cb = nothing
     for cb in phd.callbacks
@@ -524,6 +531,11 @@ function get_callback(phd::PHData, name::String)::Callback
     return return_cb
 end
 
+"""
+    get_callback_ext(phd::PHData, name::String)::Dict{Symbol,Any}
+
+Retrieve the external dictionary for callback `name`.
+"""
 function get_callback_ext(phd::PHData, name::String)::Dict{Symbol,Any}
     cb = get_callback(phd, name)
     return cb.ext

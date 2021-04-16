@@ -149,7 +149,7 @@ end
     nscen = length(PH.scenarios(phd))
     lag = 2
 
-    PH._add_callback(phd, PH.variable_fixing(lag=lag))
+    PH.add_callback(phd, PH.variable_fixing(lag=lag))
 
     phd.scenario_map[PH.scid(0)].branch_vars[PH.VariableID(PH.scid(0), PH.stid(1), PH.index(1))] = -1.0
     PH.compute_and_save_xhat(phd)
@@ -197,7 +197,7 @@ end
     nscen = length(PH.scenarios(phd))
     tol = 1e-8
 
-    PH._add_callback(phd, PH.mean_deviation(tol=tol, save_deviations=true))
+    PH.add_callback(phd, PH.mean_deviation(tol=tol, save_deviations=true))
     PH.compute_and_save_xhat(phd)
     user_continue = PH._execute_callbacks(phd, winf, 1)
 
@@ -215,7 +215,7 @@ end
 
     phd = fake_phdata(3, 4; add_leaves=false)
     phd.scenario_map[PH.scid(0)].branch_vars[PH.VariableID(PH.scid(0), PH.stid(1), PH.index(1))] = 4.0
-    PH._add_callback(phd, PH.mean_deviation(tol=1.0, save_deviations=false))
+    PH.add_callback(phd, PH.mean_deviation(tol=1.0, save_deviations=false))
     PH.compute_and_save_xhat(phd)
     user_continue = PH._execute_callbacks(phd, winf, 1)
 

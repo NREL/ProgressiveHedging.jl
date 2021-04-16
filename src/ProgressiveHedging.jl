@@ -50,7 +50,7 @@ export AbstractSubproblem, JuMPSubproblem
 #### Includes ####
 
 include("id_types.jl")
-include("penalty_parameter.jl")
+include("penalty_parameter_types.jl")
 include("scenario_tree.jl")
 
 include("subproblem.jl")
@@ -61,6 +61,7 @@ include("worker.jl")
 include("worker_management.jl")
 
 include("structs.jl")
+include("penalty_parameter_functions.jl")
 
 include("utils.jl")
 
@@ -158,7 +159,7 @@ function solve(tree::ScenarioTree,
                           )
 
     for cb in callbacks
-        _add_callback(phd, cb)
+        add_callback(phd, cb)
     end
 
     # Solution
