@@ -53,7 +53,7 @@ include("common.jl")
 
     my_task = @async begin
         PH._wait_for_shutdown(worker_inf)
-        return PH._isrunning(worker_inf)
+        return PH._is_running(worker_inf)
     end
     if timeout_wait(my_task)
         @test !fetch(my_task)

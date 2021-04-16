@@ -130,6 +130,10 @@ function is_leaf(tree::ScenarioTree, nid::NodeID)::Bool
     return is_leaf(tree.tree_map[nid])
 end
 
+function is_leaf(tree::ScenarioTree, node::ScenarioNode)::Bool
+    return is_leaf(tree.tree_map[node.id])
+end
+
 function _add_node(tree::ScenarioTree, node::ScenarioNode)::Nothing
     tree.tree_map[node.id] = node
     return

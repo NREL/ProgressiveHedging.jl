@@ -161,6 +161,17 @@ function process_message(msg::ShutDown,
     return false
 end
 
+function process_message(msg::SubproblemAction,
+                         record::WorkerRecord,
+                         output::RemoteChannel
+                         )::Bool
+
+    sub = record.subproblems[msg.scen].problem
+    msg.action(sub, msg.args...; msg.kwargs...)
+
+    return true
+end
+
 function _build_subproblems(output::RemoteChannel,
                             record::WorkerRecord,
                             scenarios::Set{ScenarioID},

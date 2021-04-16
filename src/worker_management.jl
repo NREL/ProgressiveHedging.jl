@@ -5,7 +5,7 @@ struct WorkerInf
     results::Dict{Int,Future}
 end
 
-function _isrunning(wi::WorkerInf)
+function _is_running(wi::WorkerInf)
     return length(wi.results) > 0
 end
 
@@ -56,7 +56,7 @@ function _monitor_workers(wi::WorkerInf)::Nothing
 end
 
 function _wait_for_shutdown(wi::WorkerInf)::Nothing
-    while _isrunning(wi)
+    while _is_running(wi)
         _monitor_workers(wi)
         yield()
     end
@@ -89,7 +89,7 @@ end
 
 function _retrieve_message(wi::WorkerInf)::Message
 
-    while !isready(wi.output) && _isrunning(wi)
+    while !isready(wi.output) && _is_running(wi)
         _monitor_workers(wi)
         yield()
     end

@@ -11,38 +11,64 @@ using TimerOutputs
 
 #### Exports ####
 
-## Types
-
-export AbstractSubproblem, JuMPSubproblem
-
-## Functions
-
-# Functions for solving the problem
+# High-level Functions
 export solve, solve_extensive
-# Functions for building the scenario tree
+export two_stage_tree
+
+# Callbacks
+export Callback
+export cb, mean_deviation, variable_reduction
+export apply_to_subproblem
+
+# ID types and functions
+export Index, NodeID, ScenarioID, StageID, VariableID, XhatID
+export index, scenario, stage, value
+
+# Penalty Parameter types and functions
+export AbstractPenaltyParameter
+export ProportionalPenaltyParameter, ScalarPenaltyParameter, SEPPenaltyParameter
+
+# PHData interaction function
+export consensus_variables, probability, scenarios
+
+# (Consensus) Variable interaction funcitons
+export convert_to_variable_ids, convert_to_xhat_id
+export is_leaf, name, value, branch_value, leaf_value, w_value, xhat_value
+
+# Result retrieval functions
+export residuals, relative_residuals, residual_components
+export retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_w
+export retrieve_xhat_history, retrieve_no_hat_history, retrieve_w_history
+
+# Scenario tree types and functions
+export ScenarioTree
 export add_node, add_leaf, root, two_stage_tree
-# Functions for interacting with the returned PHData struct
-export residuals, retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_w
+
+# Subproblems types and functions
+export AbstractSubproblem, JuMPSubproblem
 
 #### Includes ####
 
 include("id_types.jl")
-include("penalty_parameter.jl")
+include("penalty_parameter_types.jl")
 include("scenario_tree.jl")
 
 include("subproblem.jl")
 include("jumpsubproblem.jl")
 
 include("message.jl")
-
-include("structs.jl")
 include("worker.jl")
 include("worker_management.jl")
+
+include("structs.jl")
+include("penalty_parameter_functions.jl")
 
 include("utils.jl")
 
 include("algorithm.jl")
 include("setup.jl")
+
+include("callbacks.jl")
 
 #### Functions ####
 
@@ -58,17 +84,18 @@ include("setup.jl")
           save_iterates::Int=0,
           save_residuals::Bool=false,
           timing::Bool=true,
+          callbacks::Vector{Callback}=Vector{Callback}(),
           args::Tuple=(),
           kwargs...)
 
-Solve given problem using Progressive Hedging.
+Solve the stochastic programming problem described by `tree` and the models created by `subproblem_constructor` using Progressive Hedging.
 
 **Arguments**
 
 * `tree::ScenararioTree` : Scenario tree describing the structure of the problem to be solved.
-* `subproblem_constructor::Function` : User created function to construct a subproblem. Should accept a `ScenarioID` (a unique identifier for each scenario subproblem) as an argument and returns a subtype of `AbstractSubproblem` specified by `subproblem_type`.
-* `r<:Real` : Parameter to use on quadratic penalty term.
-* `other_args` : Other arguments that should be passed to `subproblem_constructor`. See also keyword arguments `args` and `kwargs`
+* `subproblem_constructor::Function` : User created function to construct a subproblem. Should accept a `ScenarioID` (a unique identifier for each scenario subproblem) as an argument and returns a subtype of `AbstractSubproblem`.
+* `r<:AbstractPenaltyParameter` : PH penalty parameter
+* `other_args` : Other arguments that should be passed to `subproblem_constructor`. See also keyword arguments `args` and `kwargs`.
 
 **Keyword Arguments**
 
@@ -80,6 +107,7 @@ Solve given problem using Progressive Hedging.
 * `save_residuals::Int` : Save PH residuals every `save_residuals` steps. Any value <= 0 disables saving residuals. Defaults to 0.
 * `timing::Bool` : Flag indicating whether or not to record timing information. Defaults to true.
 * `warm_start::Bool` : Flag indicating that solver should be "warm started" by using the previous solution as the starting point (not compatible with all solvers)
+* `callbacks::Vector{Callback}` : Collection of `Callback` structs to call after each PH iteration. See `Callback` struct for more info. Defaults to empty vector.
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
 * `kwargs` : Any keyword arguments not specified here that need to be passed to `subproblem_constructor`.  See also `other_args` and `args`.
 """
@@ -95,6 +123,7 @@ function solve(tree::ScenarioTree,
                save_residuals::Int=0,
                timing::Bool=true,
                warm_start::Bool=false,
+               callbacks=Vector{Callback}(),
                args::Tuple=(),
                kwargs...
                ) where {R <: AbstractPenaltyParameter}
@@ -128,6 +157,10 @@ function solve(tree::ScenarioTree,
                                      (other_args...,args...);
                                      kwargs...)
                           )
+
+    for cb in callbacks
+        add_callback(phd, cb)
+    end
 
     # Solution
     if report > 0

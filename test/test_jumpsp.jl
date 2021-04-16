@@ -78,6 +78,7 @@
 end
 
 @testset "Extensive Form" begin
+    #TODO: Make tests for this case
 end
 
 @testset "Penalties" begin
@@ -189,6 +190,33 @@ end
             elseif (x_ref == v1 && w_ref == v2) || (w_ref == v1 && x_ref == v2)
                 @test isapprox(c, 1.0)
             end
+        end
+    end
+
+end
+
+@testset "Fix Variables" begin
+    js = create_model(PH.scid(0))
+
+    is_fixed = Dict{PH.VariableID,Float64}()
+    is_free = Vector{PH.VariableID}()
+    for vid in keys(js.vars)
+        r = rand()
+        if r > 0.5
+            is_fixed[vid] = r
+        else
+            push!(is_free, vid)
+        end
+    end
+
+    PH.fix_variables(js, is_fixed)
+
+    for (vid,var) in pairs(js.vars)
+        if haskey(is_fixed, vid)
+            @test JuMP.is_fixed(var)
+            @test JuMP.value(var) == is_fixed[vid]
+        elseif vid in is_free
+            @test !JuMP.is_fixed(var)
         end
     end
 

@@ -23,10 +23,10 @@ A concrete subtype handles all details of creating, solving and updating subprob
 Variables and their values are identified and exchanged between PH and a Subproblem type using the `VariableID` type.  A unique `VariableID` is associated with each variable in the subproblem by the Subproblem implementation by using the `ScenarioID` of the subproblem as well as the `StageID` to which this variable belongs.  This combination uniquely identifies a node in the scenario tree to which the variable can be associated.  Variables associated with the same node in a scenario tree and sharing the same name are assumed to be consensus variables whose optimal value is determined by PH.  The final component of a `VariableID` is an `Index` which is just a counter assigned to a variable to differentiate it from other variables at the same node.  See `VariableID` type for more details.
 
 Any concrete subtype must implement the following functions:
-* `add_ph_objective_terms(sp::<ConcreteSubtype>, vids::Vector{VariableID}, r::AbstractPenaltyParameter)::Dict{VariableID,Float64}`
+* `add_ph_objective_terms(sp::<ConcreteSubtype>, vids::Vector{VariableID}, r::AbstractPenaltyParameter)::Nothing
 * `objective_value(sp::<ConcreteSubtype>)::Float64`
 * `report_values(sp::<ConcreteSubtype>, vars::Vector{VariableID})::Dict{VariableID,Float64}`
-* `report_variable_info(sp::<ConcreteSubtype>, st::ScenarioTree)::Dict{VariableID,String}`
+* `report_variable_info(sp::<ConcreteSubtype>, st::ScenarioTree)::Dict{VariableID,VariableInfo}`
 * `solve(sp::<ConcreteSubtype>)::MOI.TerminationStatusCode`
 * `update_ph_terms(sp::<ConcreteSubtype>, w_vals::Dict{VariableID,Float64}, xhat_vals::Dict{VariableID,Float64})::Nothing`
 See help strings on each function for details on arguments, returned objects and expected performance of each function. See JuMPSubproblem for an example using JuMP.
@@ -70,7 +70,7 @@ Returns mapping of the variable to any information needed from the subproblem to
 function add_ph_objective_terms(as::AbstractSubproblem,
                                 vids::Vector{VariableID},
                                 r::Union{Float64,Dict{VariableID,Float64}},
-                                )::Dict{VariableID,Float64}
+                                )::Nothing
     throw(UnimplementedError("add_ph_objective_terms is unimplemented"))
 end
 

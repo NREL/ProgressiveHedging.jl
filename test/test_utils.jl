@@ -46,62 +46,10 @@ end
     @test st.prob_map[PH.scid(1)] == p[2]
 end
 
-function build_var_map(n::Int,
-                       m1::Int,
-                       m2::Int)
-    vmap = Dict{PH.ScenarioID, Dict{PH.VariableID, PH.VariableInfo}}()
-    vval = Dict{PH.ScenarioID, Dict{PH.VariableID, Float64}}()
-    for k in 1:n
-        scid = PH.scid(k-1)
-
-        vars = Dict{PH.VariableID, PH.VariableInfo}()
-        vals = Dict{PH.VariableID, Float64}()
-        for j in 1:m1
-            vid = PH.VariableID(scid, PH.stid(1), PH.index(j + k - 1))
-            vars[vid] = PH.VariableInfo("a$j",false) # convert(Float64, j)
-            vals[vid] = convert(Float64, j)
-        end
-
-        for j in 1:m2
-            vid = PH.VariableID(scid, PH.stid(2), PH.index(j-1))
-            vars[vid] = PH.VariableInfo("b$j", false) # convert(Float64, k*j + n)
-            vals[vid] = convert(Float64, k*j + n)
-        end
-
-        vmap[scid] = vars
-        vval[scid] = vals
-    end
-
-    return (vmap, vval)
-end
-
-nscen = 2
 nv1 = 3
 nv2 = 4
-st = two_stage_tree(nscen)
-(var_map, var_val) = build_var_map(nscen, nv1, nv2)
-
-phd = PH.PHData(PH.ScalarPenaltyParameter(1.0),
-                st,
-                Dict{Int,Set{PH.ScenarioID}}(1=>copy(PH.scenarios(st))),
-                var_map,
-                TimerOutputs.TimerOutput()
-                )
-
-# Create entries for leaf variables.  This is normally done at the end of the solve call
-# but since we aren't calling that here...
-for (scid, sinfo) in pairs(phd.scenario_map)
-    for vid in keys(sinfo.branch_vars)
-        xhid = PH.convert_to_xhat_id(phd, vid)
-        sinfo.branch_vars[vid] = var_val[scid][vid]
-        phd.xhat[xhid].value = var_val[scid][vid]
-    end
-    for vid in keys(sinfo.leaf_vars)
-        xhid = PH.convert_to_xhat_id(phd, vid)
-        sinfo.leaf_vars[vid] = var_val[scid][vid]
-        phd.xhat[xhid] = PH.HatVariable(var_val[scid][vid], vid, false)
-    end
-end
+phd = fake_phdata(nv1, nv2)
+nscen = length(PH.scenarios(phd))
 
 @testset "Accessor Utilities" begin
     scid = PH.scid(0)

@@ -1,35 +1,7 @@
 
-#### Abstract Types ####
+# Functions separated from type definitions for compiler reasons
 
-"""
-Abstract type for ProgressiveHedging penalty parameter.
-
-Concrete subtypes determine how this penalty is used within the PH algorithm.
-
-All concrete subtypes must implement the following methods:
-* `get_penalty_value(r::<ConcreteSubtype>, xhid::XhatID)::Float64`
-* `is_initial_value_dependent(::Type{<ConcreteSubtype>})::Bool`
-* `is_subproblem_dependent(::Type{<ConcreteSubtype>})::Bool`
-* `is_variable_dependent(::Type{<ConcreateSubtype>})::Bool`
-
-If `is_initial_value_dependent` returns `true`, then the concrete subtype must implement
-* `process_penalty_initial_value(r::<ConcreteSubtype>, ph_data::PHData)::Nothing`
-
-If `is_subproblem_dependent` returns `true`, then the concrete subtype must implement
-* `process_penalty_subproblem(r::<ConcreteSubtype>, ph_data::PHData, scenario::ScenarioID, penalties::Dict{VariableID,Float64})::Nothing`
-Additionally, the concrete subproblem type must implement the function
-* `report_penalty_info(as::AbstractSubproblem, pp<:AbstractPenaltyParameter)::Dict{VariableID,Float64}`
-
-If `is_variable_dependent` returns `true`, then the concrete subtype must implement
-* `penalty_map(r::<ConcreteSubtype>)::Dict{XhatID,Float64}`
-If `is_variable_dependent` returns `false`, then the concrete subtype must implement
-* `get_penalty_value(r::<ConcreteSubtype>)::Float64`
-
-For more details, see the help on the individual functions.
-"""
-abstract type AbstractPenaltyParameter end
-
-# TODO: Document these functions
+#### Abstract Interface Functions ####
 
 """
 Returns the constant penalty parameter value. Only required if `is_variable_dependent` returns false.
@@ -85,7 +57,7 @@ Performs any computations for the penalty parameter based on the initial solutio
 *`phd::PHData` : PH data structure used for obtaining any required variable values. See help on `PHData` for details on available functions.
 """
 function process_penalty_initial_value(r::AbstractPenaltyParameter,
-                                       phd,
+                                       phd::PHData,
                                        )::Nothing
     throw(UnimplementedError("process_penalty_initial_value is unimplemented for penalty parameter of type $(typeof(r))."))
 end
@@ -103,24 +75,16 @@ This function is called *before* the initial solution of subproblems. Any access
 * `subproblem_dict::Dict{VariableID,Float64}` : Mapping specifying a value needed from a subproblem used in the computation of the penalty parameter.
 """
 function process_penalty_subproblem(r::AbstractPenaltyParameter,
-                                    phd,
+                                    phd::PHData,
                                     scid::ScenarioID,
                                     subproblem_dict::Dict{VariableID,Float64}
                                     )::Nothing
     throw(UnimplementedError("process_penalty_subproblem is unimplemented for penalty parameter of type $(typeof(r))."))
 end
 
-#### Concrete Types (Alphabetical Order) ####
+#### Concrete Implementations ####
 
-"""
-Variable dependent penalty parameter given by `k * c_i` where `c_i` is the linear coefficient of variable `i` in the objective function.  If `c_i == 0` (that is, the variable has no linear coefficient in the objective function), then the penalty value is taken to be `k`.
-
-Requires subproblem type to have implemented `report_penalty_info` for this type. This implementation should return the linear coefficient in the objective function for each variable.
-"""
-struct ProportionalPenaltyParameter <: AbstractPenaltyParameter
-    constant::Float64
-    penalties::Dict{XhatID,Float64}
-end
+## Proportional Penalty Parameter ##
 
 function ProportionalPenaltyParameter(constant::Real)
     return ProportionalPenaltyParameter(constant, Dict{XhatID,Float64}())
@@ -137,7 +101,7 @@ function penalty_map(r::ProportionalPenaltyParameter)::Dict{XhatID,Float64}
 end
 
 function process_penalty_subproblem(r::ProportionalPenaltyParameter,
-                                    phd,
+                                    phd::PHData,
                                     scid::ScenarioID,
                                     penalties::Dict{VariableID,Float64}
                                     )::Nothing
@@ -172,12 +136,7 @@ function is_variable_dependent(::Type{ProportionalPenaltyParameter})::Bool
     return true
 end
 
-"""
-Constant scalar penalty parameter.
-"""
-struct ScalarPenaltyParameter <: AbstractPenaltyParameter
-    value::Float64
-end
+## Scalar Penalty Parameter ##
 
 function get_penalty_value(r::ScalarPenaltyParameter)::Float64
     return r.value
@@ -201,16 +160,7 @@ function is_variable_dependent(::Type{ScalarPenaltyParameter})::Bool
     return false
 end
 
-"""
-Penalty parameter set with Watson-Woodruff SEP method. See (Watson and Woodruff 2011) for more details.
-
-Requires subproblem type to have implemented `report_penalty_info` for this type. This implementation should return the linear coefficient in the objective function for each variable.
-"""
-
-struct SEPPenaltyParameter <: AbstractPenaltyParameter
-    default::Float64
-    penalties::Dict{XhatID,Float64}
-end
+## SEP Penalty Parameter ##
 
 function SEPPenaltyParameter(default::Float64=1.0)
     return SEPPenaltyParameter(default, Dict{XhatID,Float64}())
@@ -231,10 +181,10 @@ function is_initial_value_dependent(::Type{SEPPenaltyParameter})::Bool
 end
 
 function process_penalty_initial_value(r::SEPPenaltyParameter,
-                                       phd,
+                                       phd::PHData,
                                        )::Nothing
 
-    for (xhid, xhat) in pairs(ph_variables(phd))
+    for (xhid, xhat) in pairs(consensus_variables(phd))
 
         if is_integer(xhat)
 
@@ -284,7 +234,7 @@ function is_subproblem_dependent(::Type{SEPPenaltyParameter})::Bool
 end
 
 function process_penalty_subproblem(r::SEPPenaltyParameter,
-                                    phd,
+                                    phd::PHData,
                                     scid::ScenarioID,
                                     penalties::Dict{VariableID,Float64}
                                     )::Nothing

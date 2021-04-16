@@ -10,9 +10,22 @@ function _copy_values(target::Dict{VariableID,Float64},
     return
 end
 
+function _execute_callbacks(phd::PHData, winf::WorkerInf, niter::Int)::Bool
+
+    running = true
+
+    for cb in phd.callbacks
+        running &= cb.h(cb.ext, phd, winf, niter)
+    end
+
+    return running
+
+end
+
 function _process_reports(phd::PHData,
                           winf::WorkerInf,
-                          report_type::Union{Type{ReportBranch},Type{ReportLeaf}},
+                          report_type::Union{Type{ReportBranch},
+                                             Type{ReportLeaf}},
                           )::Nothing
 
     waiting_on = copy(scenarios(phd))
@@ -44,12 +57,6 @@ function _save_iterate(phd::PHData,
             wd[vid] = w_value(phd, vid)
         end
     end
-
-    # for sinfo in values(phd.scenario_map)
-    #     for (vid, x) in pairs(sinfo.leaf_vars)
-    #         xd[vid] = x
-    #     end
-    # end
 
     _save_iterate(phd.iterate_history,
                   iter,
@@ -147,6 +154,7 @@ function compute_and_save_xhat(phd::PHData)::Float64
 
             xhat += p * x
             norm += p
+
         end
 
         xhat_new = xhat / norm
@@ -183,6 +191,7 @@ function compute_and_save_w(phd::PHData)::Float64
 
             exp += p * w_value(phd, vid)
             norm += p
+
         end
 
         if abs(exp) > 1e-6
@@ -269,6 +278,7 @@ function hedge(ph_data::PHData,
     report_flag = (report > 0)
     save_iter_flag = (save_iter > 0)
     save_res_flag = (save_res > 0)
+    user_continue = true
 
     cr = ph_data.residual_history.residuals[-1]
     delete!(ph_data.residual_history.residuals, -1)
@@ -280,6 +290,11 @@ function hedge(ph_data::PHData,
             ? max(maximum(abs.(value.(values(ph_data.xhat)))), 1e-12)
             : 1.0)
     residual = sqrt(xhat_res_sq + x_res_sq) / nsqrt
+
+    user_continue = @timeit(ph_data.time_info,
+                            "User Callbacks",
+                            _execute_callbacks(ph_data, worker_inf, niter)
+                            )
 
     if report_flag
         @printf("Iter: %4d   AbsR: %12.6e   RelR: %12.6e   Xhat: %12.6e   X: %12.6e\n",
@@ -297,7 +312,9 @@ function hedge(ph_data::PHData,
         _save_residual(ph_data, 0, xhat_res_sq, x_res_sq, residual, residual/xmax)
     end
     
-    while niter < max_iter && residual > atol && residual > rtol * xmax
+    while user_continue && niter < max_iter && residual > atol && residual > rtol * xmax
+
+        niter += 1
 
         # Solve subproblems
         @timeit(ph_data.time_info,
@@ -319,7 +336,10 @@ function hedge(ph_data::PHData,
         residual = sqrt(xhat_res_sq + x_res_sq) / nsqrt
         xmax = max(maximum(abs.(value.(values(ph_data.xhat)))), 1e-12)
 
-        niter += 1
+        user_continue = @timeit(ph_data.time_info,
+                                "User Callbacks",
+                                _execute_callbacks(ph_data, worker_inf, niter)
+                                )
 
         if report_flag && niter % report == 0
             @printf("Iter: %4d   AbsR: %12.6e   RelR: %12.6e   Xhat: %12.6e   X: %12.6e\n",

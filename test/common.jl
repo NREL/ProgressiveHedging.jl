@@ -121,6 +121,7 @@ function invert_map(my_map::Dict{A,B})::Dict{B,A} where {A,B}
 end
 
 function two_stage_model(scenario_id::PH.ScenarioID)
+
     model = JuMP.Model(()->Ipopt.Optimizer())
     JuMP.set_optimizer_attribute(model, "print_level", 0)
     JuMP.set_optimizer_attribute(model, "tol", 1e-12)
@@ -170,4 +171,81 @@ if isdefined(Main, :Xpress)
                                                           PH.stid(2) => stage2)
                                  )
     end
+end
+
+function build_var_map(n::Int,
+                       m1::Int,
+                       m2::Int)
+    vmap = Dict{PH.ScenarioID, Dict{PH.VariableID, PH.VariableInfo}}()
+    vval = Dict{PH.ScenarioID, Dict{PH.VariableID, Float64}}()
+    for k in 1:n
+        scid = PH.scid(k-1)
+
+        vars = Dict{PH.VariableID, PH.VariableInfo}()
+        vals = Dict{PH.VariableID, Float64}()
+
+        # Stage 1 variables
+        for j in 1:m1
+            vid = PH.VariableID(scid, PH.stid(1), PH.index(j + k - 1))
+            vars[vid] = PH.VariableInfo("a$j",false) # convert(Float64, j)
+            vals[vid] = convert(Float64, j)
+        end
+
+        # Stage 2 variables
+        for j in 1:m2
+            vid = PH.VariableID(scid, PH.stid(2), PH.index(j-1))
+            vars[vid] = PH.VariableInfo("b$j", false) # convert(Float64, k*j + n)
+            vals[vid] = convert(Float64, k*j + n)
+        end
+
+        vmap[scid] = vars
+        vval[scid] = vals
+    end
+
+    return (vmap, vval)
+end
+
+function fake_phdata(nv1::Int, nv2::Int; add_leaves=true)
+    nscen = 2
+    st = two_stage_tree(nscen)
+    (var_map, var_val) = build_var_map(nscen, nv1, nv2)
+
+    phd = PH.PHData(PH.ScalarPenaltyParameter(1.0),
+                    st,
+                    Dict(1=>copy(PH.scenarios(st))),
+                    var_map,
+                    TimerOutputs.TimerOutput()
+                    )
+
+    for (scid, sinfo) in pairs(phd.scenario_map)
+
+        for vid in keys(sinfo.branch_vars)
+            xhid = PH.convert_to_xhat_id(phd, vid)
+            sinfo.branch_vars[vid] = var_val[scid][vid]
+            phd.xhat[xhid].value = var_val[scid][vid]
+        end
+
+        if add_leaves
+            # Create entries for leaf variables.  This is normally done at the end of the
+            # solve call but since we aren't calling that here...
+            for vid in keys(sinfo.leaf_vars)
+                xhid = PH.convert_to_xhat_id(phd, vid)
+                sinfo.leaf_vars[vid] = var_val[scid][vid]
+                phd.xhat[xhid] = PH.HatVariable(var_val[scid][vid], vid, false)
+            end
+        end
+    end
+
+    return phd
+end
+
+function fake_worker_info(queue_size::Int=10)
+
+    worker_results = RemoteChannel(()->Channel{PH.Message}(queue_size))
+    worker_queue = RemoteChannel(()->Channel{PH.Message}(queue_size))
+
+    return PH.WorkerInf(Dict(1=>worker_queue),
+                        worker_results,
+                        Dict(1=>Future())
+                        )
 end
