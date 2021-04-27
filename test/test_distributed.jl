@@ -88,6 +88,51 @@ end
 
 end
 
+@testset "Distributed user specified workers" begin
+
+    st = build_scen_tree()
+    worker_assignments = Dict(k=>Set{PH.ScenarioID}() for k in 2:3)
+    for s in PH.scenarios(st)
+        if PH.value(s) < 3
+            push!(worker_assignments[2], s)
+        else
+            push!(worker_assignments[3], s)
+        end
+    end
+    
+    # Solve the problem
+    (n, err, rerr, obj, soln, phd) = PH.solve(build_scen_tree(),
+                                              create_model,
+                                              r;
+                                              atol=atol,
+                                              rtol=rtol,
+                                              opt=Ipopt.Optimizer,
+                                              opt_args=(print_level=0,tol=1e-12),
+                                              max_iter=max_iter,
+                                              report=0,
+                                              worker_assignments=worker_assignments,
+                                              timing=false,
+                                              warm_start=true)
+
+    @test err < atol
+    @test isapprox(obj, obj_val)
+    @test n < max_iter
+
+    for row in eachrow(soln)
+        var = row[:variable] * "_{" * row[:scenarios] * "}"
+        @test isapprox(row[:value], var_vals[var], atol=1e-7)
+    end
+
+    for s in PH.scenarios(phd)
+        if PH.value(s) < 3
+            @test phd.scenario_map[s].pid == 2
+        else
+            @test phd.scenario_map[s].pid == 3
+        end
+    end
+
+end
+
 # Tear down distrbuted stuff
 Distributed.rmprocs(Distributed.workers())
 @assert Distributed.nprocs() == 1

@@ -40,6 +40,7 @@ function _variable_fixing(external::Dict{Symbol,Any},
         values = external[:value]
         counts = external[:value_count]
         fixed = external[:fixed]
+        tol = external[:eq_tol]
         to_fix = Dict{ScenarioID,Dict{VariableID,Float64}}()
 
         for (xhid, xhat) in pairs(consensus_variables(phd))
@@ -50,7 +51,7 @@ function _variable_fixing(external::Dict{Symbol,Any},
 
             is_equal = true
             for vid in variables(xhat)
-                is_equal &= isapprox(value(xhat), branch_value(phd, vid), atol=1e-8)
+                is_equal &= isapprox(value(xhat), branch_value(phd, vid), atol=tol)
             end
 
             if is_equal

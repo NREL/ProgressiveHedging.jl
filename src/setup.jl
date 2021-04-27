@@ -184,6 +184,7 @@ end
 function initialize(scen_tree::ScenarioTree,
                     model_constructor::Function,
                     r::AbstractPenaltyParameter,
+                    user_sp_map::Dict{Int,Set{ScenarioID}},
                     warm_start::Bool,
                     timo::TimerOutputs.TimerOutput,
                     report::Int,
@@ -192,7 +193,7 @@ function initialize(scen_tree::ScenarioTree,
                     )::Tuple{PHData,WorkerInf}
 
     # Assign scenarios to processes
-    scen_proc_map = assign_scenarios_to_procs(scen_tree)
+    scen_proc_map = isempty(user_sp_map) ? assign_scenarios_to_procs(scen_tree) : user_sp_map
     scen_per_worker = maximum(length.(collect(values(scen_proc_map))))
     n_scenarios = length(scenarios(scen_tree))
 

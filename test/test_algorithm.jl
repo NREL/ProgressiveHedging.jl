@@ -80,7 +80,7 @@ end
     prop_atol = 1e-8
     (n, err, rerr, obj, soln, phd) = PH.solve(PH.two_stage_tree(2),
                                               two_stage_model,
-                                              PH.SEPPenaltyParameter(),
+                                              PH.ProportionalPenaltyParameter(25.0),
                                               atol=prop_atol,
                                               rtol=1e-12,
                                               max_iter=prop_max_iter,
