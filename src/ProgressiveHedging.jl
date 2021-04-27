@@ -85,6 +85,7 @@ include("callbacks.jl")
           save_residuals::Bool=false,
           timing::Bool=true,
           callbacks::Vector{Callback}=Vector{Callback}(),
+          worker_assignments::Dict{Int,Set{ScenarioID}}=Dict{Int,Set{ScenarioID}}(),
           args::Tuple=(),
           kwargs...)
 
@@ -105,9 +106,10 @@ Solve the stochastic programming problem described by `tree` and the models crea
 * `report::Int` : Print progress to screen every `report` iterations. Any value <= 0 disables printing. Defaults to 0.
 * `save_iterates::Int` : Save PH iterates every `save_iterates` steps. Any value <= 0 disables saving iterates. Defaults to 0.
 * `save_residuals::Int` : Save PH residuals every `save_residuals` steps. Any value <= 0 disables saving residuals. Defaults to 0.
-* `timing::Bool` : Flag indicating whether or not to record timing information. Defaults to true.
+* `timing::Bool` : Print timing info after solving if true. Defaults to true.
 * `warm_start::Bool` : Flag indicating that solver should be "warm started" by using the previous solution as the starting point (not compatible with all solvers)
-* `callbacks::Vector{Callback}` : Collection of `Callback` structs to call after each PH iteration. See `Callback` struct for more info. Defaults to empty vector.
+* `callbacks::Vector{Callback}` : Collection of `Callback` structs to call after each PH iteration. Callbacks will be executed in the order they appear. See `Callback` struct for more info. Defaults to empty vector.
+* `worker_assignments::Dict{Int,Set{ScenarioID}}` : Dictionary specifying which scenario subproblems a worker will create and solve. The key values are worker ids as given by Distributed (see `Distributed.workers()`). The user is responsible for ensuring the specified workers exist and that every scenario is assigned to a worker. If no dictionary is given, scenarios are assigned to workers in round robin fashion. Defaults to empty dictionary.
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
 * `kwargs` : Any keyword arguments not specified here that need to be passed to `subproblem_constructor`.  See also `other_args` and `args`.
 """
@@ -123,7 +125,8 @@ function solve(tree::ScenarioTree,
                save_residuals::Int=0,
                timing::Bool=true,
                warm_start::Bool=false,
-               callbacks=Vector{Callback}(),
+               callbacks::Vector{Callback}=Vector{Callback}(),
+               worker_assignments::Dict{Int,Set{ScenarioID}}=Dict{Int,Set{ScenarioID}}(),
                args::Tuple=(),
                kwargs...
                ) where {R <: AbstractPenaltyParameter}
@@ -151,6 +154,7 @@ function solve(tree::ScenarioTree,
                           initialize(tree,
                                      subproblem_constructor,
                                      r,
+                                     worker_assignments,
                                      warm_start,
                                      timo,
                                      report,
