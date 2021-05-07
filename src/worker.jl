@@ -3,7 +3,7 @@ struct SubproblemRecord
     problem::AbstractSubproblem
     branch_vars::Vector{VariableID}
     leaf_vars::Vector{VariableID}
-    callbacks::Vector{SubproblemCallback}
+    subproblem_callbacks::Vector{SubproblemCallback}
 end
 
 mutable struct WorkerRecord
@@ -70,6 +70,7 @@ function process_message(msg::Initialize,
                          )::Bool
 
     record.warm_start = msg.warm_start
+    record.subproblem_callbacks = msg.subproblem_callbacks
 
     # Master process needs the variable map messages to proceed. Initial solves are
     # not needed until much later in the process. So get all variable maps back first
@@ -87,6 +88,8 @@ function process_message(msg::Initialize,
     _initial_solve(output, record)
 
     _penalty_parameter_preprocess(output, record, msg.r)
+
+    _execute_subproblem_callbacks(output, record)
 
     return true
 end
@@ -129,6 +132,8 @@ function process_message(msg::Solve,
     sub = record.subproblems[msg.scen]
 
     update_ph_terms(sub.problem, msg.w_vals, msg.xhat_vals)
+
+    _execute_callbacks(output, record, msg.niter)
 
     if record.warm_start
         warm_start(sub.problem)
@@ -261,3 +266,24 @@ function _split_variables(scen_tree::ScenarioTree,
 
     return (branch_vars, leaf_vars)
 end
+
+function _execute_subproblem_callbacks(output::RemoteChannel,
+                                       record::WorkerRecord,
+                                       )::Nothing
+    for (scen, sub) in record.subproblems
+        spcb.h(spcb.ext, sub, scenario_id)
+    end
+
+    return
+end 
+
+function _execute_subproblem_callbacks(output::RemoteChannel,
+                                       record::WorkerRecord,
+                                       niter::Int
+                                       )::Nothing 
+    for (scen, sub) in record.subproblems
+        spcb.h(spcb.ext, sub, scenario_id, niter)
+    end
+
+    return
+end 

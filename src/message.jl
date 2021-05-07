@@ -40,6 +40,7 @@ struct Solve <: Message
     scen::ScenarioID
     w_vals::Dict{VariableID,Float64}
     xhat_vals::Dict{VariableID,Float64}
+    niter::Int
 end
 
 struct SubproblemAction <: Message
