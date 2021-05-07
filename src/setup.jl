@@ -22,7 +22,7 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
                                  constructor_args::Tuple,
                                  r::AbstractPenaltyParameter,
                                  warm_start::Bool,
-                                 subproblem_callbacks::Vector{SubproblemCallbacks};
+                                 subproblem_callbacks::Vector{SubproblemCallback};
                                  kwargs...
                                  )
 

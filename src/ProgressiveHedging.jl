@@ -57,6 +57,7 @@ include("scenario_tree.jl")
 include("subproblem.jl")
 include("jumpsubproblem.jl")
 
+include("subproblem_callback.jl")
 include("message.jl")
 include("worker.jl")
 include("worker_management.jl")

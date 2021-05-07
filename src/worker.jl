@@ -3,6 +3,7 @@ struct SubproblemRecord
     problem::AbstractSubproblem
     branch_vars::Vector{VariableID}
     leaf_vars::Vector{VariableID}
+    callbacks::Vector{SubproblemCallback}
 end
 
 mutable struct WorkerRecord

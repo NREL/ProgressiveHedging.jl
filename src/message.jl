@@ -10,8 +10,8 @@ struct Initialize{R <: AbstractPenaltyParameter} <: Message
     r::Type{R}
     scenarios::Set{ScenarioID}
     scenario_tree::ScenarioTree
-    warm_start::Bool,
-    subproblem_callbacks::Vector{SubproblemCallbacks}
+    warm_start::Bool
+    subproblem_callbacks::Vector{SubproblemCallback}
 end
 
 struct PenaltyInfo <: Message
