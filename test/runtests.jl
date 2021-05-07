@@ -53,6 +53,9 @@ end
 @testset "Callbacks" begin
     include("test_callback.jl")
 end
+@testset "SubproblemCallbacks" begin
+    include("test_subproblem_callback.jl")
+end
 @testset "Setup" begin
     include("test_setup.jl")
 end

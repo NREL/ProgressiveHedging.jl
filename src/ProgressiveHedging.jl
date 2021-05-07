@@ -19,6 +19,7 @@ export two_stage_tree
 export Callback
 export cb, mean_deviation, variable_reduction
 export apply_to_subproblem
+export SubproblemCallback, spcb
 
 # ID types and functions
 export Index, NodeID, ScenarioID, StageID, VariableID, XhatID
@@ -160,6 +161,7 @@ function solve(tree::ScenarioTree,
                                      warm_start,
                                      timo,
                                      report,
+                                     subproblem_callbacks,
                                      (other_args...,args...);
                                      kwargs...)
                           )

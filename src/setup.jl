@@ -21,7 +21,8 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
                                  constructor::Function,
                                  constructor_args::Tuple,
                                  r::AbstractPenaltyParameter,
-                                 warm_start::Bool;
+                                 warm_start::Bool,
+                                 subproblem_callbacks::Vector{SubproblemCallbacks};
                                  kwargs...
                                  )
 
@@ -35,7 +36,8 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
                                         typeof(r),
                                         scenarios,
                                         scen_tree,
-                                        warm_start)
+                                        warm_start,
+                                        subproblem_callbacks)
                              )
     end
 
@@ -188,6 +190,7 @@ function initialize(scen_tree::ScenarioTree,
                     warm_start::Bool,
                     timo::TimerOutputs.TimerOutput,
                     report::Int,
+                    subproblem_callbacks::Vector{SubproblemCallback},
                     constructor_args::Tuple,;
                     kwargs...
                     )::Tuple{PHData,WorkerInf}
@@ -219,7 +222,8 @@ function initialize(scen_tree::ScenarioTree,
                                               model_constructor,
                                               constructor_args,
                                               r,
-                                              warm_start;
+                                              warm_start,
+                                              subproblem_callbacks;
                                               kwargs...)
                       )
 
