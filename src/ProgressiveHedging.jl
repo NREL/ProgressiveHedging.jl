@@ -13,11 +13,10 @@ using TimerOutputs
 
 # High-level Functions
 export solve, solve_extensive
-export two_stage_tree
 
 # Callbacks
 export Callback
-export cb, mean_deviation, variable_reduction
+export cb, mean_deviation, variable_fixing
 export apply_to_subproblem
 
 # ID types and functions
@@ -31,7 +30,7 @@ export ProportionalPenaltyParameter, ScalarPenaltyParameter, SEPPenaltyParameter
 # PHData interaction function
 export consensus_variables, probability, scenarios
 
-# (Consensus) Variable interaction funcitons
+# (Consensus) Variable interaction functions
 export convert_to_variable_ids, convert_to_xhat_id
 export is_leaf, name, value, branch_value, leaf_value, w_value, xhat_value
 
