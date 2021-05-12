@@ -9,6 +9,7 @@ mutable struct WorkerRecord
     id::Int
     warm_start::Bool
     subproblems::Dict{ScenarioID,SubproblemRecord}
+    lb_subproblems::Dict{ScenarioID,SubproblemRecord}
 end
 
 function WorkerRecord(id::Int)
@@ -90,6 +91,26 @@ function process_message(msg::Initialize,
     return true
 end
 
+function process_message(msg::InitializeLowerBound,
+                         record::WorkerRecord,
+                         output::RemoteChannel,
+                         )::Bool
+
+    for scen in msg.scenarios
+        lb_sub = create_subproblem(scen,
+                                  create_subproblem_args...;
+                                  create_subproblem_kwargs...)
+        var_map = report_variable_info(sub, scen_tree)
+        (branch_ids, leaf_ids) = _split_variables(scen_tree,
+                                                  collect(keys(var_map)))
+        record.lb_subproblems[scen] = SubproblemRecord(lb_sub,
+                                                       branch_ids,
+                                                       leaf_ids)
+    end
+
+    return true
+end
+
 function process_message(msg::PenaltyInfo,
                          record::WorkerRecord,
                          output::RemoteChannel,
@@ -143,6 +164,34 @@ function process_message(msg::Solve,
                               objective_value(sub.problem),
                               stop - start,
                               var_vals)
+         )
+
+    return true
+end
+
+function process_message(msg::SolveLowerBound,
+                         record::WorkerRecord,
+                         output::RemoteChannel
+                         )::Bool
+
+    if !haskey(record.lb_subproblems, msg.scen)
+        error("Worker $(record.id) received solve command for scenario $(msg.scen). This worker was not assigned this scenario.")
+    end
+
+    lb_sub = record.lb_subproblems[msg.scen]
+
+    if record.warm_start
+        warm_start(lb_sub.problem)
+    end
+
+    start = time()
+    sts = solve(lbsub.problem)
+    stop = time()
+
+    put!(output, ReportLowerBound(msg.scen,
+                                  sts,
+                                  objective_value(lb_sub.problem),
+                                  stop - start)
          )
 
     return true

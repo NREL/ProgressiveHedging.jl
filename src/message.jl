@@ -13,6 +13,14 @@ struct Initialize{R <: AbstractPenaltyParameter} <: Message
     warm_start::Bool
 end
 
+struct InitializeLowerBound <: Message
+    create_subproblem::Function
+    create_subproblem_args::Tuple
+    create_subproblem_kwargs::NamedTuple
+    scenarios::Set{ScenarioID}
+    scenario_tree::ScenarioTree
+end
+
 struct PenaltyInfo <: Message
     scen::ScenarioID
     penalty::Union{Float64,Dict{VariableID,Float64}}
@@ -33,12 +41,24 @@ struct ReportLeaf <: Message
     vals::Dict{VariableID,Float64}
 end
 
+struct ReportLowerBound <: Message
+    scen::ScenarioID
+    sts::MOI.TerminationStatusCode
+    obj::Float64
+    time::Float64
+end
+
 struct ShutDown <: Message end
 
 struct Solve <: Message
     scen::ScenarioID
     w_vals::Dict{VariableID,Float64}
     xhat_vals::Dict{VariableID,Float64}
+end
+
+struct SolveLowerBound <: Message
+    scen::ScenarioID
+    w_vals::Dict{VariableID,Float64}
 end
 
 struct SubproblemAction <: Message

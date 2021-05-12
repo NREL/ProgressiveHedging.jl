@@ -135,6 +135,13 @@ function solve(js::JuMPSubproblem)::MOI.TerminationStatusCode
     return JuMP.termination_status(js.model)
 end
 
+function update_lagrange_terms(js::JuMPSubproblem,
+                               w_vals::Dict{VariableID,Float64}
+                               )::Nothing
+    update_ph_terms(js, w_vals, Dict{VariableID,Float64}())
+    return
+end
+
 function update_ph_terms(js::JuMPSubproblem,
                          w_vals::Dict{VariableID,Float64},
                          xhat_vals::Dict{VariableID,Float64}
