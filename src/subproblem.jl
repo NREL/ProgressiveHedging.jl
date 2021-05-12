@@ -54,7 +54,7 @@ abstract type AbstractSubproblem end
 """
     add_ph_objective_terms(as::AbstractSubproblem,
                            vids::Vector{VariableID},
-                           r::AbstractPenaltyParameter
+                           r::Union{Float64,Dict{VariableID,Float64}}
                            )::Dict{VariableID,Float64}
 
 Create model variables for Lagrange multipliers and hat variables and add lagrange and quadratic penalty terms to the objective function.
@@ -189,6 +189,24 @@ function warm_start(as::AbstractSubproblem)::Nothing
 end
 
 ## Optional Interface Functions ##
+
+"""
+TODO: Add documentation!!
+"""
+function add_lagrange_terms(as::AbstractSubproblem,
+                            vids::Vector{VariableID}
+                            )::Nothing
+    throw(UnimplementedError("add_lagrange_terms is unimplemented"))
+end
+
+"""
+TODO: Add documentation!!
+"""
+function update_lagrange_terms(as::AbstractSubproblem,
+                               vids::Dict{VariableID,Float64}
+                               )::Nothing
+    throw(UnimplementedError("update_lagrange_terms is unimplemented"))
+end
 
 # These functions are required only if an extensive form construction is desired
 
