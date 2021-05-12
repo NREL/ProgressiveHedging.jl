@@ -255,7 +255,6 @@ struct PHData
     callbacks::Vector{Callback}
     xhat::Dict{XhatID, HatVariable}
     variable_data::Dict{VariableID, VariableData}
-    indexer::Indexer
     iterate_history::PHIterateHistory
     residual_history::PHResidualHistory
     time_info::TimerOutputs.TimerOutput
@@ -326,7 +325,6 @@ function PHData(r::AbstractPenaltyParameter,
                   Vector{Callback}(),
                   xhat_dict,
                   var_data,
-                  idxr,
                   PHIterateHistory(),
                   PHResidualHistory(),
                   time_out,
