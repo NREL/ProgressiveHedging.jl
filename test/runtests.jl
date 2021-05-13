@@ -11,6 +11,7 @@ using Ipopt
 using JuMP
 using MathOptInterface
 const MOI = MathOptInterface
+using Suppressor
 
 using TimerOutputs
 

@@ -70,7 +70,6 @@ function process_message(msg::Initialize,
                          )::Bool
 
     record.warm_start = msg.warm_start
-    record.subproblem_callbacks = msg.subproblem_callbacks
 
     # Master process needs the variable map messages to proceed. Initial solves are
     # not needed until much later in the process. So get all variable maps back first
@@ -83,6 +82,7 @@ function process_message(msg::Initialize,
                        msg.create_subproblem,
                        msg.create_subproblem_args,
                        msg.create_subproblem_kwargs,
+                       msg.subproblem_callbacks
                        )
 
     _initial_solve(output, record)
@@ -133,7 +133,7 @@ function process_message(msg::Solve,
 
     update_ph_terms(sub.problem, msg.w_vals, msg.xhat_vals)
 
-    _execute_callbacks(output, record, msg.niter)
+    _execute_subproblem_callbacks(output, record, msg.niter)
 
     if record.warm_start
         warm_start(sub.problem)
@@ -185,6 +185,7 @@ function _build_subproblems(output::RemoteChannel,
                             create_subproblem::Function,
                             create_subproblem_args::Tuple,
                             create_subproblem_kwargs::NamedTuple,
+                            subproblem_callbacks::Vector{SubproblemCallback}
                             )::Nothing
     for scen in scenarios
 
@@ -206,7 +207,9 @@ function _build_subproblems(output::RemoteChannel,
         # Save subproblem and relevant data
         record.subproblems[scen] = SubproblemRecord(sub,
                                                     branch_ids,
-                                                    leaf_ids)
+                                                    leaf_ids,
+                                                    subproblem_callbacks
+                                                    )
     end
 
     return
@@ -267,22 +270,36 @@ function _split_variables(scen_tree::ScenarioTree,
     return (branch_vars, leaf_vars)
 end
 
+"""
+    _execute_subproblem_callbacks(output::RemoteChannel, record::WorkerRecord)
+
+Executes subproblem callbacks in the initialization phase.
+"""
 function _execute_subproblem_callbacks(output::RemoteChannel,
                                        record::WorkerRecord,
                                        )::Nothing
     for (scen, sub) in record.subproblems
-        spcb.h(spcb.ext, sub, scenario_id)
+        for spcb in sub.subproblem_callbacks
+            spcb.h(spcb.ext, sub, scen)
+        end
     end
 
     return
 end 
 
+"""
+    _execute_subproblem_callbacks(output::RemoteChannel, record::WorkerRecord, niter::Int)
+
+Executes subproblem callbacks in the solve phase and hence has access to the iteration count.
+"""
 function _execute_subproblem_callbacks(output::RemoteChannel,
                                        record::WorkerRecord,
                                        niter::Int
                                        )::Nothing 
     for (scen, sub) in record.subproblems
-        spcb.h(spcb.ext, sub, scenario_id, niter)
+        for spcb in sub.subproblem_callbacks
+            spcb.h(spcb.ext, sub, scen, niter)
+        end
     end
 
     return

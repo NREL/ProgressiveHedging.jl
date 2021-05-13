@@ -245,7 +245,7 @@ function process_penalty_subproblem(r::SEPPenaltyParameter,
 
         if haskey(r.penalties, xhid)
             if !isapprox(r.penalties[xhid], penalty)
-                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(r_value).")
+                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty).")
             end
         else
             r.penalties[xhid] = penalty
