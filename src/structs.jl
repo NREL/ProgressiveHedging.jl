@@ -247,6 +247,17 @@ end
 
 """
 Data structure used to store information and results for a stochastic programming problem.
+
+*`r::AbstractPenaltyParameter`
+*`scenario_tree::ScenarioTree`
+*`scenario_map::Dict{ScenarioID, ScenarioInfo}`
+*`callbacks::Vector{Callback}`
+*`xhat::Dict{XhatID, HatVariable}`
+*`variable_data::Dict{VariableID, VariableData}`
+*`indexer::Indexer`
+*`iterate_history::PHIterateHistory`
+*`residual_history::PHResidualHistory`
+*`time_info::TimerOutputs.TimerOutput`
 """
 struct PHData
     r::AbstractPenaltyParameter
