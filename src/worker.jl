@@ -89,8 +89,6 @@ function process_message(msg::Initialize,
 
     _penalty_parameter_preprocess(output, record, msg.r)
 
-    _execute_subproblem_callbacks(output, record)
-
     return true
 end
 
@@ -133,7 +131,7 @@ function process_message(msg::Solve,
 
     update_ph_terms(sub.problem, msg.w_vals, msg.xhat_vals)
 
-    _execute_subproblem_callbacks(output, record, msg.niter)
+    _execute_subproblem_callbacks(record, msg.niter)
 
     if record.warm_start
         warm_start(sub.problem)
@@ -270,35 +268,12 @@ function _split_variables(scen_tree::ScenarioTree,
     return (branch_vars, leaf_vars)
 end
 
-"""
-    _execute_subproblem_callbacks(output::RemoteChannel, record::WorkerRecord)
-
-Executes subproblem callbacks in the initialization phase.
-"""
-function _execute_subproblem_callbacks(output::RemoteChannel,
-                                       record::WorkerRecord,
-                                       )::Nothing
-    for (scen, sub) in record.subproblems
-        for spcb in sub.subproblem_callbacks
-            spcb.h(spcb.ext, sub, scen)
-        end
-    end
-
-    return
-end 
-
-"""
-    _execute_subproblem_callbacks(output::RemoteChannel, record::WorkerRecord, niter::Int)
-
-Executes subproblem callbacks in the solve phase and hence has access to the iteration count.
-"""
-function _execute_subproblem_callbacks(output::RemoteChannel,
-                                       record::WorkerRecord,
+function _execute_subproblem_callbacks(record::WorkerRecord,
                                        niter::Int
                                        )::Nothing 
     for (scen, sub) in record.subproblems
         for spcb in sub.subproblem_callbacks
-            spcb.h(spcb.ext, sub, scen, niter)
+            spcb.h(spcb.ext, sub, niter, scen)
         end
     end
 

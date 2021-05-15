@@ -8,8 +8,8 @@ Struct for user supbroblem callbacks.
 * `ext::Dict{Symbol,Any}` : Dictionary to store data between callback calls or needed parameters.
 
 The callback function `h` must have the signature
-    `h(ext::Dict{Symbol,Any}, sp::T, niter::Int, scenario_id::ScenarioID)::Bool where T <: AbstractSubproblem`
-where `ext` is the same dictionary given to the `Callback` constructor, `sp` is a concrete type of subproblem (see `AbstractSubproblem`), `niter` is the current iteration and `scenario_id` is a scenario identifier (see `ScenarioID`). The callback may return `false` to stop PH.
+    `h(ext::Dict{Symbol,Any}, sp::SubproblemRecord, niter::Int, scenario_id::ScenarioID)::Bool`
+where `ext` is the same dictionary given to the `Callback` constructor, `sp` is a subproblem record containing a concrete type of `AbstractSubproblem` (see `SubproblemRecord` and `AbstractSubproblem`), `niter` is the current iteration and `scenario_id` is a scenario identifier (see `ScenarioID`). The callback may return `false` to stop PH.
 """
 struct SubproblemCallback
     name::String
