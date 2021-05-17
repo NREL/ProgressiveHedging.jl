@@ -51,15 +51,9 @@ function index(idxr::Indexer, nid::NodeID, name::String)::Index
     return idx
 end
 
-mutable struct VariableData
+struct VariableData
     name::String
     xhat_id::XhatID
-end
-
-function VariableData(name::String,
-                      nid::NodeID
-                      )::VariableData
-    return VariableData(name, nid, 0.0)
 end
 
 mutable struct ProblemData
@@ -456,6 +450,28 @@ function apply_to_subproblem(to_apply::Function,
 end
 
 """
+    branch_value(phd::PHData, vid::VariableID)::Float64
+
+Returns the value of the variable associated with `vid`. Must be a branch variable.
+
+See also: [`leaf_value`](@ref), [`value`](@ref)
+"""
+function branch_value(phd::PHData, vid::VariableID)::Float64
+    return phd.scenario_map[scenario(vid)].branch_vars[vid]
+end
+
+"""
+    branch_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+
+Returns the value of the variable associated with with scenario `scen`, stage `stage` and index `idx`. Must be a branch variable.
+
+See also: [`leaf_value`](@ref), [`value`](@ref)
+"""
+function branch_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+    return branch_value(phd, VariableID(scen, stage, idx))
+end
+
+"""
     consensus_variables(phd::PHData)::Dict{XhatID,HatVariable}
 
 Returns the collection of consensus variables for the problem.
@@ -532,6 +548,40 @@ function is_leaf(phd::PHData, xhid::XhatID)::Bool
 end
 
 """
+    leaf_value(phd::PHData, vid::VariableID)::Float64
+
+Returns the value of the variable associated with `vid`. Must be a leaf variable.
+
+See also: [`branch_value`](@ref), [`value`](@ref)
+"""
+function leaf_value(phd::PHData, vid::VariableID)::Float64
+    return phd.scenario_map[scenario(vid)].leaf_vars[vid]
+end
+
+"""
+    leaf_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+
+Returns the value of the variable associated with with scenario `scen`, stage `stage` and index `idx`. Must be a leaf variable.
+
+See also: [`branch_value`](@ref), [`value`](@ref)
+"""
+function leaf_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+    return leaf_value(phd, VariableID(scen, stage, idx))
+end
+
+"""
+    name(phd::PHData, vid::VariableID)::String
+
+Returns the name of the consensus variable for the given `VariableID`.
+"""
+function name(phd::PHData, vid::VariableID)::String
+    if !haskey(phd.variable_data, vid)
+        error("No name available for variable id $vid")
+    end
+    return phd.variable_data[vid].name
+end
+
+"""
     name(phd::PHData, xid::XhatID)::String
 
 Returns the name of the consensus variable for the given `XhatID`. The name is the same given to the individual scenario variables.
@@ -574,4 +624,72 @@ Returns the `StageID` in which the given consensus variable is.
 """
 function stage_id(phd::PHData, xid::XhatID)::StageID
     return phd.scenario_tree.tree_map[xid.node].stage
+end
+
+"""
+   value(phd::PHData, vid::VariableID)
+
+Returns the value of the variable associated with `vid`.
+
+See also: [`branch_value`](@ref), [`leaf_value`](@ref)
+"""
+function value(phd::PHData, vid::VariableID)::Float64
+    return retrieve_variable_value(phd.scenario_map[scenario(vid)], vid)
+end
+
+"""
+   value(phd::PHData, vid::VariableID)
+
+Returns the value of the variable associated with scenario `scen`, stage `stage` and index `idx`.
+
+See also: [`branch_value`](@ref), [`leaf_value`](@ref)
+"""
+function value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+    vid = VariableID(scen, stage, idx)
+    return value(phd, vid)
+end
+
+"""
+   w_value(phd::PHData, vid::VariableID)
+
+Returns the value of the variable associated with `vid`. Only available for branch variables.
+"""
+function w_value(phd::PHData, vid::VariableID)::Float64
+    return phd.scenario_map[scenario(vid)].w_vars[vid]
+end
+
+"""
+   value(phd::PHData, vid::VariableID)
+
+Returns the value of the variable associated with scenario `scen`, stage `stage` and index `idx`. Only available for branch variables.
+"""
+function w_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+    return w_value(phd, VariableID(scen, stage, idx))
+end
+
+"""
+   xhat_value(phd::PHData, xhid::VariableID)
+
+Returns the value of the consensus variable associated with `xhid`. Only available for leaf variables after calling `solve`.  Available for branch variables at any time.
+"""
+function xhat_value(phd::PHData, xhat_id::XhatID)::Float64
+    return value(phd.xhat[xhat_id])
+end
+
+"""
+   xhat_value(phd::PHData, vid::VariableID)
+
+Returns the value of the consensus variable associated with `vid`. Only available for leaf variables after calling `solve`.  Available for branch variables at any time.
+"""
+function xhat_value(phd::PHData, vid::VariableID)::Float64
+    return xhat_value(phd, convert_to_xhat_id(phd, vid))
+end
+
+"""
+   xhat_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+
+Returns the value of the consensus variable associated with scenario `scen`, stage `stage` and index `idx`. Only available for leaf variables after calling `solve`.  Available for branch variables at any time.
+"""
+function xhat_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+    return xhat_value(phd, VariableID(scen, stage, idx))
 end

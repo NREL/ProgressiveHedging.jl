@@ -1,54 +1,5 @@
-function name(phd::PHData, vid::VariableID)::String
-    if !haskey(phd.variable_data, vid)
-        error("No name available for variable id $vid")
-    end
-    return phd.variable_data[vid].name
-end
 
-function value(phd::PHData, vid::VariableID)::Float64
-    return retrieve_variable_value(phd.scenario_map[scenario(vid)], vid)
-end
-
-function value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
-    vid = VariableID(scen, stage, idx)
-    return value(phd, vid)
-end
-
-function branch_value(phd::PHData, vid::VariableID)::Float64
-    return phd.scenario_map[scenario(vid)].branch_vars[vid]
-end
-
-function branch_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
-    return branch_value(phd, VariableID(scen, stage, idx))
-end
-
-function leaf_value(phd::PHData, vid::VariableID)::Float64
-    return phd.scenario_map[scenario(vid)].leaf_vars[vid]
-end
-
-function leaf_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
-    return leaf_value(phd, VariableID(scen, stage, idx))
-end
-
-function w_value(phd::PHData, vid::VariableID)::Float64
-    return phd.scenario_map[scenario(vid)].w_vars[vid]
-end
-
-function w_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
-    return w_value(phd, VariableID(scen, stage, idx))
-end
-
-function xhat_value(phd::PHData, xhat_id::XhatID)::Float64
-    return value(phd.xhat[xhat_id])
-end
-
-function xhat_value(phd::PHData, vid::VariableID)::Float64
-    return xhat_value(phd, convert_to_xhat_id(phd, vid))
-end
-
-function xhat_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
-    return xhat_value(phd, VariableID(scen, stage, idx))
-end
+## Helper Functions ##
 
 function stringify(set::Set{K})::String where K
     str = ""
@@ -65,6 +16,31 @@ function stringify(array::Vector{K})::String where K
     end
     return rstrip(str, [',',' '])
 end
+
+## Generic Utility Functions ##
+
+function two_stage_tree(n::Int;
+                        pvect::Union{Nothing,Vector{R}}=nothing
+                        )::ScenarioTree where R <: Real
+    p = pvect == nothing ? [1.0/n for k in 1:n] : pvect
+
+    st = ScenarioTree()
+    for k in 1:n
+        add_leaf(st, root(st), p[k])
+    end
+    return st
+end
+
+function visualize_tree(phd::PHData)
+    # TODO: Implement this...
+    @warn("Not yet implemented")
+    return
+end
+
+## Complex PHData Interaction Functions ##
+# NOTE: These functions are almost always post-processing functions
+
+# TODO: Add documentation to these functions
 
 function retrieve_soln(phd::PHData)::DataFrames.DataFrame
 
@@ -122,24 +98,6 @@ function retrieve_obj_value(phd::PHData)::Float64
     end
 
     return obj_value
-end
-
-function two_stage_tree(n::Int;
-                        pvect::Union{Nothing,Vector{R}}=nothing
-                        )::ScenarioTree where R <: Real
-    p = pvect == nothing ? [1.0/n for k in 1:n] : pvect
-
-    st = ScenarioTree()
-    for k in 1:n
-        add_leaf(st, root(st), p[k])
-    end
-    return st
-end
-
-function visualize_tree(phd::PHData)
-    # TODO: Implement this...
-    @warn("Not yet implemented")
-    return
 end
 
 function retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
