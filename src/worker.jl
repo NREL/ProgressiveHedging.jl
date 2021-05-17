@@ -16,6 +16,7 @@ function WorkerRecord(id::Int)
     return WorkerRecord(id,
                         false,
                         Dict{ScenarioID,SubproblemRecord}(),
+                        Dict{ScenarioID,SubproblemRecord}(),
                         )
 end
 
@@ -96,17 +97,22 @@ function process_message(msg::InitializeLowerBound,
                          output::RemoteChannel,
                          )::Bool
 
+    # println("Worker $(record.id) initializing lower-bound problems for scenarios $(msg.scenarios)")
+
     for scen in msg.scenarios
-        lb_sub = create_subproblem(scen,
-                                  create_subproblem_args...;
-                                  create_subproblem_kwargs...)
-        var_map = report_variable_info(sub, scen_tree)
-        (branch_ids, leaf_ids) = _split_variables(scen_tree,
+        lb_sub = msg.create_subproblem(scen,
+                                       msg.create_subproblem_args...;
+                                       msg.create_subproblem_kwargs...)
+        var_map = report_variable_info(lb_sub, msg.scenario_tree)
+        (branch_ids, leaf_ids) = _split_variables(msg.scenario_tree,
                                                   collect(keys(var_map)))
+        add_lagrange_terms(lb_sub, branch_ids)
         record.lb_subproblems[scen] = SubproblemRecord(lb_sub,
                                                        branch_ids,
                                                        leaf_ids)
     end
+
+    # println("Worker $(record.id) finished with lower-bound initialization")
 
     return true
 end
@@ -175,17 +181,20 @@ function process_message(msg::SolveLowerBound,
                          )::Bool
 
     if !haskey(record.lb_subproblems, msg.scen)
-        error("Worker $(record.id) received solve command for scenario $(msg.scen). This worker was not assigned this scenario.")
+        error("Worker $(record.id) received lower-bound solve command for scenario $(msg.scen). This worker was not assigned this scenario.")
     end
 
+    # println("Worker $(record.id) received lower-bound solve command for scenario $(msg.scen).")
+
     lb_sub = record.lb_subproblems[msg.scen]
+    update_lagrange_terms(lb_sub.problem, msg.w_vals)
 
     if record.warm_start
         warm_start(lb_sub.problem)
     end
 
     start = time()
-    sts = solve(lbsub.problem)
+    sts = solve(lb_sub.problem)
     stop = time()
 
     put!(output, ReportLowerBound(msg.scen,
@@ -193,6 +202,8 @@ function process_message(msg::SolveLowerBound,
                                   objective_value(lb_sub.problem),
                                   stop - start)
          )
+
+    # println("Worker $(record.id) finished solve on lower bound scenario $(msg.scen).")
 
     return true
 end

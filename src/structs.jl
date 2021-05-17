@@ -66,9 +66,13 @@ mutable struct ProblemData
     obj::Float64
     sts::MOI.TerminationStatusCode
     time::Float64
+    lb_obj::Float64
+    lb_sts::MOI.TerminationStatusCode
+    lb_time::Float64
 end
 
-ProblemData() = ProblemData(0.0, MOI.OPTIMIZE_NOT_CALLED, 0.0)
+ProblemData() = ProblemData(0.0, MOI.OPTIMIZE_NOT_CALLED, 0.0,
+                            0.0, MOI.OPTIMIZE_NOT_CALLED, 0.0)
 
 struct ScenarioInfo
     pid::Int
@@ -129,20 +133,10 @@ struct PHIterate
     w::Dict{VariableID,Float64}
 end
 
-struct PHIterateHistory
-    iterates::Dict{Int,PHIterate}
-end
-
-function PHIterateHistory()
-    return PHIterateHistory(Dict{Int,PHIterate}())
-end
-
-function _save_iterate(phih::PHIterateHistory,
-                       iter::Int,
-                       phi::PHIterate,
-                       )::Nothing
-    phih.iterates[iter] = phi
-    return
+struct PHLowerBound
+    lower_bound::Float64
+    gap::Float64
+    rel_gap::Float64
 end
 
 struct PHResidual
@@ -152,47 +146,37 @@ struct PHResidual
     x_sq::Float64
 end
 
-struct PHResidualHistory
-    residuals::Dict{Int,PHResidual}
+struct PHHistory
+    iterates::Dict{Int, PHIterate}
+    residuals::Dict{Int, PHResidual}
+    lower_bounds::Dict{Int, PHLowerBound}
 end
 
-function PHResidualHistory()::PHResidualHistory
-    return PHResidualHistory(Dict{Int,PHResidual}())
+function PHHistory()
+    return PHHistory(Dict{Int, PHIterate}(),
+                     Dict{Int, PHResidual}(),
+                     Dict{Int, PHLowerBound}(),
+                     )
 end
 
-function residual_vector(phrh::PHResidualHistory)::Vector{Float64}
-    if length(phrh.residuals) > 0
-        max_iter = maximum(keys(phrh.residuals))
-        return [phrh.residuals[k].abs_res for k in sort!(collect(keys(phrh.residuals)))]
-    else
-        return Vector{Float64}()
-    end
+function _save_iterate(phh::PHHistory,
+                       iter::Int,
+                       phi::PHIterate
+                       )::Nothing
+    phh.iterates[iter] = phi
+    return
 end
 
-function relative_residual_vector(phrh::PHResidualHistory)::Vector{Float64}
-    if length(phrh.residuals) > 0
-        max_iter = maximum(keys(phrh.residuals))
-        return [phrh.residuals[k].rel_res for k in sort!(collect(keys(phrh.residuals)))]
-    else
-        return Vector{Float64}()
-    end
+function _save_lower_bound(phh::PHHistory,
+                           iter::Int,
+                           phlb::PHLowerBound
+                           )::Nothing
+    phh.lower_bounds[iter] = phlb
+    return
 end
 
-function residual_components(phrh::PHResidualHistory)::NTuple{2,Vector{Float64}}
-    if length(phrh.residuals) > 0
-        max_iter = maximum(keys(phrh.residuals))
-        sorted_keys = sort!(collect(keys(phrh.residuals)))
-        xhat_sq = [phrh.residuals[k].xhat_sq for k in sorted_keys]
-        x_sq = [phrh.residuals[k].x_sq for k in sorted_keys]
-        return (xhat_sq, x_sq)
-    else
-        return (Vector{Float64}(), Vector{Float64}())
-    end
-end
-
-function _save_residual(phrh::PHResidualHistory, iter::Int, res::PHResidual)::Nothing
-    # @assert(!(iter in keys(phrh.residuals)))
-    phrh.residuals[iter] = res
+function _save_residual(phh::PHHistory, iter::Int, res::PHResidual)::Nothing
+    phh.residuals[iter] = res
     return
 end
 
@@ -255,8 +239,7 @@ struct PHData
     callbacks::Vector{Callback}
     xhat::Dict{XhatID, HatVariable}
     variable_data::Dict{VariableID, VariableData}
-    iterate_history::PHIterateHistory
-    residual_history::PHResidualHistory
+    history::PHHistory
     time_info::TimerOutputs.TimerOutput
 end
 
@@ -325,8 +308,7 @@ function PHData(r::AbstractPenaltyParameter,
                   Vector{Callback}(),
                   xhat_dict,
                   var_data,
-                  PHIterateHistory(),
-                  PHResidualHistory(),
+                  PHHistory(),
                   time_out,
                   )
 end
@@ -423,6 +405,7 @@ function variables(a::HatVariable)::Set{VariableID}
 end
 
 ## PHData Interaction Functions ##
+# NOTE: Additional, more complicated functions are in utils.jl
 
 """
     add_callback(phd::PHData,
@@ -564,33 +547,6 @@ Returns the probability of the given scenario.
 """
 function probability(phd::PHData, scenario::ScenarioID)::Float64
     return phd.scenario_map[scenario].prob
-end
-
-"""
-    residuals(phd::PHData)::Vector{Float64}
-
-Returns the absolute residuals at the iterations specified by the user.
-"""
-function residuals(phd::PHData)::Vector{Float64}
-    return residual_vector(phd.residual_history)
-end
-
-"""
-    residual_components(phd::PHData)::NTuple{2,Vector{Float64}}
-
-Returns the components of the absolute residual at the iterations specified by the user.
-"""
-function residual_components(phd::PHData)::NTuple{2,Vector{Float64}}
-    return residual_components(phd.residual_history)
-end
-
-"""
-    relative_residuals(phd::PHData)::Vector{Float64}
-
-Returns the relative residuals at the iterations specified by the user.
-"""
-function relative_residuals(phd::PHData)::Vector{Float64}
-    return relative_residual_vector(phd.residual_history)
 end
 
 """

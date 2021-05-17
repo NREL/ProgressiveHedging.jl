@@ -35,7 +35,8 @@ export convert_to_variable_ids, convert_to_xhat_id
 export is_leaf, name, value, branch_value, leaf_value, w_value, xhat_value
 
 # Result retrieval functions
-export residuals, relative_residuals, residual_components
+export lower_bounds
+export residuals
 export retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_w
 export retrieve_xhat_history, retrieve_no_hat_history, retrieve_w_history
 
@@ -122,6 +123,7 @@ function solve(tree::ScenarioTree,
                report::Int=0,
                save_iterates::Int=0,
                save_residuals::Int=0,
+               lower_bound::Int=0,
                timing::Bool=true,
                warm_start::Bool=false,
                callbacks::Vector{Callback}=Vector{Callback}(),
@@ -157,6 +159,7 @@ function solve(tree::ScenarioTree,
                                      warm_start,
                                      timo,
                                      report,
+                                     lower_bound,
                                      (other_args...,args...);
                                      kwargs...)
                           )
@@ -169,7 +172,8 @@ function solve(tree::ScenarioTree,
     if report > 0
         println("Solving...")
     end
-    (niter, abs_res, rel_res) = @timeit(timo, "Solution",
+    (niter, abs_res, rel_res) = @timeit(timo,
+                                        "Solution",
                                         hedge(phd,
                                               winf,
                                               max_iter,
@@ -177,7 +181,8 @@ function solve(tree::ScenarioTree,
                                               rtol,
                                               report,
                                               save_iterates,
-                                              save_residuals)
+                                              save_residuals,
+                                              lower_bound)
                                         )
 
     # Post Processing

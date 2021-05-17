@@ -19,6 +19,7 @@ struct InitializeLowerBound <: Message
     create_subproblem_kwargs::NamedTuple
     scenarios::Set{ScenarioID}
     scenario_tree::ScenarioTree
+    warm_start::Bool
 end
 
 struct PenaltyInfo <: Message

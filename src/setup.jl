@@ -73,6 +73,30 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
     return var_maps
 end
 
+function _initialize_lb_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
+                                    wi::WorkerInf,
+                                    scen_tree::ScenarioTree,
+                                    constructor::Function,
+                                    constructor_args::Tuple,
+                                    warm_start::Bool;
+                                    kwargs...
+                                    )::Nothing
+
+    @sync for (wid, scenarios) in pairs(sp_map)
+        @async _send_message(wi,
+                             wid,
+                             InitializeLowerBound(constructor,
+                                                  constructor_args,
+                                                  (;kwargs...),
+                                                  scenarios,
+                                                  scen_tree,
+                                                  warm_start)
+                             )
+    end
+
+    return
+end
+
 function _set_initial_values(phd::PHData,
                              wi::WorkerInf,
                              )::Float64
@@ -188,6 +212,7 @@ function initialize(scen_tree::ScenarioTree,
                     warm_start::Bool,
                     timo::TimerOutputs.TimerOutput,
                     report::Int,
+                    lower_bound::Int,
                     constructor_args::Tuple,;
                     kwargs...
                     )::Tuple{PHData,WorkerInf}
@@ -206,11 +231,12 @@ function initialize(scen_tree::ScenarioTree,
                          _launch_workers(scen_per_worker, n_scenarios)
                          )
 
-    # Initialize workers
+    # Initialize subproblems
     if report > 0
         println("...initializing subproblems...")
         flush(stdout)
     end
+
     var_map = @timeit(timo,
                       "Initialize Subproblems",
                       _initialize_subproblems(scen_proc_map,
@@ -222,6 +248,26 @@ function initialize(scen_tree::ScenarioTree,
                                               warm_start;
                                               kwargs...)
                       )
+
+    if lower_bound > 0
+
+        if report > 0
+            println("...initializing lower-bound subproblems...")
+            flush(stdout)
+        end
+
+        @timeit(timo,
+                "Initialze Lower Bound Subproblems",
+                _initialize_lb_subproblems(scen_proc_map,
+                                           worker_inf,
+                                           scen_tree,
+                                           model_constructor,
+                                           constructor_args,
+                                           warm_start;
+                                           kwargs...)
+                )
+
+    end
 
     # Construct master ph object
     phd = @timeit(timo,
@@ -245,6 +291,14 @@ function initialize(scen_tree::ScenarioTree,
                        _set_penalty_parameter(phd,
                                               worker_inf)
                        )
+
+    if lower_bound > 0
+        @timeit(timo,
+                "Initial Lower Bound",
+                _send_lb_solve_commands(phd,
+                                        worker_inf)
+                )
+    end
 
     # Save residual
     _save_residual(phd, -1, xhat_res_sq, x_res_sq, 0.0, 0.0)

@@ -199,7 +199,7 @@ end
 function retrieve_xhat_history(phd::PHData)::DataFrames.DataFrame
 
     xhat_df = nothing
-    iterates = phd.iterate_history.iterates
+    iterates = phd.history.iterates
 
     for iter in sort!(collect(keys(iterates)))
 
@@ -229,7 +229,7 @@ end
 function retrieve_no_hat_history(phd::PHData)::DataFrames.DataFrame
 
     x_df = nothing
-    iterates = phd.iterate_history.iterates
+    iterates = phd.history.iterates
 
     for iter in sort!(collect(keys(iterates)))
 
@@ -258,7 +258,7 @@ end
 function retrieve_w_history(phd::PHData)::DataFrames.DataFrame
 
     w_df = nothing
-    iterates = phd.iterate_history.iterates
+    iterates = phd.history.iterates
 
     for iter in sort!(collect(keys(iterates)))
 
@@ -282,4 +282,59 @@ function retrieve_w_history(phd::PHData)::DataFrames.DataFrame
     end
 
     return w_df
+end
+
+function residuals(phd::PHData)::DataFrames.DataFrame
+
+    res_df = nothing
+    residuals = phd.history.residuals
+
+    for iter in sort!(collect(keys(residuals)))
+        res = residuals[iter]
+        data = Dict{String,Any}("iteration" => iter,
+                                "absolute" => res.abs_res,
+                                "relative" => res.rel_res,
+                                "xhat_sq" => res.xhat_sq,
+                                "x_sq" => res.x_sq
+                                )
+
+        if res_df == nothing
+            res_df = DataFrames.DataFrame(data)
+        else
+            push!(res_df, data)
+        end
+    end
+
+    if res_df == nothing
+        res_df = DataFrames.DataFrame()
+    end
+
+    return res_df
+end
+
+function lower_bounds(phd::PHData)::DataFrames.DataFrame
+
+    lb_df = nothing
+    lower_bounds = phd.history.lower_bounds
+
+    for iter in sort!(collect(keys(lower_bounds)))
+        lb = lower_bounds[iter]
+        data = Dict{String,Any}("iteration" => iter,
+                                "bound" => lb.lower_bound,
+                                "absolute gap" => lb.gap,
+                                "relative gap" => lb.rel_gap,
+                                )
+
+        if lb_df == nothing
+            lb_df = DataFrames.DataFrame(data)
+        else
+            push!(lb_df, data)
+        end
+    end
+
+    if lb_df == nothing
+        lb_df = DataFrames.DataFrame()
+    end
+
+    return lb_df
 end
