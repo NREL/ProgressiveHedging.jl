@@ -131,7 +131,7 @@ function process_message(msg::Solve,
 
     update_ph_terms(sub.problem, msg.w_vals, msg.xhat_vals)
 
-    _execute_subproblem_callbacks(record, msg.niter)
+    _execute_subproblem_callbacks(sub, msg.niter, msg.scen)
 
     if record.warm_start
         warm_start(sub.problem)
@@ -268,13 +268,13 @@ function _split_variables(scen_tree::ScenarioTree,
     return (branch_vars, leaf_vars)
 end
 
-function _execute_subproblem_callbacks(record::WorkerRecord,
-                                       niter::Int
+function _execute_subproblem_callbacks(sub::SubproblemRecord,
+                                       niter::Int,
+                                       scen::ScenarioID
                                        )::Nothing 
-    for (scen, sub) in record.subproblems
-        for spcb in sub.subproblem_callbacks
-            spcb.h(spcb.ext, sub, niter, scen)
-        end
+    
+    for spcb in sub.subproblem_callbacks
+        spcb.h(spcb.ext, sub.problem, niter, scen)
     end
 
     return

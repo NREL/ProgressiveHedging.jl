@@ -246,18 +246,10 @@ end
 ## Primary PH Data Structure ##
 
 """
-Data structure used to store information and results for a stochastic programming problem.
-
-*`r::AbstractPenaltyParameter`
-*`scenario_tree::ScenarioTree`
-*`scenario_map::Dict{ScenarioID, ScenarioInfo}`
-*`callbacks::Vector{Callback}`
-*`xhat::Dict{XhatID, HatVariable}`
-*`variable_data::Dict{VariableID, VariableData}`
-*`indexer::Indexer`
-*`iterate_history::PHIterateHistory`
-*`residual_history::PHResidualHistory`
-*`time_info::TimerOutputs.TimerOutput`
+Data structure used to store information and results for a stochastic programming problem. See the following functions to interact with this object:
+* [`consensus_variables`](@ref)
+* [`probability`](@ref)
+* [`scenarios`](@ref)
 """
 struct PHData
     r::AbstractPenaltyParameter
