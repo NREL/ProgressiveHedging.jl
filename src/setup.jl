@@ -42,32 +42,14 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
     # Wait for and process initialization replies
     var_maps = Dict{ScenarioID,Dict{VariableID,VariableInfo}}()
     remaining_maps = copy(scenarios(scen_tree))
-    msg_waiting = Vector{Union{ReportBranch,PenaltyInfo}}()
 
     while !isempty(remaining_maps)
 
-        msg = _retrieve_message_type(wi, Union{ReportBranch,VariableMap,PenaltyInfo})
+        msg = _retrieve_message_type(wi, VariableMap)
+        var_maps[msg.scen] = msg.var_info
 
-        if typeof(msg) <: ReportBranch || typeof(msg) <: PenaltyInfo
+        delete!(remaining_maps, msg.scen)
 
-            push!(msg_waiting, msg)
-
-        elseif typeof(msg) <: VariableMap
-
-            var_maps[msg.scen] = msg.var_info
-            delete!(remaining_maps, msg.scen)
-
-        else
-
-            error("Inconceivable!!!!")
-
-        end
-
-    end
-
-    # Put any other messages back
-    for msg in msg_waiting
-        put!(wi.output, msg)
     end
 
     return var_maps
@@ -103,34 +85,16 @@ function _set_initial_values(phd::PHData,
 
     # Wait for and process mapping replies
     remaining_init = copy(scenarios(phd.scenario_tree))
-    msg_waiting = Vector{PenaltyInfo}()
 
     while !isempty(remaining_init)
 
-        msg = _retrieve_message_type(wi, Union{ReportBranch,PenaltyInfo})
+        msg = _retrieve_message_type(wi, ReportBranch)
 
-        if typeof(msg) <: PenaltyInfo
+        _verify_report(msg)
+        _update_values(phd, msg)
 
-            push!(msg_waiting, msg)
+        delete!(remaining_init, msg.scen)
 
-        elseif typeof(msg) <: ReportBranch
-
-            _verify_report(msg)
-            _update_values(phd, msg)
-
-            delete!(remaining_init, msg.scen)
-
-        else
-
-            error("Recieved unexpected message of type $(typeof(msg)).")
-
-        end
-
-    end
-
-    # Put any penalty messages back
-    for msg in msg_waiting
-        put!(wi.output, msg)
     end
 
     # Start computation of initial PH values -- W values are computed at

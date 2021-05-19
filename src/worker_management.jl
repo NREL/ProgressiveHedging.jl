@@ -1,16 +1,19 @@
 # Type containing information on workers.
 struct WorkerInf
-    inputs::Dict{Int,RemoteChannel}
-    output::RemoteChannel
+    inputs::Dict{Int,RemoteChannel{Channel{Message}}}
+    output::RemoteChannel{Channel{Message}}
+    wait::Vector{Message}
     results::Dict{Int,Future}
 end
 
-function _is_running(wi::WorkerInf)
-    return length(wi.results) > 0
-end
-
-function _number_workers(wi::WorkerInf)
-    return length(wi.results)
+function WorkerInf(inputs::Dict{Int,RemoteChannel{Channel{Message}}},
+                   output::RemoteChannel{Channel{Message}},
+                   results::Dict{Int,Future}
+                   ) where T
+    return WorkerInf(inputs,
+                     output,
+                     Vector{Message}(),
+                     results)
 end
 
 function _abort(wi::WorkerInf)::Nothing
@@ -22,6 +25,51 @@ function _abort(wi::WorkerInf)::Nothing
         take!(wi.output)
     end
     return
+end
+
+function _check_wait(wi::WorkerInf,
+                     msg_type::Type{M}
+                     )::Union{Nothing,M} where M <: Message
+
+    retval = nothing
+
+    for (k,msg) in enumerate(wi.wait)
+        if typeof(msg) <: msg_type
+            retval = msg
+            deleteat!(wi.wait, k)
+            break
+        end
+    end
+
+    return retval
+end
+
+function _is_running(wi::WorkerInf)
+    return length(wi.results) > 0
+end
+
+function _launch_workers(min_worker_size::Int,
+                         min_result_size::Int,
+                         )::WorkerInf
+
+    worker_q_size = min_worker_size
+    result_q_size = max(2*nworkers(), min_result_size)
+
+    worker_results = RemoteChannel(()->Channel{Message}(result_q_size))
+    worker_qs = Dict{Int,RemoteChannel{Channel{Message}}}()
+    futures = Dict{Int,Future}()
+    @sync for wid in workers()
+        @async begin
+            worker_q = RemoteChannel(()->Channel{Message}(worker_q_size), wid)
+            futures[wid] = remotecall(worker_loop, wid, wid, worker_q, worker_results)
+            worker_qs[wid] = worker_q
+        end
+    end
+
+    wi = WorkerInf(worker_qs, worker_results, futures)
+    _monitor_workers(wi)
+
+    return wi
 end
 
 function _monitor_workers(wi::WorkerInf)::Nothing
@@ -55,36 +103,8 @@ function _monitor_workers(wi::WorkerInf)::Nothing
     return
 end
 
-function _wait_for_shutdown(wi::WorkerInf)::Nothing
-    while _is_running(wi)
-        _monitor_workers(wi)
-        yield()
-    end
-    return
-end
-
-function _launch_workers(min_worker_size::Int,
-                         min_result_size::Int,
-                         )::WorkerInf
-
-    worker_q_size = min_worker_size
-    result_q_size = max(2*nworkers(), min_result_size)
-
-    worker_results = RemoteChannel(()->Channel{Message}(result_q_size))
-    worker_qs = Dict{Int,RemoteChannel}()
-    futures = Dict{Int,Future}()
-    @sync for wid in workers()
-        @async begin
-            worker_q = RemoteChannel(()->Channel{Message}(worker_q_size), wid)
-            futures[wid] = remotecall(worker_loop, wid, wid, worker_q, worker_results)
-            worker_qs[wid] = worker_q
-        end
-    end
-
-    wi = WorkerInf(worker_qs, worker_results, futures)
-    _monitor_workers(wi)
-
-    return wi
+function _number_workers(wi::WorkerInf)
+    return length(wi.results)
 end
 
 function _retrieve_message(wi::WorkerInf)::Message
@@ -103,23 +123,30 @@ function _retrieve_message_type(wi::WorkerInf,
                                 msg_type::Type{M}
                                 )::M where M <: Message
 
-    msg = _retrieve_message(wi)
+    # Check if we have this type of message in the wait queue
+    msg = _check_wait(wi, msg_type)
 
-    if !(typeof(msg) <: msg_type)
+    while isnothing(msg)
 
-        # TODO: Should this be catastrophic as it is now?
-        _abort(wi)
-        error("Got message of type $(typeof(msg)) when expecting $(msg_type) message only.")
+        # Check get messages from the remote channel
+        msg = _retrieve_message(wi)
+
+        # If it's wrong put it on the wait queue for later and keep looking
+        if !(typeof(msg) <: msg_type)
+            push!(wi.wait, msg)
+            msg = nothing
+        end
 
     end
 
     return msg
+
 end
 
 function _send_message(wi::WorkerInf,
                        wid::Int,
-                       msg::M,
-                       ) where M <: Message
+                       msg::Message,
+                       )
     put!(wi.inputs[wid], msg)
     return
 end
@@ -127,6 +154,14 @@ end
 function _shutdown(wi::WorkerInf)
     @sync for rchan in values(wi.inputs)
         @async put!(rchan, ShutDown())
+    end
+    return
+end
+
+function _wait_for_shutdown(wi::WorkerInf)::Nothing
+    while _is_running(wi)
+        _monitor_workers(wi)
+        yield()
     end
     return
 end
