@@ -1,6 +1,8 @@
 
 abstract type Message end
 
+abstract type Report <: Message end
+
 struct Abort <: Message end
 
 struct Initialize{R <: AbstractPenaltyParameter} <: Message
@@ -29,7 +31,7 @@ end
 
 struct Ping <: Message end
 
-struct ReportBranch <: Message
+struct ReportBranch <: Report
     scen::ScenarioID
     sts::MOI.TerminationStatusCode
     obj::Float64
@@ -37,12 +39,12 @@ struct ReportBranch <: Message
     vals::Dict{VariableID,Float64}
 end
 
-struct ReportLeaf <: Message
+struct ReportLeaf <: Report
     scen::ScenarioID
     vals::Dict{VariableID,Float64}
 end
 
-struct ReportLowerBound <: Message
+struct ReportLowerBound <: Report
     scen::ScenarioID
     sts::MOI.TerminationStatusCode
     obj::Float64

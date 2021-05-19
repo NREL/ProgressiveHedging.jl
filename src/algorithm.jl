@@ -24,10 +24,8 @@ end
 
 function _process_reports(phd::PHData,
                           winf::WorkerInf,
-                          report_type::Union{Type{ReportBranch},
-                                             Type{ReportLeaf},
-                                             Type{ReportLowerBound}},
-                          )::Nothing
+                          report_type::Type{R}
+                          )::Nothing where R <: Report
 
     waiting_on = copy(scenarios(phd))
 
