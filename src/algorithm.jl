@@ -270,6 +270,11 @@ end
 function update_gap(phd::PHData, winf::WorkerInf)::NTuple{2,Float64}
 
     @timeit(phd.time_info,
+            "Issuing lower bound solve commands",
+            _send_lb_solve_commands(phd, winf)
+            )
+
+    @timeit(phd.time_info,
             "Collecting lower bound results",
             _process_reports(phd, winf, ReportLowerBound)
             )
@@ -292,7 +297,6 @@ end
 
 function solve_subproblems(phd::PHData,
                            winf::WorkerInf,
-                           solve_lb_problems::Bool
                            )::Nothing
 
     # Copy hat values to scenario base structure for easy dispersal
@@ -304,12 +308,6 @@ function solve_subproblems(phd::PHData,
     @timeit(phd.time_info,
             "Issuing solve commands",
             _send_solve_commands(phd, winf))
-
-    if solve_lb_problems
-        @timeit(phd.time_info,
-                "Issuing lower bound solve commands",
-                _send_lb_solve_commands(phd, winf))
-    end
 
     # Wait for and process replies
     @timeit(phd.time_info,
@@ -376,32 +374,10 @@ function hedge(ph_data::PHData,
             : 1.0)
     residual = sqrt(xhat_res_sq + x_res_sq) / nsqrt
 
-    if lb_flag
-        (lb, gap) = @timeit(ph_data.time_info,
-                            "Update Gap",
-                            update_gap(ph_data, worker_inf)
-                            )
-        _save_lower_bound(ph_data.history,
-                          niter,
-                          PHLowerBound(lb, gap, gap/lb)
-                          )
-    end
-
     user_continue = @timeit(ph_data.time_info,
                             "User Callbacks",
                             _execute_callbacks(ph_data, worker_inf, niter)
                             )
-
-    if lb_flag && report_flag
-        @printf("Iter: %4d   Bound: %12.4e   Abs Gap: %12.4e   Rel Gap: %8.4g\n",
-                niter,
-                lb,
-                gap,
-                abs(gap/lb)
-                )
-
-        flush(stdout)
-    end
 
     if report_flag
         @printf("Iter: %4d   AbsR: %12.6e   RelR: %12.6e   Xhat: %12.6e   X: %12.6e\n",
@@ -409,6 +385,29 @@ function hedge(ph_data::PHData,
                 sqrt(xhat_res_sq)/nsqrt, sqrt(x_res_sq)/nsqrt
                 )
         flush(stdout)
+    end
+
+    if lb_flag
+
+        (lb, gap) = @timeit(ph_data.time_info,
+                            "Update Gap",
+                            update_gap(ph_data, worker_inf)
+                            )
+
+        _save_lower_bound(ph_data.history,
+                          niter,
+                          PHLowerBound(lb, gap, abs(gap/lb))
+                          )
+
+        if report_flag
+            @printf("Iter: %4d   Bound: %12.4e   Abs Gap: %12.4e   Rel Gap: %8.4g\n",
+                    niter,
+                    lb,
+                    gap,
+                    abs(gap/lb)
+                    )
+            flush(stdout)
+        end
     end
 
     if save_iter_flag
@@ -426,12 +425,11 @@ function hedge(ph_data::PHData,
            )
 
         niter += 1
-        run_lb = (lb_flag && niter % lower_bound == 0)
 
         # Solve subproblems
         @timeit(ph_data.time_info,
                 "Solve subproblems",
-                solve_subproblems(ph_data, worker_inf, run_lb)
+                solve_subproblems(ph_data, worker_inf)
                 )
 
         # Update xhat and w
@@ -448,31 +446,10 @@ function hedge(ph_data::PHData,
         residual = sqrt(xhat_res_sq + x_res_sq) / nsqrt
         xmax = max(maximum(abs.(value.(values(ph_data.xhat)))), 1e-12)
 
-        if run_lb
-            (lb, gap) = @timeit(ph_data.time_info,
-                                "Update Gap",
-                                update_gap(ph_data, worker_inf)
-                                )
-            _save_lower_bound(ph_data.history,
-                          niter,
-                          PHLowerBound(lb, gap, gap/lb)
-                          )
-        end
-
         user_continue = @timeit(ph_data.time_info,
                                 "User Callbacks",
                                 _execute_callbacks(ph_data, worker_inf, niter)
                                 )
-
-        if run_lb && report_flag
-            @printf("Iter: %4d   Bound: %12.4e   Abs Gap: %12.4e   Rel Gap: %8.4g\n",
-                    niter,
-                    lb,
-                    gap,
-                    abs(gap/lb)
-                    )
-            flush(stdout)
-        end
 
         if report_flag && niter % report == 0
             @printf("Iter: %4d   AbsR: %12.6e   RelR: %12.6e   Xhat: %12.6e   X: %12.6e\n",
@@ -480,6 +457,29 @@ function hedge(ph_data::PHData,
                     sqrt(xhat_res_sq)/nsqrt, sqrt(x_res_sq)/nsqrt
                     )
             flush(stdout)
+        end
+
+        if lb_flag && niter % lower_bound == 0
+
+            (lb, gap) = @timeit(ph_data.time_info,
+                                "Update Gap",
+                                update_gap(ph_data, worker_inf)
+                                )
+
+            _save_lower_bound(ph_data.history,
+                              niter,
+                              PHLowerBound(lb, gap, abs(gap/lb))
+                              )
+
+            if report_flag
+                @printf("Iter: %4d   Bound: %12.4e   Abs Gap: %12.4e   Rel Gap: %8.4g\n",
+                        niter,
+                        lb,
+                        gap,
+                        abs(gap/lb)
+                        )
+                flush(stdout)
+            end
         end
 
         if save_iter_flag && niter % save_iter == 0
