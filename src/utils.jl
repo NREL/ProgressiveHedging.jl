@@ -22,7 +22,7 @@ end
 function two_stage_tree(n::Int;
                         pvect::Union{Nothing,Vector{R}}=nothing
                         )::ScenarioTree where R <: Real
-    p = pvect == nothing ? [1.0/n for k in 1:n] : pvect
+    p = isnothing(pvect) ? [1.0/n for k in 1:n] : pvect
 
     st = ScenarioTree()
     for k in 1:n
@@ -170,14 +170,14 @@ function retrieve_xhat_history(phd::PHData)::DataFrames.DataFrame
             end
         end
 
-        if xhat_df == nothing
+        if isnothing(xhat_df)
             xhat_df = DataFrames.DataFrame(data)
         else
             push!(xhat_df, data)
         end
     end
 
-    if xhat_df == nothing
+    if isnothing(xhat_df)
         xhat_df = DataFrames.DataFrame()
     end
 
@@ -199,14 +199,14 @@ function retrieve_no_hat_history(phd::PHData)::DataFrames.DataFrame
             data[vname] = current_iterate.x[vid]
         end
 
-        if x_df == nothing
+        if isnothing(x_df)
             x_df = DataFrames.DataFrame(data)
         else
             push!(x_df, data)
         end
     end
 
-    if x_df == nothing
+    if isnothing(x_df)
         x_df = DataFrames.DataFrame()
     end
 
@@ -228,14 +228,14 @@ function retrieve_w_history(phd::PHData)::DataFrames.DataFrame
             data[vname] = current_iterate.w[vid]
         end
 
-        if w_df == nothing
+        if isnothing(w_df)
             w_df = DataFrames.DataFrame(data)
         else
             push!(w_df, data)
         end
     end
 
-    if w_df == nothing
+    if isnothing(w_df)
         w_df = DataFrames.DataFrame()
     end
 
@@ -256,14 +256,14 @@ function residuals(phd::PHData)::DataFrames.DataFrame
                                 "x_sq" => res.x_sq
                                 )
 
-        if res_df == nothing
+        if isnothing(res_df)
             res_df = DataFrames.DataFrame(data)
         else
             push!(res_df, data)
         end
     end
 
-    if res_df == nothing
+    if isnothing(res_df)
         res_df = DataFrames.DataFrame()
     end
 
@@ -283,14 +283,14 @@ function lower_bounds(phd::PHData)::DataFrames.DataFrame
                                 "relative gap" => lb.rel_gap,
                                 )
 
-        if lb_df == nothing
+        if isnothing(lb_df)
             lb_df = DataFrames.DataFrame(data)
         else
             push!(lb_df, data)
         end
     end
 
-    if lb_df == nothing
+    if isnothing(lb_df)
         lb_df = DataFrames.DataFrame()
     end
 

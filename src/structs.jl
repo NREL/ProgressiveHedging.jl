@@ -259,7 +259,7 @@ function PHData(r::AbstractPenaltyParameter,
 
                 vnode = node(tree, vid.scenario, vid.stage)
 
-                if vnode == nothing
+                if isnothing(vnode)
                     error("Unable to locate scenario tree node for variable '$(vinfo.name)' occuring in scenario $(vid.scenario) and stage $(vid.stage).")
                 end
 
@@ -521,7 +521,7 @@ function get_callback(phd::PHData, name::String)::Callback
         end
     end
 
-    if return_cb === nothing
+    if isnothing(return_cb)
         error("Unable to find callback $name.")
     end
 
