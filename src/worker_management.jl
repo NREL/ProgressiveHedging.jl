@@ -31,6 +31,8 @@ function _check_wait(wi::WorkerInf,
                      msg_type::Type{M}
                      )::Union{Nothing,M} where M <: Message
 
+    # println("Checking wait queue...")
+
     retval = nothing
 
     for (k,msg) in enumerate(wi.wait)
@@ -73,14 +75,18 @@ function _launch_workers(min_worker_size::Int,
 end
 
 function _monitor_workers(wi::WorkerInf)::Nothing
+
     # println("Checking worker status...")
+
     for (pid, f) in pairs(wi.results)
         if isready(f)
             # Whatever the return value, this worker is done and
             # we can stop checking on it
             delete!(wi.results, pid)
             delete!(wi.inputs, pid)
+
             try
+
                 # Fetch on a remote process result will throw and error here
                 # whereas fetch on a task requires that it is thrown. Hence
                 # the try-catch AND the type check for an exception.
@@ -92,15 +98,22 @@ function _monitor_workers(wi::WorkerInf)::Nothing
                 else
                     error("Unexpected return code from worker: $e")
                 end
+
             catch e
+
                 _abort(wi)
                 rethrow()
+
             finally
+
                 ;
+
             end
         end
     end
+
     return
+
 end
 
 function _number_workers(wi::WorkerInf)
@@ -108,6 +121,8 @@ function _number_workers(wi::WorkerInf)
 end
 
 function _retrieve_message(wi::WorkerInf)::Message
+
+    # println("Checking message queue...")
 
     while !isready(wi.output) && _is_running(wi)
         _monitor_workers(wi)
@@ -147,6 +162,7 @@ function _send_message(wi::WorkerInf,
                        wid::Int,
                        msg::Message,
                        )
+    # println("Sending message of type $(typeof(msg)) to worker $(wid)")
     put!(wi.inputs[wid], msg)
     return
 end

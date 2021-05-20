@@ -195,7 +195,7 @@ function initialize(scen_tree::ScenarioTree,
     end
     worker_inf = @timeit(timo,
                          "Launch Workers",
-                         _launch_workers(scen_per_worker, n_scenarios)
+                         _launch_workers(2*scen_per_worker, n_scenarios)
                          )
 
     # Initialize subproblems
@@ -259,14 +259,6 @@ function initialize(scen_tree::ScenarioTree,
                        _set_penalty_parameter(phd,
                                               worker_inf)
                        )
-
-    if lower_bound > 0
-        @timeit(timo,
-                "Initial Lower Bound",
-                _send_lb_solve_commands(phd,
-                                        worker_inf)
-                )
-    end
 
     # Save residual
     _save_residual(phd, -1, xhat_res_sq, x_res_sq, 0.0, 0.0)

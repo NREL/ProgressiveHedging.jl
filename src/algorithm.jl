@@ -48,7 +48,7 @@ function _report(niter::Int,
                  residual::Float64,
                  xmax::Float64,
                  xhat_sq::Float64,
-                 x_sqrt::Float64
+                 x_sq::Float64
                  )::Nothing
 
     @printf("Iter: %4d   AbsR: %12.6e   RelR: %12.6e   Xhat: %12.6e   X: %12.6e\n",
@@ -64,7 +64,7 @@ end
 function _report_lower_bound(niter::Int, bound::Float64, gap::Float64)::Nothing
 
     @printf("Iter: %4d   Bound: %12.4e   Abs Gap: %12.4e   Rel Gap: %8.4g\n",
-            niter, lb, gap, abs(gap/lb)
+            niter, bound, gap, abs(gap/bound)
             )
     flush(stdout)
 
@@ -360,7 +360,7 @@ function update_gap(phd::PHData, winf::WorkerInf, niter::Int)::NTuple{2,Float64}
                         compute_gap(phd)
                         )
 
-    _save_lower_bound(ph_data.history,
+    _save_lower_bound(phd.history,
                       niter,
                       PHLowerBound(lb, gap, abs(gap/lb))
                       )
@@ -418,7 +418,6 @@ function hedge(ph_data::PHData,
     save_iter_flag = (save_iter > 0)
     save_res_flag = (save_res > 0)
     lb_flag = (lower_bound > 0)
-    user_continue = true
 
     cr = ph_data.history.residuals[-1]
     delete!(ph_data.history.residuals, -1)
@@ -441,12 +440,10 @@ function hedge(ph_data::PHData,
     end
 
     if lb_flag
-
         (lb, gap) = @timeit(ph_data.time_info,
                             "Update Gap",
                             update_gap(ph_data, worker_inf, niter)
                             )
-
         if report_flag
             _report_lower_bound(niter, lb, gap)
         end
@@ -459,12 +456,14 @@ function hedge(ph_data::PHData,
     if save_res_flag
         _save_residual(ph_data, 0, xhat_res_sq, x_res_sq, residual, residual/xmax)
     end
+
+    running = (user_continue
+               && niter < max_iter
+               && residual > atol
+               && residual > rtol * xmax
+               )
     
-    while (user_continue
-           && niter < max_iter
-           && residual > atol
-           && residual > rtol * xmax
-           )
+    while running
 
         niter += 1
 
@@ -493,17 +492,21 @@ function hedge(ph_data::PHData,
                                 _execute_callbacks(ph_data, worker_inf, niter)
                                 )
 
-        if report_flag && niter % report == 0
+        running = (user_continue
+                   && niter < max_iter
+                   && residual > atol
+                   && residual > rtol * xmax
+                   )
+
+        if report_flag && (niter % report == 0 || !running)
             _report(niter, nsqrt, residual, xmax, xhat_res_sq, x_res_sq)
         end
 
-        if lb_flag && niter % lower_bound == 0
-
+        if lb_flag && (niter % lower_bound == 0 || !running)
             (lb, gap) = @timeit(ph_data.time_info,
                                 "Update Gap",
                                 update_gap(ph_data, worker_inf, niter)
                                 )
-
             if report_flag
                 _report_lower_bound(niter, lb, gap)
             end

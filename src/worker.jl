@@ -99,24 +99,25 @@ function process_message(msg::InitializeLowerBound,
                          output::RemoteChannel,
                          )::Bool
 
-    # println("Worker $(record.id) initializing lower-bound problems for scenarios $(msg.scenarios)")
-
     for scen in msg.scenarios
         lb_sub = msg.create_subproblem(scen,
                                        msg.create_subproblem_args...;
-                                       msg.create_subproblem_kwargs...)
+                                       msg.create_subproblem_kwargs...
+                                       )
         var_map = report_variable_info(lb_sub, msg.scenario_tree)
         (branch_ids, leaf_ids) = _split_variables(msg.scenario_tree,
-                                                  collect(keys(var_map)))
+                                                  collect(keys(var_map))
+                                                  )
         add_lagrange_terms(lb_sub, branch_ids)
         record.lb_subproblems[scen] = SubproblemRecord(lb_sub,
                                                        branch_ids,
-                                                       leaf_ids)
+                                                       leaf_ids,
+                                                       SubproblemCallback[]
+                                                       )
     end
 
-    # println("Worker $(record.id) finished with lower-bound initialization")
-
     return true
+
 end
 
 function process_message(msg::PenaltyInfo,
@@ -177,6 +178,7 @@ function process_message(msg::Solve,
          )
 
     return true
+
 end
 
 function process_message(msg::SolveLowerBound,
@@ -187,8 +189,6 @@ function process_message(msg::SolveLowerBound,
     if !haskey(record.lb_subproblems, msg.scen)
         error("Worker $(record.id) received lower-bound solve command for scenario $(msg.scen). This worker was not assigned this scenario.")
     end
-
-    # println("Worker $(record.id) received lower-bound solve command for scenario $(msg.scen).")
 
     lb_sub = record.lb_subproblems[msg.scen]
     update_lagrange_terms(lb_sub.problem, msg.w_vals)
@@ -207,9 +207,8 @@ function process_message(msg::SolveLowerBound,
                                   stop - start)
          )
 
-    # println("Worker $(record.id) finished solve on lower bound scenario $(msg.scen).")
-
     return true
+
 end
 
 function process_message(msg::ShutDown,
@@ -223,6 +222,7 @@ function process_message(msg::ShutDown,
     end
 
     return false
+
 end
 
 function process_message(msg::SubproblemAction,
@@ -234,6 +234,7 @@ function process_message(msg::SubproblemAction,
     msg.action(sub, msg.args...; msg.kwargs...)
 
     return true
+
 end
 
 function _build_subproblems(output::RemoteChannel,
@@ -271,6 +272,7 @@ function _build_subproblems(output::RemoteChannel,
     end
 
     return
+
 end
 
 function _initial_solve(output::RemoteChannel,
@@ -293,6 +295,7 @@ function _initial_solve(output::RemoteChannel,
     end
 
     return
+
 end
 
 function _penalty_parameter_preprocess(output::RemoteChannel,
@@ -308,6 +311,7 @@ function _penalty_parameter_preprocess(output::RemoteChannel,
     end
 
     return
+
 end
 
 function _split_variables(scen_tree::ScenarioTree,
@@ -326,6 +330,7 @@ function _split_variables(scen_tree::ScenarioTree,
     end
 
     return (branch_vars, leaf_vars)
+
 end
 
 function _execute_subproblem_callbacks(sub::SubproblemRecord,
@@ -338,4 +343,5 @@ function _execute_subproblem_callbacks(sub::SubproblemRecord,
     end
 
     return
-end 
+
+end
