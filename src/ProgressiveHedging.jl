@@ -108,10 +108,11 @@ Solve the stochastic programming problem described by `tree` and the models crea
 * `report::Int` : Print progress to screen every `report` iterations. Any value <= 0 disables printing. Defaults to 0.
 * `save_iterates::Int` : Save PH iterates every `save_iterates` steps. Any value <= 0 disables saving iterates. Defaults to 0.
 * `save_residuals::Int` : Save PH residuals every `save_residuals` steps. Any value <= 0 disables saving residuals. Defaults to 0.
+* `lower_bound::Int` : Compute and save a lower-bound using (Gade, et. al. 2016) every `lower_bound` iterations. Any value <= disables lower-bound computation. Defaults to 0.
 * `timing::Bool` : Print timing info after solving if true. Defaults to true.
 * `warm_start::Bool` : Flag indicating that solver should be "warm started" by using the previous solution as the starting point (not compatible with all solvers)
 * `callbacks::Vector{Callback}` : Collection of `Callback` structs to call after each PH iteration. Callbacks will be executed in the order they appear. See `Callback` struct for more info. Defaults to empty vector.
-* `subproblem_callbacks::Vector{SubproblemCallback}` : Collection of `SubproblemCallback` structs to call after each PH iteration similarly to `callbacks`. These must not require communication between subproblems, and as such should be more efficient than regular callbacks. 
+* `subproblem_callbacks::Vector{SubproblemCallback}` : Collection of `SubproblemCallback` structs to call before solving each subproblem. Each callback is called on each subproblem but does not affect other subproblems. See `SubproblemCallback` struct for more info. Defaults to empty vector.
 * `worker_assignments::Dict{Int,Set{ScenarioID}}` : Dictionary specifying which scenario subproblems a worker will create and solve. The key values are worker ids as given by Distributed (see `Distributed.workers()`). The user is responsible for ensuring the specified workers exist and that every scenario is assigned to a worker. If no dictionary is given, scenarios are assigned to workers in round robin fashion. Defaults to empty dictionary.
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
 * `kwargs` : Any keyword arguments not specified here that need to be passed to `subproblem_constructor`.  See also `other_args` and `args`.
