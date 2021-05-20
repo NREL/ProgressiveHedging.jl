@@ -13,6 +13,7 @@ struct Initialize{R <: AbstractPenaltyParameter} <: Message
     scenarios::Set{ScenarioID}
     scenario_tree::ScenarioTree
     warm_start::Bool
+    subproblem_callbacks::Vector{SubproblemCallback}
 end
 
 struct InitializeLowerBound <: Message
@@ -57,6 +58,7 @@ struct Solve <: Message
     scen::ScenarioID
     w_vals::Dict{VariableID,Float64}
     xhat_vals::Dict{VariableID,Float64}
+    niter::Int
 end
 
 struct SolveLowerBound <: Message

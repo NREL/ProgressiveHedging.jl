@@ -78,10 +78,18 @@ end
 
 function _send_solve_commands(phd::PHData,
                               winf::WorkerInf,
+                              niter::Int
                               )::Nothing
     @sync for (scen, sinfo) in pairs(phd.scenario_map)
         (w_dict, xhat_dict) = create_ph_dicts(sinfo)
-        @async _send_message(winf, sinfo.pid, Solve(scen, w_dict, xhat_dict))
+        @async _send_message(winf,
+                             sinfo.pid,
+                             Solve(scen,
+                                   w_dict,
+                                   xhat_dict,
+                                   niter
+                                   )
+                             )
     end
 
     return
@@ -297,6 +305,7 @@ end
 
 function solve_subproblems(phd::PHData,
                            winf::WorkerInf,
+                           niter::Int,
                            )::Nothing
 
     # Copy hat values to scenario base structure for easy dispersal
@@ -307,7 +316,7 @@ function solve_subproblems(phd::PHData,
     # Send solve command to workers
     @timeit(phd.time_info,
             "Issuing solve commands",
-            _send_solve_commands(phd, winf))
+            _send_solve_commands(phd, winf, niter))
 
     # Wait for and process replies
     @timeit(phd.time_info,
@@ -429,7 +438,7 @@ function hedge(ph_data::PHData,
         # Solve subproblems
         @timeit(ph_data.time_info,
                 "Solve subproblems",
-                solve_subproblems(ph_data, worker_inf)
+                solve_subproblems(ph_data, worker_inf, niter)
                 )
 
         # Update xhat and w
