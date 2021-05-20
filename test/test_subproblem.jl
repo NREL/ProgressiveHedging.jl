@@ -1,3 +1,50 @@
+@testset "Unimplemented Error" begin
+
+    struct InterfaceFunction
+        f::Function
+        args::Tuple
+    end
+
+    function IF(f::Function, args...)
+        return InterfaceFunction(f, args)
+    end
+
+    struct Unimplemented <: PH.AbstractSubproblem
+    end
+
+    to_test = [
+        IF(PH.add_ph_objective_terms, Vector{PH.VariableID}(), 2.25),
+        IF(PH.objective_value),
+        IF(PH.report_values, Vector{PH.VariableID}()),
+        IF(PH.report_variable_info, build_scen_tree()),
+        IF(PH.solve),
+        IF(PH.update_ph_terms, Dict{PH.VariableID,Float64}(), Dict{PH.VariableID,Float64}()),
+        IF(PH.warm_start),
+        IF(PH.report_penalty_info, PH.ProportionalPenaltyParameter),
+        IF(PH.add_lagrange_terms, Vector{VariableID}()),
+        IF(PH.update_lagrange_terms, Dict{VariableID,Float64}()),
+    ]
+
+    subprob = Unimplemented()
+    for interface_function in to_test
+        @test_throws PH.UnimplementedError begin
+            interface_function.f(subprob, interface_function.args...)
+        end
+    end
+
+    @test_throws PH.UnimplementedError begin
+        PH.ef_copy_model(JuMP.Model(),
+                         subprob,
+                         PH.scid(0),
+                         build_scen_tree(),
+                         Dict{PH.NodeID,Any}()
+                         )
+    end
+    @test_throws PH.UnimplementedError begin
+        PH.ef_node_dict_constructor(typeof(subprob))
+    end
+end
+
 @testset "Scenario Form" begin
     st = build_scen_tree()
 
@@ -217,6 +264,8 @@ end
             @test JuMP.value(var) == is_fixed[vid]
         elseif vid in is_free
             @test !JuMP.is_fixed(var)
+        else
+            error("Vid $vid is neither fixed nor free")
         end
     end
 

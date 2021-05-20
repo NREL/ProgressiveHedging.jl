@@ -41,8 +41,8 @@ end
 @testset "Utils" begin
     include("test_utils.jl")
 end
-@testset "JuMP Subproblem" begin
-    include("test_jumpsp.jl")
+@testset "Subproblem" begin
+    include("test_subproblem.jl")
 end
 @testset "Workers" begin
     include("test_worker.jl")
