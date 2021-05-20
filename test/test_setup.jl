@@ -31,7 +31,8 @@
         rc = RemoteChannel(()->Channel(2*length(PH.scenarios(st))), myid())
 
         PH._build_subproblems(rc, wr, PH.scenarios(st), st,
-                              create_model, (), NamedTuple())
+                              create_model, (), NamedTuple(), SubproblemCallback[]
+                              )
 
         for (scid, sub) in pairs(wr.subproblems)
             @test length(JuMP.all_variables(sub.problem.model)) == 6
@@ -87,7 +88,8 @@
                                        create_model,
                                        (),
                                        PH.ScalarPenaltyParameter(1.0),
-                                       false)
+                                       false,
+                                       SubproblemCallback[])
         end
 
         if timeout_wait(my_task, 90) && !istaskfailed(my_task)
@@ -247,7 +249,8 @@
                                        create_model,
                                        (),
                                        PH.ProportionalPenaltyParameter(1.0),
-                                       false)
+                                       false,
+                                       SubproblemCallback[])
         end
 
         if timeout_wait(my_task, 90) && !istaskfailed(my_task)
@@ -418,7 +421,8 @@
                                        create_model,
                                        (),
                                        PH.SEPPenaltyParameter(),
-                                       false)
+                                       false,
+                                       SubproblemCallback[])
         end
 
         if timeout_wait(my_task, 90) && !istaskfailed(my_task)

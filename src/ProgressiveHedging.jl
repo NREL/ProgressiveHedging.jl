@@ -19,6 +19,7 @@ export two_stage_tree
 export Callback
 export cb, mean_deviation, variable_reduction
 export apply_to_subproblem
+export SubproblemCallback, spcb
 
 # ID types and functions
 export Index, NodeID, ScenarioID, StageID, VariableID, XhatID
@@ -56,6 +57,7 @@ include("scenario_tree.jl")
 include("subproblem.jl")
 include("jumpsubproblem.jl")
 
+include("subproblem_callback.jl")
 include("message.jl")
 include("worker.jl")
 include("worker_management.jl")
@@ -109,6 +111,7 @@ Solve the stochastic programming problem described by `tree` and the models crea
 * `timing::Bool` : Print timing info after solving if true. Defaults to true.
 * `warm_start::Bool` : Flag indicating that solver should be "warm started" by using the previous solution as the starting point (not compatible with all solvers)
 * `callbacks::Vector{Callback}` : Collection of `Callback` structs to call after each PH iteration. Callbacks will be executed in the order they appear. See `Callback` struct for more info. Defaults to empty vector.
+* `subproblem_callbacks::Vector{SubproblemCallback}` : Collection of `SubproblemCallback` structs to call after each PH iteration similarly to `callbacks`. These must not require communication between subproblems, and as such should be more efficient than regular callbacks. 
 * `worker_assignments::Dict{Int,Set{ScenarioID}}` : Dictionary specifying which scenario subproblems a worker will create and solve. The key values are worker ids as given by Distributed (see `Distributed.workers()`). The user is responsible for ensuring the specified workers exist and that every scenario is assigned to a worker. If no dictionary is given, scenarios are assigned to workers in round robin fashion. Defaults to empty dictionary.
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
 * `kwargs` : Any keyword arguments not specified here that need to be passed to `subproblem_constructor`.  See also `other_args` and `args`.
@@ -126,6 +129,7 @@ function solve(tree::ScenarioTree,
                timing::Bool=true,
                warm_start::Bool=false,
                callbacks::Vector{Callback}=Vector{Callback}(),
+               subproblem_callbacks::Vector{SubproblemCallback}=Vector{SubproblemCallback}(),
                worker_assignments::Dict{Int,Set{ScenarioID}}=Dict{Int,Set{ScenarioID}}(),
                args::Tuple=(),
                kwargs...
@@ -158,6 +162,7 @@ function solve(tree::ScenarioTree,
                                      warm_start,
                                      timo,
                                      report,
+                                     subproblem_callbacks,
                                      (other_args...,args...);
                                      kwargs...)
                           )
@@ -239,7 +244,7 @@ function solve_extensive(tree::ScenarioTree,
     end
 
     psum = sum(values(tree.prob_map))
-    if psum > 1.0 || psum < 1.0
+    if !isapprox(psum, 1.0, atol=1e-8)
         error("Total probability of scenarios in given scenario tree is $psum.")
     end
 

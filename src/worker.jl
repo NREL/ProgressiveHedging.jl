@@ -3,6 +3,7 @@ struct SubproblemRecord
     problem::AbstractSubproblem
     branch_vars::Vector{VariableID}
     leaf_vars::Vector{VariableID}
+    subproblem_callbacks::Vector{SubproblemCallback}
 end
 
 mutable struct WorkerRecord
@@ -81,6 +82,7 @@ function process_message(msg::Initialize,
                        msg.create_subproblem,
                        msg.create_subproblem_args,
                        msg.create_subproblem_kwargs,
+                       msg.subproblem_callbacks
                        )
 
     _initial_solve(output, record)
@@ -128,6 +130,8 @@ function process_message(msg::Solve,
     sub = record.subproblems[msg.scen]
 
     update_ph_terms(sub.problem, msg.w_vals, msg.xhat_vals)
+
+    _execute_subproblem_callbacks(sub, msg.niter, msg.scen)
 
     if record.warm_start
         warm_start(sub.problem)
@@ -179,6 +183,7 @@ function _build_subproblems(output::RemoteChannel,
                             create_subproblem::Function,
                             create_subproblem_args::Tuple,
                             create_subproblem_kwargs::NamedTuple,
+                            subproblem_callbacks::Vector{SubproblemCallback}
                             )::Nothing
     for scen in scenarios
 
@@ -200,7 +205,9 @@ function _build_subproblems(output::RemoteChannel,
         # Save subproblem and relevant data
         record.subproblems[scen] = SubproblemRecord(sub,
                                                     branch_ids,
-                                                    leaf_ids)
+                                                    leaf_ids,
+                                                    subproblem_callbacks
+                                                    )
     end
 
     return
@@ -260,3 +267,15 @@ function _split_variables(scen_tree::ScenarioTree,
 
     return (branch_vars, leaf_vars)
 end
+
+function _execute_subproblem_callbacks(sub::SubproblemRecord,
+                                       niter::Int,
+                                       scen::ScenarioID
+                                       )::Nothing 
+    
+    for spcb in sub.subproblem_callbacks
+        spcb.h(spcb.ext, sub.problem, niter, scen)
+    end
+
+    return
+end 

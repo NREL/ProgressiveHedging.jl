@@ -246,7 +246,10 @@ end
 ## Primary PH Data Structure ##
 
 """
-Data structure used to store information and results for a stochastic programming problem.
+Data structure used to store information and results for a stochastic programming problem. See the following functions to interact with this object:
+* [`consensus_variables`](@ref)
+* [`probability`](@ref)
+* [`scenarios`](@ref)
 """
 struct PHData
     r::AbstractPenaltyParameter
