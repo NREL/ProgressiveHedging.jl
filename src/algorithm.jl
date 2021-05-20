@@ -83,14 +83,14 @@ function _send_solve_commands(phd::PHData,
                               )::Nothing
     @sync for (scen, sinfo) in pairs(phd.scenario_map)
         (w_dict, xhat_dict) = create_ph_dicts(sinfo)
-        @async _send_message(winf, 
+        @async _send_message(winf,
                              sinfo.pid,
                              Solve(scen,
                                    w_dict,
                                    xhat_dict,
                                    niter
                                    )
-                            )
+                             )
     end
 
     return
