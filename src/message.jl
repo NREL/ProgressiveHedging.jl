@@ -5,6 +5,8 @@ abstract type Report <: Message end
 
 struct Abort <: Message end
 
+struct DumpState <: Message end
+
 struct Initialize{R <: AbstractPenaltyParameter} <: Message
     create_subproblem::Function
     create_subproblem_args::Tuple
@@ -76,4 +78,9 @@ end
 struct VariableMap <: Message
     scen::ScenarioID
     var_info::Dict{VariableID,VariableInfo} # VariableInfo definition in subproblem.jl
+end
+
+struct WorkerState{T} <: Message
+    id::Int
+    state::T
 end

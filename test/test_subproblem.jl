@@ -1,5 +1,7 @@
 @testset "Unimplemented Error" begin
 
+    # TODO: This is a pain to debug if it fails. Try to fix it.
+
     struct InterfaceFunction
         f::Function
         args::Tuple
@@ -40,12 +42,13 @@
                          Dict{PH.NodeID,Any}()
                          )
     end
+
     @test_throws PH.UnimplementedError begin
         PH.ef_node_dict_constructor(typeof(subprob))
     end
 end
 
-@testset "Scenario Form" begin
+@testset "Scenario Subproblem Functions" begin
     st = build_scen_tree()
 
     js = create_model(PH.scid(0))
@@ -124,9 +127,9 @@ end
     end
 end
 
-@testset "Extensive Form" begin
-    #TODO: Make tests for this case
-end
+# @testset "Extensive Form" begin
+#     #TODO: Make tests for this case
+# end
 
 @testset "Penalties" begin
     st = build_scen_tree()
@@ -243,20 +246,23 @@ end
 end
 
 @testset "Fix Variables" begin
+
     js = create_model(PH.scid(0))
+    PH.report_variable_info(js, build_scen_tree())
 
     is_fixed = Dict{PH.VariableID,Float64}()
     is_free = Vector{PH.VariableID}()
     for vid in keys(js.vars)
-        r = rand()
-        if r > 0.5
-            is_fixed[vid] = r
+        if PH.value(PH.index(vid)) % 2 == 0 # r > 0.5
+            is_fixed[vid] = rand()
         else
             push!(is_free, vid)
         end
     end
 
     PH.fix_variables(js, is_fixed)
+    sts = PH.solve(js)
+    @test sts == MOI.LOCALLY_SOLVED
 
     for (vid,var) in pairs(js.vars)
         if haskey(is_fixed, vid)
@@ -269,4 +275,40 @@ end
         end
     end
 
+end
+
+@testset "Lagrange Terms" begin
+    st = build_scen_tree()
+
+    js = create_model(PH.scid(0))
+    org_obj_func = JuMP.objective_function(js.model, JuMP.QuadExpr)
+
+    vid_name_map = PH.report_variable_info(js, st)
+    (br_vids, lf_vids) = PH._split_variables(st, collect(keys(vid_name_map)))
+
+    PH.add_lagrange_terms(js, br_vids)
+    ph_obj_func = JuMP.objective_function(js.model, JuMP.QuadExpr)
+
+    diff = ph_obj_func - org_obj_func
+    JuMP.drop_zeros!(diff)
+
+    @test length(JuMP.linear_terms(diff)) == 0
+    @test length(JuMP.quad_terms(diff)) == length(br_vids)
+    for qt in JuMP.quad_terms(diff)
+        coef = qt[1]
+        @test isapprox(coef, 1.0)
+    end
+
+    w_vals = Dict{PH.VariableID,Float64}()
+    for (k,w) in enumerate(keys(js.w_vars))
+        w_vals[w] = k * rand()
+    end
+    PH.update_lagrange_terms(js, w_vals)
+
+    sts = PH.solve(js)
+    @test sts == MOI.LOCALLY_SOLVED
+
+    for (wid, wref) in pairs(js.w_vars)
+        @test JuMP.value(wref) == w_vals[wid]
+    end
 end

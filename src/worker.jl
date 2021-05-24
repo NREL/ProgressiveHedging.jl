@@ -1,3 +1,4 @@
+#### Worker Structs ####
 
 struct SubproblemRecord
     problem::AbstractSubproblem
@@ -20,6 +21,8 @@ function WorkerRecord(id::Int)
                         Dict{ScenarioID,SubproblemRecord}(),
                         )
 end
+
+#### Worker Functions ####
 
 function worker_loop(id::Int,
                      input::RemoteChannel,
@@ -64,6 +67,14 @@ function process_message(msg::Abort,
                          output::RemoteChannel
                          )::Bool
     return false
+end
+
+function process_message(msg::DumpState,
+                         record::WorkerRecord,
+                         output::RemoteChannel
+                         )::Bool
+    put!(output, WorkerState(record.id, record))
+    return true
 end
 
 function process_message(msg::Initialize,
@@ -237,6 +248,8 @@ function process_message(msg::SubproblemAction,
 
 end
 
+#### Internal Functions ####
+
 function _build_subproblems(output::RemoteChannel,
                             record::WorkerRecord,
                             scenarios::Set{ScenarioID},
@@ -269,6 +282,19 @@ function _build_subproblems(output::RemoteChannel,
                                                     leaf_ids,
                                                     subproblem_callbacks
                                                     )
+    end
+
+    return
+
+end
+
+function _execute_subproblem_callbacks(sub::SubproblemRecord,
+                                       niter::Int,
+                                       scen::ScenarioID
+                                       )::Nothing
+
+    for spcb in sub.subproblem_callbacks
+        spcb.h(spcb.ext, sub.problem, niter, scen)
     end
 
     return
@@ -330,18 +356,5 @@ function _split_variables(scen_tree::ScenarioTree,
     end
 
     return (branch_vars, leaf_vars)
-
-end
-
-function _execute_subproblem_callbacks(sub::SubproblemRecord,
-                                       niter::Int,
-                                       scen::ScenarioID
-                                       )::Nothing 
-    
-    for spcb in sub.subproblem_callbacks
-        spcb.h(spcb.ext, sub.problem, niter, scen)
-    end
-
-    return
 
 end
