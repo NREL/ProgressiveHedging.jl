@@ -138,23 +138,25 @@ end
 function update_lagrange_terms(js::JuMPSubproblem,
                                w_vals::Dict{VariableID,Float64}
                                )::Nothing
-    update_ph_terms(js, w_vals, Dict{VariableID,Float64}())
+
+    for (wid, wval) in pairs(w_vals)
+        JuMP.fix(js.w_vars[wid], wval, force=true)
+    end
+
     return
+
 end
 
 function update_ph_terms(js::JuMPSubproblem,
                          w_vals::Dict{VariableID,Float64},
                          xhat_vals::Dict{VariableID,Float64}
                          )::Nothing
-    for (wid, wval) in pairs(w_vals)
-        JuMP.fix(js.w_vars[wid], wval, force=true)
-    end
 
-    for (xhid, xhval) in pairs(xhat_vals)
-        JuMP.fix(js.xhat_vars[xhid], xhval, force=true)
-    end
+    update_lagrange_terms(js, w_vals)
+    update_proximal_terms(js, xhat_vals)
 
     return
+
 end
 
 function warm_start(js::JuMPSubproblem)::Nothing
@@ -213,6 +215,19 @@ function add_proximal_terms(js::JuMPSubproblem,
     JuMP.set_objective_function(js.model, obj)
 
     return
+
+end
+
+function fix_variables(js::JuMPSubproblem,
+                       vids::Dict{VariableID,Float64}
+                       )::Nothing
+
+    for (vid, val) in pairs(vids)
+        JuMP.fix(js.vars[vid], val, force=true)
+    end
+
+    return
+
 end
 
 function objective_coefficients(js::JuMPSubproblem,
@@ -226,15 +241,16 @@ function objective_coefficients(js::JuMPSubproblem,
     return pen_dict
 end
 
-function fix_variables(js::JuMPSubproblem,
-                       vids::Dict{VariableID,Float64}
-                       )::Nothing
+function update_proximal_terms(js::JuMPSubproblem,
+                               xhat_vals::Dict{VariableID,Float64}
+                               )::Nothing
 
-    for (vid, val) in pairs(vids)
-        JuMP.fix(js.vars[vid], val, force=true)
+    for (xhid, xhval) in pairs(xhat_vals)
+        JuMP.fix(js.xhat_vars[xhid], xhval, force=true)
     end
 
     return
+
 end
 
 ## JuMPSubproblem Internal Functions ##
