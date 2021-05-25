@@ -19,6 +19,13 @@ end
 
 ## Generic Utility Functions ##
 
+"""
+    two_stage_tree(n::Int;
+                   pvect::Union{Nothing,Vector{R}}=nothing
+                   )::ScenarioTree where R <: Real
+
+Construct and return a two-stage scenario tree with `n` scenarios. `pvect` contains the probabilities for the scenarios.  If not given, each scenario is assigned probability `1/n`.
+"""
 function two_stage_tree(n::Int;
                         pvect::Union{Nothing,Vector{R}}=nothing
                         )::ScenarioTree where R <: Real
@@ -42,6 +49,76 @@ end
 
 # TODO: Add documentation to these functions
 
+"""
+    lower_bounds(phd::PHData)::DataFrames.DataFrame
+
+Return a `DataFrame` with the computed and saved lower bounds. See the `lower_bound` keyword argument on [`solve`](@ref).
+"""
+function lower_bounds(phd::PHData)::DataFrames.DataFrame
+
+    lb_df = nothing
+    lower_bounds = phd.history.lower_bounds
+
+    for iter in sort!(collect(keys(lower_bounds)))
+        lb = lower_bounds[iter]
+        data = Dict{String,Any}("iteration" => iter,
+                                "bound" => lb.lower_bound,
+                                "absolute gap" => lb.gap,
+                                "relative gap" => lb.rel_gap,
+                                )
+
+        if isnothing(lb_df)
+            lb_df = DataFrames.DataFrame(data)
+        else
+            push!(lb_df, data)
+        end
+    end
+
+    if isnothing(lb_df)
+        lb_df = DataFrames.DataFrame()
+    end
+
+    return lb_df
+end
+
+"""
+    residuals(phd::PHData)::DataFrames.DataFrame
+
+Return a `DataFrame` with absolute and relative residuals along with the components. See the `save_residuals` keyword argument on [`solve`](@ref).
+"""
+function residuals(phd::PHData)::DataFrames.DataFrame
+
+    res_df = nothing
+    residuals = phd.history.residuals
+
+    for iter in sort!(collect(keys(residuals)))
+        res = residuals[iter]
+        data = Dict{String,Any}("iteration" => iter,
+                                "absolute" => res.abs_res,
+                                "relative" => res.rel_res,
+                                "xhat_sq" => res.xhat_sq,
+                                "x_sq" => res.x_sq
+                                )
+
+        if isnothing(res_df)
+            res_df = DataFrames.DataFrame(data)
+        else
+            push!(res_df, data)
+        end
+    end
+
+    if isnothing(res_df)
+        res_df = DataFrames.DataFrame()
+    end
+
+    return res_df
+end
+
+"""
+    retrieve_soln(phd::PHData)::DataFrames.DataFrame
+
+Return a `DataFrame` with the solution values of all consensus and leaf variables.
+"""
 function retrieve_soln(phd::PHData)::DataFrames.DataFrame
 
     vars = Vector{String}()
@@ -66,6 +143,11 @@ function retrieve_soln(phd::PHData)::DataFrames.DataFrame
     return soln_df
 end
 
+"""
+    retrieve_aug_obj_value(phd::PHData)::Float64
+
+Return the current objective value including Lagrange and proximal PH terms of the stochastic program.
+"""
 function retrieve_aug_obj_value(phd::PHData)::Float64
 
     obj_value = 0.0
@@ -77,6 +159,11 @@ function retrieve_aug_obj_value(phd::PHData)::Float64
     return obj_value
 end
 
+"""
+    retrieve_aug_obj_value(phd::PHData)::Float64
+
+Return the current objective value without Lagrange and proximal PH terms.
+"""
 function retrieve_obj_value(phd::PHData)::Float64
 
     obj_value = 0.0
@@ -100,6 +187,11 @@ function retrieve_obj_value(phd::PHData)::Float64
     return obj_value
 end
 
+"""
+    retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
+
+Return a `DataFrame` with the final nonconsensus variable values.
+"""
 function retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
     vars = Vector{String}()
     vals = Vector{Float64}()
@@ -126,6 +218,11 @@ function retrieve_no_hats(phd::PHData)::DataFrames.DataFrame
     return soln_df
 end
 
+"""
+    retrieve_w(phd::PHData)::DataFrames.DataFrame
+
+Return a `DataFrame` with the final anticipativity constraint Lagrange multiplier values.
+"""
 function retrieve_w(phd::PHData)::DataFrames.DataFrame
     vars = Vector{String}()
     vals = Vector{Float64}()
@@ -154,6 +251,11 @@ function retrieve_w(phd::PHData)::DataFrames.DataFrame
     return soln_df
 end
 
+"""
+    retrieve_xhat_history(phd::PHData)::DataFrames.DataFrame
+
+Return a `DataFrame` with the saved consensus variable values. See the `save_iterates` keyword argument on [`solve`](@ref).
+"""
 function retrieve_xhat_history(phd::PHData)::DataFrames.DataFrame
 
     xhat_df = nothing
@@ -184,6 +286,11 @@ function retrieve_xhat_history(phd::PHData)::DataFrames.DataFrame
     return xhat_df
 end
 
+"""
+    retrieve_no_hat_history(phd::PHData)::DataFrames.DataFrame
+
+Return a `DataFrame` with the saved nonconsensus variable values. See the `save_iterates` keyword argument on [`solve`](@ref).
+"""
 function retrieve_no_hat_history(phd::PHData)::DataFrames.DataFrame
 
     x_df = nothing
@@ -213,6 +320,11 @@ function retrieve_no_hat_history(phd::PHData)::DataFrames.DataFrame
     return x_df
 end
 
+"""
+    retrieve_w_history(phd::PHData)::DataFrames.DataFrame
+
+Return a `DataFrame` with the saved PH Lagrange variable values. See the `save_iterates` keyword argument on [`solve`](@ref).
+"""
 function retrieve_w_history(phd::PHData)::DataFrames.DataFrame
 
     w_df = nothing
@@ -240,59 +352,4 @@ function retrieve_w_history(phd::PHData)::DataFrames.DataFrame
     end
 
     return w_df
-end
-
-function residuals(phd::PHData)::DataFrames.DataFrame
-
-    res_df = nothing
-    residuals = phd.history.residuals
-
-    for iter in sort!(collect(keys(residuals)))
-        res = residuals[iter]
-        data = Dict{String,Any}("iteration" => iter,
-                                "absolute" => res.abs_res,
-                                "relative" => res.rel_res,
-                                "xhat_sq" => res.xhat_sq,
-                                "x_sq" => res.x_sq
-                                )
-
-        if isnothing(res_df)
-            res_df = DataFrames.DataFrame(data)
-        else
-            push!(res_df, data)
-        end
-    end
-
-    if isnothing(res_df)
-        res_df = DataFrames.DataFrame()
-    end
-
-    return res_df
-end
-
-function lower_bounds(phd::PHData)::DataFrames.DataFrame
-
-    lb_df = nothing
-    lower_bounds = phd.history.lower_bounds
-
-    for iter in sort!(collect(keys(lower_bounds)))
-        lb = lower_bounds[iter]
-        data = Dict{String,Any}("iteration" => iter,
-                                "bound" => lb.lower_bound,
-                                "absolute gap" => lb.gap,
-                                "relative gap" => lb.rel_gap,
-                                )
-
-        if isnothing(lb_df)
-            lb_df = DataFrames.DataFrame(data)
-        else
-            push!(lb_df, data)
-        end
-    end
-
-    if isnothing(lb_df)
-        lb_df = DataFrames.DataFrame()
-    end
-
-    return lb_df
 end

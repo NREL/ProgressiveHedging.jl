@@ -109,7 +109,7 @@ Solve the stochastic programming problem described by `tree` and the models crea
 * `atol::Float64` : Absolute error tolerance. Defaults to 1e-6.
 * `rtol::Float64` : Relative error tolerance. Defaults to 1e-6.
 * `gap_tol::Float64` : Relative gap tolerance. Terminate when the relative gap between the lower bound and objective are smaller than `gap_tol`. Any value < 0.0 disables this termination condition. Defaults to -1.0. See also the `lower_bound` keyword argument.
-* `lower_bound::Int` : Compute and save a lower-bound using (Gade, et. al. 2016) every `lower_bound` iterations. Any value <= disables lower-bound computation. Defaults to 0.
+* `lower_bound::Int` : Compute and save a lower-bound using (Gade, et. al. 2016) every `lower_bound` iterations. Any value <= 0 disables lower-bound computation. Defaults to 0.
 * `report::Int` : Print progress to screen every `report` iterations. Any value <= 0 disables printing. Defaults to 0.
 * `save_iterates::Int` : Save PH iterates every `save_iterates` steps. Any value <= 0 disables saving iterates. Defaults to 0.
 * `save_residuals::Int` : Save PH residuals every `save_residuals` steps. Any value <= 0 disables saving residuals. Defaults to 0.

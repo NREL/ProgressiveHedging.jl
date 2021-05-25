@@ -207,13 +207,13 @@ function Base.show(io::IO, cb::Callback)
 end
 
 """
-Struct for a consensus variable.
+Type representing a consensus variable.
 
-**Fields**
-
-*`value::Float64` : Current value of the consensus variable
-*`vars::Set{VariableID}` : Individual scenario variables contributing to this consensus variable
-*`is_integer::Bool` : Flag indicating that this variable is an integer (or binary)
+The following functions are available to the user to interact with consensus variables
+* [`is_integer`](@ref)
+* [`set_value`](@ref)
+* [`value`](@ref)
+* [`variables`](@ref)
 """
 mutable struct HatVariable
     value::Float64 # Current value of variable
@@ -224,10 +224,40 @@ end
 ## Primary PH Data Structure ##
 
 """
-Data structure used to store information and results for a stochastic programming problem. See the following functions to interact with this object:
+Data structure used to store information and results for a stochastic programming problem.
+
+See the following functions may be used to interact with this object:
+* [`apply_to_subproblem`](@ref)
+* [`branch_value`](@ref)
 * [`consensus_variables`](@ref)
+* [`convert_to_variable_ids`](@ref)
+* [`convert_to_xhat_id`](@ref)
+* [`get_callback`](@ref)
+* [`get_callback_ext`](@ref)
+* [`is_leaf`](@ref)
+* [`name`](@ref)
 * [`probability`](@ref)
+* [`scenario_bundle`](@ref)
 * [`scenarios`](@ref)
+* [`stage_id`](@ref)
+* [`value`](@ref)
+* [`w_value`](@ref)
+* [`xhat_value`](@ref)
+
+The following post solution functions are also available:
+* [`leaf_value`](@ref)
+* [`retrieve_soln`](@ref)
+* [`retrieve_aug_obj_value`](@ref)
+* [`retrieve_obj_value`](@ref)
+* [`retrieve_no_hats`](@ref)
+* [`retrieve_w`](@ref)
+
+If the corresponding save options are enabled, the saved terms may be accessed with one of the following:
+* [`lower_bounds`](@ref)
+* [`residuals`](@ref)
+* [`retrieve_xhat_history`](@ref)
+* [`retrieve_no_hat_history`](@ref)
+* [`retrieve_w_history`](@ref)
 """
 struct PHData
     r::AbstractPenaltyParameter
@@ -331,10 +361,18 @@ end
 
 """
     cb(f::Function)
+    cb(f::Function, ext::Dict{Symbol,Any})
+    cb(f::Function, initialize::Function)
+    cb(f::Function, initialize::Function, ext::Dict{Symbol,Any})
+    cb(name::String, f::Function, ext::Dict{Symbol,Any})
 
-Shorthand for `Callback(f)`.
+Shorthand for [`Callback`](@ref) functions with the same signature.
 """
 cb(f::Function) = Callback(f)
+cb(f::Function, ext::Dict{Symbol,Any}) = Callback(f, ext)
+cb(f::Function, initialize::Function) = Callback(f, initialize)
+cb(f::Function, initialize::Function, ext::Dict{Symbol,Any}) = Callback(f, initialize, ext)
+cb(name::String, f::Function, ext::Dict{Symbol,Any}) = Callback(name, f, ext)
 
 """
     Callback(f::Function, ext::Dict{Symbol,Any})
@@ -379,12 +417,13 @@ function HatVariable(val::Float64,vid::VariableID, is_int::Bool)
     return HatVariable(val, Set{VariableID}([vid]), is_int)
 end
 
-function is_integer(a::HatVariable)::Bool
-    return a.is_integer
+function add_variable(a::HatVariable, vid::VariableID)
+    push!(a.vars, vid)
+    return
 end
 
-function value(a::HatVariable)::Float64
-    return a.value
+function is_integer(a::HatVariable)::Bool
+    return a.is_integer
 end
 
 function set_value(a::HatVariable, v::Float64)::Nothing
@@ -392,9 +431,8 @@ function set_value(a::HatVariable, v::Float64)::Nothing
     return
 end
 
-function add_variable(a::HatVariable, vid::VariableID)
-    push!(a.vars, vid)
-    return
+function value(a::HatVariable)::Float64
+    return a.value
 end
 
 function variables(a::HatVariable)::Set{VariableID}
