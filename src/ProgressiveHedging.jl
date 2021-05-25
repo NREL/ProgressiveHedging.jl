@@ -82,10 +82,13 @@ include("callbacks.jl")
           max_iter::Int=1000,
           atol::Float64=1e-6,
           rtol::Float64=1e-6,
+          gap_tol::Float64=-1.0,
+          lower_bound::Int=0,
           report::Int=0,
           save_iterates::Int=0,
           save_residuals::Bool=false,
           timing::Bool=true,
+          warm_start::Bool=false,
           callbacks::Vector{Callback}=Vector{Callback}(),
           worker_assignments::Dict{Int,Set{ScenarioID}}=Dict{Int,Set{ScenarioID}}(),
           args::Tuple=(),
@@ -105,10 +108,11 @@ Solve the stochastic programming problem described by `tree` and the models crea
 * `max_iter::Int` : Maximum number of iterations to perform before returning. Defaults to 1000.
 * `atol::Float64` : Absolute error tolerance. Defaults to 1e-6.
 * `rtol::Float64` : Relative error tolerance. Defaults to 1e-6.
+* `gap_tol::Float64` : Relative gap tolerance. Terminate when the relative gap between the lower bound and objective are smaller than `gap_tol`. Any value < 0.0 disables this termination condition. Defaults to -1.0. See also the `lower_bound` keyword argument.
+* `lower_bound::Int` : Compute and save a lower-bound using (Gade, et. al. 2016) every `lower_bound` iterations. Any value <= disables lower-bound computation. Defaults to 0.
 * `report::Int` : Print progress to screen every `report` iterations. Any value <= 0 disables printing. Defaults to 0.
 * `save_iterates::Int` : Save PH iterates every `save_iterates` steps. Any value <= 0 disables saving iterates. Defaults to 0.
 * `save_residuals::Int` : Save PH residuals every `save_residuals` steps. Any value <= 0 disables saving residuals. Defaults to 0.
-* `lower_bound::Int` : Compute and save a lower-bound using (Gade, et. al. 2016) every `lower_bound` iterations. Any value <= disables lower-bound computation. Defaults to 0.
 * `timing::Bool` : Print timing info after solving if true. Defaults to true.
 * `warm_start::Bool` : Flag indicating that solver should be "warm started" by using the previous solution as the starting point (not compatible with all solvers)
 * `callbacks::Vector{Callback}` : Collection of `Callback` structs to call after each PH iteration. Callbacks will be executed in the order they appear. See `Callback` struct for more info. Defaults to empty vector.
@@ -124,10 +128,11 @@ function solve(tree::ScenarioTree,
                max_iter::Int=1000,
                atol::Float64=1e-6,
                rtol::Float64=1e-6,
+               gap_tol::Float64=-1.0,
+               lower_bound::Int=0,
                report::Int=0,
                save_iterates::Int=0,
                save_residuals::Int=0,
-               lower_bound::Int=0,
                timing::Bool=true,
                warm_start::Bool=false,
                callbacks::Vector{Callback}=Vector{Callback}(),
@@ -185,6 +190,7 @@ function solve(tree::ScenarioTree,
                                               max_iter,
                                               atol,
                                               rtol,
+                                              gap_tol,
                                               report,
                                               save_iterates,
                                               save_residuals,
@@ -273,7 +279,6 @@ end # module
 
 #### TODOs ####
 
-# 1. Add tests for unimplemented subproblem error throwing?
-# 2. Add flag to solve call to turn off parallelism
-# 3. Add handling of nonlinear objective functions
-# 4. Add tests for nonlinear constraints (these should work currently but testing is needed)
+# 1. Add flag to solve call to turn off parallelism
+# 2. Add handling of nonlinear objective functions
+# 3. Add tests for nonlinear constraints (these should work currently but testing is needed)

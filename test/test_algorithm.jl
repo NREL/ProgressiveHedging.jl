@@ -210,6 +210,7 @@ end
 end
 
 @testset "Lower Bound Algorithm" begin
+
     (n, err, rerr, obj, soln, phd) = PH.solve(PH.two_stage_tree(2),
                                               two_stage_model,
                                               PH.ScalarPenaltyParameter(2.0),
@@ -234,4 +235,31 @@ end
     @test size(lb_df,1) == 12
     @test isapprox(lb_df[size(lb_df,1), "absolute gap"], 0.0, atol=1e-7)
     @test isapprox(lb_df[size(lb_df,1), "relative gap"], 0.0, atol=(1e-7/8.25))
+
+end
+
+@testset "Lower Bound Termination" begin
+
+    gap_tol = 1e-3
+
+    (n, err, rerr, obj, soln, phd) = PH.solve(PH.two_stage_tree(2),
+                                              two_stage_model,
+                                              PH.ScalarPenaltyParameter(2.0),
+                                              gap_tol=gap_tol,
+                                              atol=atol,
+                                              rtol=rtol,
+                                              max_iter=max_iter,
+                                              report=0,
+                                              lower_bound=5,
+                                              timing=false,
+                                              warm_start=false
+                                              )
+
+    lb_df = PH.lower_bounds(phd)
+
+    @test err > atol
+    @test rerr > rtol
+    @test n < max_iter
+    @test lb_df[size(lb_df,1), "relative gap"] < gap_tol
+
 end

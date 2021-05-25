@@ -407,6 +407,7 @@ function hedge(ph_data::PHData,
                max_iter::Int,
                atol::Float64,
                rtol::Float64,
+               gap_tol::Float64,
                report::Int,
                save_iter::Int,
                save_res::Int,
@@ -461,6 +462,7 @@ function hedge(ph_data::PHData,
                && niter < max_iter
                && residual > atol
                && residual > rtol * xmax
+               && (lb_flag ? gap > lb * gap_tol : true)
                )
     
     while running
@@ -496,6 +498,7 @@ function hedge(ph_data::PHData,
                    && niter < max_iter
                    && residual > atol
                    && residual > rtol * xmax
+                   && (lb_flag ? gap > lb * gap_tol : true)
                    )
 
         if report_flag && (niter % report == 0 || !running)
