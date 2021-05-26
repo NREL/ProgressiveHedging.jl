@@ -54,7 +54,6 @@ Penalty parameter set with Watson-Woodruff SEP method. See (Watson and Woodruff 
 
 Requires subproblem type to have implemented `report_penalty_info` for this type. This implementation should return the linear coefficient in the objective function for each variable.
 """
-
 struct SEPPenaltyParameter <: AbstractPenaltyParameter
     default::Float64
     penalties::Dict{XhatID,Float64}

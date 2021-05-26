@@ -177,7 +177,7 @@ function process_message(msg::Solve,
     end
 
     start = time()
-    sts = solve(sub.problem)
+    sts = solve_subproblem(sub.problem)
     stop = time()
     var_vals = report_values(sub.problem, sub.branch_vars)
 
@@ -209,7 +209,7 @@ function process_message(msg::SolveLowerBound,
     end
 
     start = time()
-    sts = solve(lb_sub.problem)
+    sts = solve_subproblem(lb_sub.problem)
     stop = time()
 
     put!(output, ReportLowerBound(msg.scen,
@@ -308,7 +308,7 @@ function _initial_solve(output::RemoteChannel,
     for (scen, sub) in record.subproblems
 
         start = time()
-        sts = solve(sub.problem)
+        sts = solve_subproblem(sub.problem)
         stop = time()
         var_vals = report_values(sub.problem, sub.branch_vars)
         put!(output, ReportBranch(scen,

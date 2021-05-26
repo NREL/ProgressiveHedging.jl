@@ -211,7 +211,6 @@ Type representing a consensus variable.
 
 The following functions are available to the user to interact with consensus variables
 * [`is_integer`](@ref)
-* [`set_value`](@ref)
 * [`value`](@ref)
 * [`variables`](@ref)
 """
@@ -220,6 +219,13 @@ mutable struct HatVariable
     vars::Set{VariableID} # All nonhat variable ids that contribute to this variable
     is_integer::Bool # Flag indicating that this variable is an integer (includes binary)
 end
+
+HatVariable(is_int::Bool)::HatVariable = HatVariable(0.0, Set{VariableID}(),is_int)
+
+function HatVariable(val::Float64,vid::VariableID, is_int::Bool)
+    return HatVariable(val, Set{VariableID}([vid]), is_int)
+end
+
 
 ## Primary PH Data Structure ##
 
@@ -360,21 +366,6 @@ function Callback(f::Function)
 end
 
 """
-    cb(f::Function)
-    cb(f::Function, ext::Dict{Symbol,Any})
-    cb(f::Function, initialize::Function)
-    cb(f::Function, initialize::Function, ext::Dict{Symbol,Any})
-    cb(name::String, f::Function, ext::Dict{Symbol,Any})
-
-Shorthand for [`Callback`](@ref) functions with the same signature.
-"""
-cb(f::Function) = Callback(f)
-cb(f::Function, ext::Dict{Symbol,Any}) = Callback(f, ext)
-cb(f::Function, initialize::Function) = Callback(f, initialize)
-cb(f::Function, initialize::Function, ext::Dict{Symbol,Any}) = Callback(f, initialize, ext)
-cb(name::String, f::Function, ext::Dict{Symbol,Any}) = Callback(name, f, ext)
-
-"""
     Callback(f::Function, ext::Dict{Symbol,Any})
 
 Creates a `Callback` structure for function `f` with the external data dictionary `ext`.
@@ -410,12 +401,22 @@ function Callback(f::Function, initialize::Function, ext::Dict{Symbol,Any})
     return Callback(string(f), f, initialize, ext)
 end
 
-## Consensus Variable Functions ##
+"""
+    cb(f::Function)
+    cb(f::Function, ext::Dict{Symbol,Any})
+    cb(f::Function, initialize::Function)
+    cb(f::Function, initialize::Function, ext::Dict{Symbol,Any})
+    cb(name::String, f::Function, ext::Dict{Symbol,Any})
 
-HatVariable(is_int::Bool)::HatVariable = HatVariable(0.0, Set{VariableID}(),is_int)
-function HatVariable(val::Float64,vid::VariableID, is_int::Bool)
-    return HatVariable(val, Set{VariableID}([vid]), is_int)
-end
+Shorthand for [`Callback`](@ref) functions with the same signature.
+"""
+cb(f::Function) = Callback(f)
+cb(f::Function, ext::Dict{Symbol,Any}) = Callback(f, ext)
+cb(f::Function, initialize::Function) = Callback(f, initialize)
+cb(f::Function, initialize::Function, ext::Dict{Symbol,Any}) = Callback(f, initialize, ext)
+cb(name::String, f::Function, ext::Dict{Symbol,Any}) = Callback(name, f, ext)
+
+## Consensus Variable Functions ##
 
 function add_variable(a::HatVariable, vid::VariableID)
     push!(a.vars, vid)
@@ -665,6 +666,15 @@ function scenario_bundle(phd::PHData, xid::XhatID)::Set{ScenarioID}
 end
 
 """
+    scenario_tree(phd::PHData)::ScenarioTree
+
+Returns the scenario tree for created stochastic programming problem.
+"""
+function scenario_tree(phd::PHData)::ScenarioTree
+    return phd.scenario_tree
+end
+
+"""
     scenarios(phd::PHData)::Set{ScenarioID}
 
 Returns the set of all scenarios for the stochastic problem.
@@ -694,7 +704,7 @@ function value(phd::PHData, vid::VariableID)::Float64
 end
 
 """
-   value(phd::PHData, vid::VariableID)
+   value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
 
 Returns the value of the variable associated with scenario `scen`, stage `stage` and index `idx`.
 
@@ -715,7 +725,7 @@ function w_value(phd::PHData, vid::VariableID)::Float64
 end
 
 """
-   value(phd::PHData, vid::VariableID)
+    w_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
 
 Returns the value of the variable associated with scenario `scen`, stage `stage` and index `idx`. Only available for branch variables.
 """
@@ -724,7 +734,7 @@ function w_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Flo
 end
 
 """
-   xhat_value(phd::PHData, xhid::VariableID)
+   xhat_value(phd::PHData, xhid::VariableID)::Float64
 
 Returns the value of the consensus variable associated with `xhid`. Only available for leaf variables after calling `solve`.  Available for branch variables at any time.
 """
@@ -733,7 +743,7 @@ function xhat_value(phd::PHData, xhat_id::XhatID)::Float64
 end
 
 """
-   xhat_value(phd::PHData, vid::VariableID)
+   xhat_value(phd::PHData, vid::VariableID)::Float64
 
 Returns the value of the consensus variable associated with `vid`. Only available for leaf variables after calling `solve`.  Available for branch variables at any time.
 """

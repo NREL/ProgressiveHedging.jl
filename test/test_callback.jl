@@ -75,7 +75,7 @@ end
         return ts.names
     end
 
-    function PH.solve(ts::TestSubproblem)::MOI.TerminationStatusCode
+    function PH.solve_subproblem(ts::TestSubproblem)::MOI.TerminationStatusCode
         return MOI.OPTIMAL
     end
 

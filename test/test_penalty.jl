@@ -63,7 +63,7 @@ end
         svm = PH.report_variable_info(js, st)
         var_map[PH.scid(s)] = svm
         (br_vars, lf_vars) = PH._split_variables(st, collect(keys(svm)))
-        PH.solve(js)
+        PH.solve_subproblem(js)
         var_vals[s] = PH.report_values(js, collect(keys(svm)))
         coef_map[s] = PH.report_penalty_info(js,
                                              br_vars,
@@ -105,7 +105,7 @@ end
             svm = PH.report_variable_info(js, st)
             var_map[PH.scid(s)] = svm
             (br_vars, lf_vars) = PH._split_variables(st, collect(keys(svm)))
-            PH.solve(js)
+            PH.solve_subproblem(js)
             var_vals[s] = PH.report_values(js, collect(keys(svm)))
             coef_map[s] = PH.report_penalty_info(js,
                                                  br_vars,

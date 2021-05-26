@@ -10,6 +10,11 @@ makedocs(modules=[ProgressiveHedging],
          sitename="ProgressiveHedging.jl",
          authors="Jonathan Maack",
          pages=["Overview" => "index.md",
-                "API" => "api.md"
+                "Examples" => map(s -> "examples/$(s)",
+                                  sort(readdir(joinpath(@__DIR__, "src", "examples")))
+                                  ),
+                "Reference" => map(s -> "api/$(s)",
+                                   sort(readdir(joinpath(@__DIR__, "src", "api")))
+                                   ),
                 ]
          )

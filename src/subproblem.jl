@@ -23,30 +23,30 @@ A concrete subtype handles all details of creating, solving and updating subprob
 Variables and their values are identified and exchanged between PH and a Subproblem type using the `VariableID` type.  A unique `VariableID` is associated with each variable in the subproblem by the Subproblem implementation by using the `ScenarioID` of the subproblem as well as the `StageID` to which this variable belongs.  This combination uniquely identifies a node in the scenario tree to which the variable can be associated.  Variables associated with the same node in a scenario tree and sharing the same name are assumed to be consensus variables whose optimal value is determined by PH.  The final component of a `VariableID` is an `Index` which is just a counter assigned to a variable to differentiate it from other variables at the same node.  See `VariableID` type for more details.
 
 Any concrete subtype **must** implement the following functions:
-* `add_ph_objective_terms(sp::<ConcreteSubtype>, vids::Vector{VariableID}, r::Union{Float64, Dict{VariableID,Float64}})::Nothing
-* `objective_value(sp::<ConcreteSubtype>)::Float64`
-* `report_values(sp::<ConcreteSubtype>, vars::Vector{VariableID})::Dict{VariableID,Float64}`
-* `report_variable_info(sp::<ConcreteSubtype>, st::ScenarioTree)::Dict{VariableID,VariableInfo}`
-* `solve(sp::<ConcreteSubtype>)::MOI.TerminationStatusCode`
-* `update_ph_terms(sp::<ConcreteSubtype>, w_vals::Dict{VariableID,Float64}, xhat_vals::Dict{VariableID,Float64})::Nothing`
+* [`add_ph_objective_terms`](@ref)
+* [`objective_value`](@ref)
+* [`report_values`](@ref)
+* [`report_variable_info`](@ref)
+* [`solve_subproblem`](@ref)
+* [`update_ph_terms`](@ref)
 See help strings on each function for details on arguments, returned objects and expected performance of each function. See JuMPSubproblem for an example using JuMP.
 
 To use `warm_start=true` the concrete subtype must also implement
-* `warm_start(sp::<ConcreteSubtype>)::Nothing`
+* [`warm_start`](@ref)
 See help on `warm_start` for more information.  See JuMPSubproblem for an example using JuMP.
 
 To use the extensive form functionality, the concrete subtype must implement
-* `ef_copy_model(destination::JuMP.Model, original::<ConcreteSubtype>, scid::ScenarioID, scen_tree::ScenarioTree, node_dict::Dict{NodeID,Any})
-* `ef_node_dict_constructor(::Type{S}) where S <: AbstractSubproblem`
+* [`ef_copy_model`](@ref)
+* [`ef_node_dict_constructor`](@ref)
 See the help on the functions for more details. See JuMPSubproblem for an example using JuMP. Note that the extensive form model is always constructed as a `JuMP.Model` object.
 
 To use penalty parameter types other than `ScalarPenaltyParameter`, concrete subproblem types also need to implement
-* `report_penalty_info(sp::<ConcreteSubtype>, pp<:AbstractPenaltyParameter)::Dict{VariableID,Float64}`
+* [`report_penalty_info`](@ref)
 See the help on individual penalty parameter types and `report_penalty_info` for more details.
 
 To use lower bound computation functionality, the concrete subtype must also implement
-* `add_lagrange_terms(sp::<ConcreteSubtype>, vids::Vector{VariableID})::Nothing
-* `update_lagrange_terms(sp::<ConcreteSubtype>, vids::Dict{VariableID,Float64})::Nothing
+* [`add_lagrange_terms`](@ref)
+* [`update_lagrange_terms`](@ref)
 See the help on these functions for more details.
 """
 abstract type AbstractSubproblem end
@@ -149,7 +149,7 @@ function report_values(as::AbstractSubproblem,
 end
 
 """
-    solve(as::AbstractSubproblem)::MOI.TerminationStatusCode
+    solve_subproblem(as::AbstractSubproblem)::MOI.TerminationStatusCode
 
 Solve the subproblem specified by `as` and return the status code.
 
@@ -157,8 +157,8 @@ Solve the subproblem specified by `as` and return the status code.
 
 * `as::AbstractSubproblem` : subproblem object (replace with appropriate type)
 """
-function solve(as::AbstractSubproblem)::MOI.TerminationStatusCode
-    throw(UnimplementedError("solve is unimplemented"))
+function solve_subproblem(as::AbstractSubproblem)::MOI.TerminationStatusCode
+    throw(UnimplementedError("solve_subproblem is unimplemented"))
 end
 
 """

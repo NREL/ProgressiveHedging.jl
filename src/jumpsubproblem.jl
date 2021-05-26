@@ -1,5 +1,8 @@
 #### JuMPSubproblem Implementation ####
 
+"""
+Implementation of the [`AbstractSubproblem`](@ref) interface using JuMP.
+"""
 struct JuMPSubproblem <: AbstractSubproblem
     model::JuMP.Model
     scenario::ScenarioID
@@ -130,7 +133,7 @@ function report_variable_info(js::JuMPSubproblem,
     return var_info
 end
 
-function solve(js::JuMPSubproblem)::MOI.TerminationStatusCode
+function solve_subproblem(js::JuMPSubproblem)::MOI.TerminationStatusCode
     JuMP.optimize!(js.model)
     return JuMP.termination_status(js.model)
 end
