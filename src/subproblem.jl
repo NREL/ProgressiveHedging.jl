@@ -41,12 +41,12 @@ To use the extensive form functionality, the concrete subtype must implement
 See the help on the functions for more details. See JuMPSubproblem for an example using JuMP. Note that the extensive form model is always constructed as a `JuMP.Model` object.
 
 To use penalty parameter types other than `ScalarPenaltyParameter`, concrete subproblem types also need to implement
-* `report_penalty_info(sp::<ConcreateSubtype>, pp<:AbstractPenaltyParameter)::Dict{VariableID,Float64}`
+* `report_penalty_info(sp::<ConcreteSubtype>, pp<:AbstractPenaltyParameter)::Dict{VariableID,Float64}`
 See the help on individual penalty parameter types and `report_penalty_info` for more details.
 
 To use lower bound computation functionality, the concrete subtype must also implement
-* `add_lagrange_terms(as::AbstractSubproblem, vids::Vector{VariableID})::Nothing
-* `update_lagrange_terms(as::AbstractSubproblem, vids::Dict{VariableID,Float64})::Nothing
+* `add_lagrange_terms(sp::<ConcreteSubtype>, vids::Vector{VariableID})::Nothing
+* `update_lagrange_terms(sp::<ConcreteSubtype>, vids::Dict{VariableID,Float64})::Nothing
 See the help on these functions for more details.
 """
 abstract type AbstractSubproblem end

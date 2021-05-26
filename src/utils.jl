@@ -45,9 +45,8 @@ function visualize_tree(phd::PHData)
 end
 
 ## Complex PHData Interaction Functions ##
-# NOTE: These functions are almost always post-processing functions
 
-# TODO: Add documentation to these functions
+# NOTE: These functions are almost all post-processing functions
 
 """
     lower_bounds(phd::PHData)::DataFrames.DataFrame
@@ -160,7 +159,7 @@ function retrieve_aug_obj_value(phd::PHData)::Float64
 end
 
 """
-    retrieve_aug_obj_value(phd::PHData)::Float64
+    retrieve_obj_value(phd::PHData)::Float64
 
 Return the current objective value without Lagrange and proximal PH terms.
 """

@@ -590,8 +590,11 @@ end
 
 """
     leaf_value(phd::PHData, vid::VariableID)::Float64
+    leaf_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
 
-Returns the value of the variable associated with `vid`. Must be a leaf variable.
+Returns the value of the variable associated with `vid` or with scenario `scen`, stage `stage` and index `idx`. Must be a leaf variable.
+
+**WARNING:** For computational efficiency, leaf values are collected only at the end of a PH run. Therefore, using this function in a callback will result in an error.
 
 See also: [`branch_value`](@ref), [`value`](@ref)
 """
@@ -599,13 +602,6 @@ function leaf_value(phd::PHData, vid::VariableID)::Float64
     return phd.scenario_map[scenario(vid)].leaf_vars[vid]
 end
 
-"""
-    leaf_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
-
-Returns the value of the variable associated with with scenario `scen`, stage `stage` and index `idx`. Must be a leaf variable.
-
-See also: [`branch_value`](@ref), [`value`](@ref)
-"""
 function leaf_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
     return leaf_value(phd, VariableID(scen, stage, idx))
 end
