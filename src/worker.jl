@@ -1,3 +1,4 @@
+#### Worker Structs ####
 
 struct SubproblemRecord
     problem::AbstractSubproblem
@@ -10,14 +11,18 @@ mutable struct WorkerRecord
     id::Int
     warm_start::Bool
     subproblems::Dict{ScenarioID,SubproblemRecord}
+    lb_subproblems::Dict{ScenarioID,SubproblemRecord}
 end
 
 function WorkerRecord(id::Int)
     return WorkerRecord(id,
                         false,
                         Dict{ScenarioID,SubproblemRecord}(),
+                        Dict{ScenarioID,SubproblemRecord}(),
                         )
 end
+
+#### Worker Functions ####
 
 function worker_loop(id::Int,
                      input::RemoteChannel,
@@ -64,6 +69,14 @@ function process_message(msg::Abort,
     return false
 end
 
+function process_message(msg::DumpState,
+                         record::WorkerRecord,
+                         output::RemoteChannel
+                         )::Bool
+    put!(output, WorkerState(record.id, record))
+    return true
+end
+
 function process_message(msg::Initialize,
                          record::WorkerRecord,
                          output::RemoteChannel
@@ -90,6 +103,32 @@ function process_message(msg::Initialize,
     _penalty_parameter_preprocess(output, record, msg.r)
 
     return true
+end
+
+function process_message(msg::InitializeLowerBound,
+                         record::WorkerRecord,
+                         output::RemoteChannel,
+                         )::Bool
+
+    for scen in msg.scenarios
+        lb_sub = msg.create_subproblem(scen,
+                                       msg.create_subproblem_args...;
+                                       msg.create_subproblem_kwargs...
+                                       )
+        var_map = report_variable_info(lb_sub, msg.scenario_tree)
+        (branch_ids, leaf_ids) = _split_variables(msg.scenario_tree,
+                                                  collect(keys(var_map))
+                                                  )
+        add_lagrange_terms(lb_sub, branch_ids)
+        record.lb_subproblems[scen] = SubproblemRecord(lb_sub,
+                                                       branch_ids,
+                                                       leaf_ids,
+                                                       SubproblemCallback[]
+                                                       )
+    end
+
+    return true
+
 end
 
 function process_message(msg::PenaltyInfo,
@@ -150,6 +189,37 @@ function process_message(msg::Solve,
          )
 
     return true
+
+end
+
+function process_message(msg::SolveLowerBound,
+                         record::WorkerRecord,
+                         output::RemoteChannel
+                         )::Bool
+
+    if !haskey(record.lb_subproblems, msg.scen)
+        error("Worker $(record.id) received lower-bound solve command for scenario $(msg.scen). This worker was not assigned this scenario.")
+    end
+
+    lb_sub = record.lb_subproblems[msg.scen]
+    update_lagrange_terms(lb_sub.problem, msg.w_vals)
+
+    if record.warm_start
+        warm_start(lb_sub.problem)
+    end
+
+    start = time()
+    sts = solve(lb_sub.problem)
+    stop = time()
+
+    put!(output, ReportLowerBound(msg.scen,
+                                  sts,
+                                  objective_value(lb_sub.problem),
+                                  stop - start)
+         )
+
+    return true
+
 end
 
 function process_message(msg::ShutDown,
@@ -163,6 +233,7 @@ function process_message(msg::ShutDown,
     end
 
     return false
+
 end
 
 function process_message(msg::SubproblemAction,
@@ -174,7 +245,10 @@ function process_message(msg::SubproblemAction,
     msg.action(sub, msg.args...; msg.kwargs...)
 
     return true
+
 end
+
+#### Internal Functions ####
 
 function _build_subproblems(output::RemoteChannel,
                             record::WorkerRecord,
@@ -211,6 +285,20 @@ function _build_subproblems(output::RemoteChannel,
     end
 
     return
+
+end
+
+function _execute_subproblem_callbacks(sub::SubproblemRecord,
+                                       niter::Int,
+                                       scen::ScenarioID
+                                       )::Nothing
+
+    for spcb in sub.subproblem_callbacks
+        spcb.h(spcb.ext, sub.problem, niter, scen)
+    end
+
+    return
+
 end
 
 function _initial_solve(output::RemoteChannel,
@@ -233,6 +321,7 @@ function _initial_solve(output::RemoteChannel,
     end
 
     return
+
 end
 
 function _penalty_parameter_preprocess(output::RemoteChannel,
@@ -248,6 +337,7 @@ function _penalty_parameter_preprocess(output::RemoteChannel,
     end
 
     return
+
 end
 
 function _split_variables(scen_tree::ScenarioTree,
@@ -266,16 +356,5 @@ function _split_variables(scen_tree::ScenarioTree,
     end
 
     return (branch_vars, leaf_vars)
+
 end
-
-function _execute_subproblem_callbacks(sub::SubproblemRecord,
-                                       niter::Int,
-                                       scen::ScenarioID
-                                       )::Nothing 
-    
-    for spcb in sub.subproblem_callbacks
-        spcb.h(spcb.ext, sub.problem, niter, scen)
-    end
-
-    return
-end 

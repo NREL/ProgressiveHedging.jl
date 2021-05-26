@@ -51,24 +51,22 @@ function index(idxr::Indexer, nid::NodeID, name::String)::Index
     return idx
 end
 
-mutable struct VariableData
+struct VariableData
     name::String
     xhat_id::XhatID
-end
-
-function VariableData(name::String,
-                      nid::NodeID
-                      )::VariableData
-    return VariableData(name, nid, 0.0)
 end
 
 mutable struct ProblemData
     obj::Float64
     sts::MOI.TerminationStatusCode
     time::Float64
+    lb_obj::Float64
+    lb_sts::MOI.TerminationStatusCode
+    lb_time::Float64
 end
 
-ProblemData() = ProblemData(0.0, MOI.OPTIMIZE_NOT_CALLED, 0.0)
+ProblemData() = ProblemData(0.0, MOI.OPTIMIZE_NOT_CALLED, 0.0,
+                            0.0, MOI.OPTIMIZE_NOT_CALLED, 0.0)
 
 struct ScenarioInfo
     pid::Int
@@ -129,20 +127,10 @@ struct PHIterate
     w::Dict{VariableID,Float64}
 end
 
-struct PHIterateHistory
-    iterates::Dict{Int,PHIterate}
-end
-
-function PHIterateHistory()
-    return PHIterateHistory(Dict{Int,PHIterate}())
-end
-
-function _save_iterate(phih::PHIterateHistory,
-                       iter::Int,
-                       phi::PHIterate,
-                       )::Nothing
-    phih.iterates[iter] = phi
-    return
+struct PHLowerBound
+    lower_bound::Float64
+    gap::Float64
+    rel_gap::Float64
 end
 
 struct PHResidual
@@ -152,47 +140,37 @@ struct PHResidual
     x_sq::Float64
 end
 
-struct PHResidualHistory
-    residuals::Dict{Int,PHResidual}
+struct PHHistory
+    iterates::Dict{Int, PHIterate}
+    residuals::Dict{Int, PHResidual}
+    lower_bounds::Dict{Int, PHLowerBound}
 end
 
-function PHResidualHistory()::PHResidualHistory
-    return PHResidualHistory(Dict{Int,PHResidual}())
+function PHHistory()
+    return PHHistory(Dict{Int, PHIterate}(),
+                     Dict{Int, PHResidual}(),
+                     Dict{Int, PHLowerBound}(),
+                     )
 end
 
-function residual_vector(phrh::PHResidualHistory)::Vector{Float64}
-    if length(phrh.residuals) > 0
-        max_iter = maximum(keys(phrh.residuals))
-        return [phrh.residuals[k].abs_res for k in sort!(collect(keys(phrh.residuals)))]
-    else
-        return Vector{Float64}()
-    end
+function _save_iterate(phh::PHHistory,
+                       iter::Int,
+                       phi::PHIterate
+                       )::Nothing
+    phh.iterates[iter] = phi
+    return
 end
 
-function relative_residual_vector(phrh::PHResidualHistory)::Vector{Float64}
-    if length(phrh.residuals) > 0
-        max_iter = maximum(keys(phrh.residuals))
-        return [phrh.residuals[k].rel_res for k in sort!(collect(keys(phrh.residuals)))]
-    else
-        return Vector{Float64}()
-    end
+function _save_lower_bound(phh::PHHistory,
+                           iter::Int,
+                           phlb::PHLowerBound
+                           )::Nothing
+    phh.lower_bounds[iter] = phlb
+    return
 end
 
-function residual_components(phrh::PHResidualHistory)::NTuple{2,Vector{Float64}}
-    if length(phrh.residuals) > 0
-        max_iter = maximum(keys(phrh.residuals))
-        sorted_keys = sort!(collect(keys(phrh.residuals)))
-        xhat_sq = [phrh.residuals[k].xhat_sq for k in sorted_keys]
-        x_sq = [phrh.residuals[k].x_sq for k in sorted_keys]
-        return (xhat_sq, x_sq)
-    else
-        return (Vector{Float64}(), Vector{Float64}())
-    end
-end
-
-function _save_residual(phrh::PHResidualHistory, iter::Int, res::PHResidual)::Nothing
-    # @assert(!(iter in keys(phrh.residuals)))
-    phrh.residuals[iter] = res
+function _save_residual(phh::PHHistory, iter::Int, res::PHResidual)::Nothing
+    phh.residuals[iter] = res
     return
 end
 
@@ -229,13 +207,13 @@ function Base.show(io::IO, cb::Callback)
 end
 
 """
-Struct for a consensus variable.
+Type representing a consensus variable.
 
-**Fields**
-
-*`value::Float64` : Current value of the consensus variable
-*`vars::Set{VariableID}` : Individual scenario variables contributing to this consensus variable
-*`is_integer::Bool` : Flag indicating that this variable is an integer (or binary)
+The following functions are available to the user to interact with consensus variables
+* [`is_integer`](@ref)
+* [`set_value`](@ref)
+* [`value`](@ref)
+* [`variables`](@ref)
 """
 mutable struct HatVariable
     value::Float64 # Current value of variable
@@ -246,10 +224,40 @@ end
 ## Primary PH Data Structure ##
 
 """
-Data structure used to store information and results for a stochastic programming problem. See the following functions to interact with this object:
+Data structure used to store information and results for a stochastic programming problem.
+
+See the following functions may be used to interact with this object:
+* [`apply_to_subproblem`](@ref)
+* [`branch_value`](@ref)
 * [`consensus_variables`](@ref)
+* [`convert_to_variable_ids`](@ref)
+* [`convert_to_xhat_id`](@ref)
+* [`get_callback`](@ref)
+* [`get_callback_ext`](@ref)
+* [`is_leaf`](@ref)
+* [`name`](@ref)
 * [`probability`](@ref)
+* [`scenario_bundle`](@ref)
 * [`scenarios`](@ref)
+* [`stage_id`](@ref)
+* [`value`](@ref)
+* [`w_value`](@ref)
+* [`xhat_value`](@ref)
+
+The following post solution functions are also available:
+* [`leaf_value`](@ref)
+* [`retrieve_soln`](@ref)
+* [`retrieve_aug_obj_value`](@ref)
+* [`retrieve_obj_value`](@ref)
+* [`retrieve_no_hats`](@ref)
+* [`retrieve_w`](@ref)
+
+If the corresponding save options are enabled, the saved terms may be accessed with one of the following:
+* [`lower_bounds`](@ref)
+* [`residuals`](@ref)
+* [`retrieve_xhat_history`](@ref)
+* [`retrieve_no_hat_history`](@ref)
+* [`retrieve_w_history`](@ref)
 """
 struct PHData
     r::AbstractPenaltyParameter
@@ -258,9 +266,7 @@ struct PHData
     callbacks::Vector{Callback}
     xhat::Dict{XhatID, HatVariable}
     variable_data::Dict{VariableID, VariableData}
-    indexer::Indexer
-    iterate_history::PHIterateHistory
-    residual_history::PHResidualHistory
+    history::PHHistory
     time_info::TimerOutputs.TimerOutput
 end
 
@@ -286,7 +292,7 @@ function PHData(r::AbstractPenaltyParameter,
 
                 vnode = node(tree, vid.scenario, vid.stage)
 
-                if vnode == nothing
+                if isnothing(vnode)
                     error("Unable to locate scenario tree node for variable '$(vinfo.name)' occuring in scenario $(vid.scenario) and stage $(vid.stage).")
                 end
 
@@ -329,9 +335,7 @@ function PHData(r::AbstractPenaltyParameter,
                   Vector{Callback}(),
                   xhat_dict,
                   var_data,
-                  idxr,
-                  PHIterateHistory(),
-                  PHResidualHistory(),
+                  PHHistory(),
                   time_out,
                   )
 end
@@ -357,10 +361,18 @@ end
 
 """
     cb(f::Function)
+    cb(f::Function, ext::Dict{Symbol,Any})
+    cb(f::Function, initialize::Function)
+    cb(f::Function, initialize::Function, ext::Dict{Symbol,Any})
+    cb(name::String, f::Function, ext::Dict{Symbol,Any})
 
-Shorthand for `Callback(f)`.
+Shorthand for [`Callback`](@ref) functions with the same signature.
 """
 cb(f::Function) = Callback(f)
+cb(f::Function, ext::Dict{Symbol,Any}) = Callback(f, ext)
+cb(f::Function, initialize::Function) = Callback(f, initialize)
+cb(f::Function, initialize::Function, ext::Dict{Symbol,Any}) = Callback(f, initialize, ext)
+cb(name::String, f::Function, ext::Dict{Symbol,Any}) = Callback(name, f, ext)
 
 """
     Callback(f::Function, ext::Dict{Symbol,Any})
@@ -405,12 +417,13 @@ function HatVariable(val::Float64,vid::VariableID, is_int::Bool)
     return HatVariable(val, Set{VariableID}([vid]), is_int)
 end
 
-function is_integer(a::HatVariable)::Bool
-    return a.is_integer
+function add_variable(a::HatVariable, vid::VariableID)
+    push!(a.vars, vid)
+    return
 end
 
-function value(a::HatVariable)::Float64
-    return a.value
+function is_integer(a::HatVariable)::Bool
+    return a.is_integer
 end
 
 function set_value(a::HatVariable, v::Float64)::Nothing
@@ -418,9 +431,8 @@ function set_value(a::HatVariable, v::Float64)::Nothing
     return
 end
 
-function add_variable(a::HatVariable, vid::VariableID)
-    push!(a.vars, vid)
-    return
+function value(a::HatVariable)::Float64
+    return a.value
 end
 
 function variables(a::HatVariable)::Set{VariableID}
@@ -428,6 +440,7 @@ function variables(a::HatVariable)::Set{VariableID}
 end
 
 ## PHData Interaction Functions ##
+# NOTE: Additional, more complicated functions are in utils.jl
 
 """
     add_callback(phd::PHData,
@@ -475,6 +488,28 @@ function apply_to_subproblem(to_apply::Function,
                   )
 
     return
+end
+
+"""
+    branch_value(phd::PHData, vid::VariableID)::Float64
+
+Returns the value of the variable associated with `vid`. Must be a branch variable.
+
+See also: [`leaf_value`](@ref), [`value`](@ref)
+"""
+function branch_value(phd::PHData, vid::VariableID)::Float64
+    return phd.scenario_map[scenario(vid)].branch_vars[vid]
+end
+
+"""
+    branch_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+
+Returns the value of the variable associated with with scenario `scen`, stage `stage` and index `idx`. Must be a branch variable.
+
+See also: [`leaf_value`](@ref), [`value`](@ref)
+"""
+function branch_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+    return branch_value(phd, VariableID(scen, stage, idx))
 end
 
 """
@@ -527,7 +562,7 @@ function get_callback(phd::PHData, name::String)::Callback
         end
     end
 
-    if return_cb === nothing
+    if isnothing(return_cb)
         error("Unable to find callback $name.")
     end
 
@@ -554,6 +589,36 @@ function is_leaf(phd::PHData, xhid::XhatID)::Bool
 end
 
 """
+    leaf_value(phd::PHData, vid::VariableID)::Float64
+    leaf_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+
+Returns the value of the variable associated with `vid` or with scenario `scen`, stage `stage` and index `idx`. Must be a leaf variable.
+
+**WARNING:** For computational efficiency, leaf values are collected only at the end of a PH run. Therefore, using this function in a callback will result in an error.
+
+See also: [`branch_value`](@ref), [`value`](@ref)
+"""
+function leaf_value(phd::PHData, vid::VariableID)::Float64
+    return phd.scenario_map[scenario(vid)].leaf_vars[vid]
+end
+
+function leaf_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+    return leaf_value(phd, VariableID(scen, stage, idx))
+end
+
+"""
+    name(phd::PHData, vid::VariableID)::String
+
+Returns the name of the consensus variable for the given `VariableID`.
+"""
+function name(phd::PHData, vid::VariableID)::String
+    if !haskey(phd.variable_data, vid)
+        error("No name available for variable id $vid")
+    end
+    return phd.variable_data[vid].name
+end
+
+"""
     name(phd::PHData, xid::XhatID)::String
 
 Returns the name of the consensus variable for the given `XhatID`. The name is the same given to the individual scenario variables.
@@ -569,33 +634,6 @@ Returns the probability of the given scenario.
 """
 function probability(phd::PHData, scenario::ScenarioID)::Float64
     return phd.scenario_map[scenario].prob
-end
-
-"""
-    residuals(phd::PHData)::Vector{Float64}
-
-Returns the absolute residuals at the iterations specified by the user.
-"""
-function residuals(phd::PHData)::Vector{Float64}
-    return residual_vector(phd.residual_history)
-end
-
-"""
-    residual_components(phd::PHData)::NTuple{2,Vector{Float64}}
-
-Returns the components of the absolute residual at the iterations specified by the user.
-"""
-function residual_components(phd::PHData)::NTuple{2,Vector{Float64}}
-    return residual_components(phd.residual_history)
-end
-
-"""
-    relative_residuals(phd::PHData)::Vector{Float64}
-
-Returns the relative residuals at the iterations specified by the user.
-"""
-function relative_residuals(phd::PHData)::Vector{Float64}
-    return relative_residual_vector(phd.residual_history)
 end
 
 """
@@ -623,4 +661,72 @@ Returns the `StageID` in which the given consensus variable is.
 """
 function stage_id(phd::PHData, xid::XhatID)::StageID
     return phd.scenario_tree.tree_map[xid.node].stage
+end
+
+"""
+   value(phd::PHData, vid::VariableID)
+
+Returns the value of the variable associated with `vid`.
+
+See also: [`branch_value`](@ref), [`leaf_value`](@ref)
+"""
+function value(phd::PHData, vid::VariableID)::Float64
+    return retrieve_variable_value(phd.scenario_map[scenario(vid)], vid)
+end
+
+"""
+   value(phd::PHData, vid::VariableID)
+
+Returns the value of the variable associated with scenario `scen`, stage `stage` and index `idx`.
+
+See also: [`branch_value`](@ref), [`leaf_value`](@ref)
+"""
+function value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+    vid = VariableID(scen, stage, idx)
+    return value(phd, vid)
+end
+
+"""
+   w_value(phd::PHData, vid::VariableID)
+
+Returns the value of the variable associated with `vid`. Only available for branch variables.
+"""
+function w_value(phd::PHData, vid::VariableID)::Float64
+    return phd.scenario_map[scenario(vid)].w_vars[vid]
+end
+
+"""
+   value(phd::PHData, vid::VariableID)
+
+Returns the value of the variable associated with scenario `scen`, stage `stage` and index `idx`. Only available for branch variables.
+"""
+function w_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+    return w_value(phd, VariableID(scen, stage, idx))
+end
+
+"""
+   xhat_value(phd::PHData, xhid::VariableID)
+
+Returns the value of the consensus variable associated with `xhid`. Only available for leaf variables after calling `solve`.  Available for branch variables at any time.
+"""
+function xhat_value(phd::PHData, xhat_id::XhatID)::Float64
+    return value(phd.xhat[xhat_id])
+end
+
+"""
+   xhat_value(phd::PHData, vid::VariableID)
+
+Returns the value of the consensus variable associated with `vid`. Only available for leaf variables after calling `solve`.  Available for branch variables at any time.
+"""
+function xhat_value(phd::PHData, vid::VariableID)::Float64
+    return xhat_value(phd, convert_to_xhat_id(phd, vid))
+end
+
+"""
+   xhat_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+
+Returns the value of the consensus variable associated with scenario `scen`, stage `stage` and index `idx`. Only available for leaf variables after calling `solve`.  Available for branch variables at any time.
+"""
+function xhat_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
+    return xhat_value(phd, VariableID(scen, stage, idx))
 end

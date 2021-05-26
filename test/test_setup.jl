@@ -562,4 +562,43 @@
         PH._wait_for_shutdown(wi)
     end
 
+    @testset "Lower Bound Initialization" begin
+
+        st = build_scen_tree()
+        sp_map = PH.assign_scenarios_to_procs(st)
+
+        worker_input_queues = Dict(1 => RemoteChannel(()->Channel{PH.Message}(10), myid()))
+        worker_output_queue = RemoteChannel(()->Channel{PH.Message}(10), myid())
+        futures = Dict(1 => remotecall(PH.worker_loop,
+                                       myid(),
+                                       1,
+                                       worker_input_queues[1],
+                                       worker_output_queue)
+                       )
+        wi = PH.WorkerInf(worker_input_queues, worker_output_queue, futures)
+
+        PH._initialize_lb_subproblems(sp_map, wi, st, create_model, (), false)
+        PH._send_message(wi, 1, PH.DumpState())
+        my_task = @async PH._retrieve_message(wi)
+        if timeout_wait(my_task, 90) && !istaskfailed(my_task)
+            msg = fetch(my_task)
+        elseif istaskfailed(my_task)
+            throw(my_task.exception)
+        else
+            error("Test timedout")
+        end
+
+        @test typeof(msg) <: PH.WorkerState{PH.WorkerRecord}
+        @test length(msg.state.lb_subproblems) == length(scenarios(st))
+
+        for (scen,sub) in pairs(msg.state.lb_subproblems)
+            @test scen in [PH.scid(0), PH.scid(1), PH.scid(2), PH.scid(3)]
+            @test length(sub.branch_vars) == 4
+            @test length(sub.leaf_vars) == 2
+        end
+
+        PH._shutdown(wi)
+        PH._wait_for_shutdown(wi)
+
+    end
 end

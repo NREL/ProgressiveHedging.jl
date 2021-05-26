@@ -22,8 +22,8 @@ A concrete subtype handles all details of creating, solving and updating subprob
 
 Variables and their values are identified and exchanged between PH and a Subproblem type using the `VariableID` type.  A unique `VariableID` is associated with each variable in the subproblem by the Subproblem implementation by using the `ScenarioID` of the subproblem as well as the `StageID` to which this variable belongs.  This combination uniquely identifies a node in the scenario tree to which the variable can be associated.  Variables associated with the same node in a scenario tree and sharing the same name are assumed to be consensus variables whose optimal value is determined by PH.  The final component of a `VariableID` is an `Index` which is just a counter assigned to a variable to differentiate it from other variables at the same node.  See `VariableID` type for more details.
 
-Any concrete subtype must implement the following functions:
-* `add_ph_objective_terms(sp::<ConcreteSubtype>, vids::Vector{VariableID}, r::AbstractPenaltyParameter)::Nothing
+Any concrete subtype **must** implement the following functions:
+* `add_ph_objective_terms(sp::<ConcreteSubtype>, vids::Vector{VariableID}, r::Union{Float64, Dict{VariableID,Float64}})::Nothing
 * `objective_value(sp::<ConcreteSubtype>)::Float64`
 * `report_values(sp::<ConcreteSubtype>, vars::Vector{VariableID})::Dict{VariableID,Float64}`
 * `report_variable_info(sp::<ConcreteSubtype>, st::ScenarioTree)::Dict{VariableID,VariableInfo}`
@@ -40,9 +40,14 @@ To use the extensive form functionality, the concrete subtype must implement
 * `ef_node_dict_constructor(::Type{S}) where S <: AbstractSubproblem`
 See the help on the functions for more details. See JuMPSubproblem for an example using JuMP. Note that the extensive form model is always constructed as a `JuMP.Model` object.
 
-To use penalty parameter types other than `ScalarPenaltyParameter`, concrete subproblem types may also need to implement
-* `report_penalty_info(as::AbstractSubproblem, pp<:AbstractPenaltyParameter)::Dict{VariableID,Float64}`
+To use penalty parameter types other than `ScalarPenaltyParameter`, concrete subproblem types also need to implement
+* `report_penalty_info(sp::<ConcreteSubtype>, pp<:AbstractPenaltyParameter)::Dict{VariableID,Float64}`
 See the help on individual penalty parameter types and `report_penalty_info` for more details.
+
+To use lower bound computation functionality, the concrete subtype must also implement
+* `add_lagrange_terms(sp::<ConcreteSubtype>, vids::Vector{VariableID})::Nothing
+* `update_lagrange_terms(sp::<ConcreteSubtype>, vids::Dict{VariableID,Float64})::Nothing
+See the help on these functions for more details.
 """
 abstract type AbstractSubproblem end
 
@@ -54,10 +59,10 @@ abstract type AbstractSubproblem end
 """
     add_ph_objective_terms(as::AbstractSubproblem,
                            vids::Vector{VariableID},
-                           r::AbstractPenaltyParameter
+                           r::Union{Float64,Dict{VariableID,Float64}}
                            )::Dict{VariableID,Float64}
 
-Create model variables for Lagrange multipliers and hat variables and add lagrange and quadratic penalty terms to the objective function.
+Create model variables for Lagrange multipliers and hat variables and add Lagrange and proximal terms to the objective function.
 
 Returns mapping of the variable to any information needed from the subproblem to compute the penalty parameter. Only used if `is_subproblem_dependent(typeof(r))` returns `true`.
 
@@ -167,6 +172,8 @@ Update the values of the PH variables in this subproblem with those given by `w_
 **Arguments**
 
 * `as::AbstractSubproblem` : subproblem object (replace with appropriate type)
+* `w_vals::Dict{VariableID,Float64}` : Values to update Lagrangian variables with
+* `xhat_vals::Dict{VariableID,Float64}` : Values to update proximal variables with
 """
 function update_ph_terms(as::AbstractSubproblem,
                          w_vals::Dict{VariableID,Float64},
@@ -189,6 +196,46 @@ function warm_start(as::AbstractSubproblem)::Nothing
 end
 
 ## Optional Interface Functions ##
+
+"""
+    add_lagrange_terms(as::AbstractSubproblem,
+                       vids::Vector{VariableID}
+                       )::Nothing
+
+Create model variables for Lagrange multipliers and adds the corresponding terms to the objective function.
+
+**Arguments**
+
+* `as::AbstractSubproblem` : subproblem object (replace with appropriate type)
+* `vids::Vector{VariableID}` : list of `VariableIDs` which need Lagrange terms
+
+See also [`add_ph_objective_terms`](@ref).
+"""
+function add_lagrange_terms(as::AbstractSubproblem,
+                            vids::Vector{VariableID}
+                            )::Nothing
+    throw(UnimplementedError("add_lagrange_terms is unimplemented"))
+end
+
+"""
+    update_lagrange_terms(as::AbstractSubproblem,
+                          w_vals::Dict{VariableID,Float64}
+                          )::Nothing
+
+Update the values of the dual variables in this subproblem with those given by `w_vals`.
+
+**Arguments**
+
+* `as::AbstractSubproblem` : subproblem object (replace with appropriate type)
+* `w_vals::Dict{VariableID,Float64}` : values to update Lagrange dual variables with
+
+See also [`update_ph_terms`](@ref).
+"""
+function update_lagrange_terms(as::AbstractSubproblem,
+                               w_vals::Dict{VariableID,Float64}
+                               )::Nothing
+    throw(UnimplementedError("update_lagrange_terms is unimplemented"))
+end
 
 # These functions are required only if an extensive form construction is desired
 

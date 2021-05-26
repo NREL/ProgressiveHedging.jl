@@ -33,7 +33,7 @@ diff > 0 && Distributed.addprocs(nw)
 @everywhere using JuMP
 include("common.jl")
 
-@testset "Distributed Error Handling" begin
+@testset "Error Handling" begin
     ch_size = 10
     worker_inf = PH._launch_workers(ch_size, ch_size)
 
@@ -62,7 +62,7 @@ include("common.jl")
     end
 end
 
-@testset "Distributed solve" begin
+@testset "Solve" begin
     
     # Solve the problem
     (n, err, rerr, obj, soln, phd) = PH.solve(build_scen_tree(),
@@ -88,7 +88,7 @@ end
 
 end
 
-@testset "Distributed user specified workers" begin
+@testset "User Specified Workers" begin
 
     st = build_scen_tree()
     worker_assignments = Dict(k=>Set{PH.ScenarioID}() for k in 2:3)
@@ -131,6 +131,33 @@ end
         end
     end
 
+end
+
+@testset "Lower Bound Algorithm" begin
+    (n, err, rerr, obj, soln, phd) = PH.solve(PH.two_stage_tree(2),
+                                              two_stage_model,
+                                              PH.ScalarPenaltyParameter(2.0),
+                                              atol=atol,
+                                              rtol=rtol,
+                                              max_iter=max_iter,
+                                              report=0,
+                                              lower_bound=5,
+                                              timing=false,
+                                              warm_start=false
+                                              )
+
+    @test err < atol
+    @test isapprox(obj, 8.25, atol=1e-6)
+    @test n < max_iter
+
+    lb_df = PH.lower_bounds(phd)
+    for row in eachrow(lb_df)
+        @test row[:bound] <= 8.25
+    end
+
+    @test size(lb_df,1) == 12
+    @test isapprox(lb_df[size(lb_df,1), "absolute gap"], 0.0, atol=1e-7)
+    @test isapprox(lb_df[size(lb_df,1), "relative gap"], 0.0, atol=(1e-7/8.25))
 end
 
 # Tear down distrbuted stuff

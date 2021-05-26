@@ -120,7 +120,7 @@ function invert_map(my_map::Dict{A,B})::Dict{B,A} where {A,B}
     return inv_map
 end
 
-function two_stage_model(scenario_id::PH.ScenarioID)
+@everywhere function two_stage_model(scenario_id::PH.ScenarioID)
 
     model = JuMP.Model(()->Ipopt.Optimizer())
     JuMP.set_optimizer_attribute(model, "print_level", 0)
@@ -129,7 +129,7 @@ function two_stage_model(scenario_id::PH.ScenarioID)
 
     scen = PH.value(scenario_id)
 
-    ref = JuMP.@variable(model, x >= 0.0)
+    ref = JuMP.@variable(model, 0.0 <= x <= 1000.0)
     stage1 = [ref]
     push!(stage1, JuMP.@variable(model, 0.0 <= u <= 1.0))
 

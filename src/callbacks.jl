@@ -2,6 +2,11 @@
 
 #### Canned Callbacks ####
 
+"""
+    variable_fixing(; lag=2, eq_tol=1e-8)::Callback
+
+Implementation of the variable fixing convergence acceleration heuristic in section 2.2 of (Watson & Woodruff 2010).
+"""
 function variable_fixing(; lag=2, eq_tol=1e-8)::Callback
     ext = Dict{Symbol,Any}()
     ext[:lag] = lag
@@ -93,6 +98,13 @@ function _variable_fixing(external::Dict{Symbol,Any},
     return true
 end
 
+"""
+    mean_deviation(;tol::Float64=1e-8,
+                   save_deviations::Bool=false
+                   )::Callback
+
+Implementation of a termination criterion given in section 2.3 of (Watson & Woodruff 2010). There it is called 'td'.
+"""
 function mean_deviation(;tol::Float64=1e-8,
                         save_deviations::Bool=false
                         )::Callback

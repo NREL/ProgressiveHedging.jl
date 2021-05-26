@@ -30,15 +30,6 @@ end
 
 ## JuMPSubproblem Penalty Parameter Functions ##
 
-# NOTE: temporary functions for coefficients of expressions
-# Future JuMP versions will implement this
-coefficient(a::JuMP.GenericAffExpr{C,V}, v::V) where {C,V} = get(a.terms, v, zero(C))
-coefficient(a::JuMP.GenericAffExpr{C,V}, v1::V, v2::V) where {C,V} = zero(C)
-function coefficient(q::JuMP.GenericQuadExpr{C,V}, v1::V, v2::V) where {C,V}
-    return get(q.terms, UnorderedPair(v1,v2), zero(C))
-end
-coefficient(q::JuMP.GenericQuadExpr{C,V}, v::V) where {C,V} = coefficient(q.aff, v)
-
 function get_penalty_value(r::Float64,
                            vid::VariableID,
                            )::Float64
@@ -51,12 +42,11 @@ function get_penalty_value(r::Dict{VariableID,Float64},
     return r[vid]
 end
 
-## Interface Functions ##
+## AbstractSubproblem Interface Functions ##
 
-function add_ph_objective_terms(js::JuMPSubproblem,
-                                vids::Vector{VariableID},
-                                r::Union{Float64,Dict{VariableID,Float64}},
-                                )::Nothing
+function add_lagrange_terms(js::JuMPSubproblem,
+                            vids::Vector{VariableID}
+                            )::Nothing
 
     obj = JuMP.objective_function(js.model,
                                   JuMP.GenericQuadExpr{Float64, JuMP.VariableRef}
@@ -70,19 +60,22 @@ function add_ph_objective_terms(js::JuMPSubproblem,
 
     for vid in vids
         var = js.vars[vid]
-
         w_ref = JuMP.add_variable(js.model, JuMP.build_variable(error, jvi))
         JuMP.add_to_expression!(obj, w_ref, var)
         js.w_vars[vid] = w_ref
-
-        xhat_ref = JuMP.add_variable(js.model, JuMP.build_variable(error, jvi))
-        rho = get_penalty_value(r, vid)
-        JuMP.add_to_expression!(obj, 0.5 * rho * (var - xhat_ref)^2)
-        js.xhat_vars[vid] = xhat_ref
     end
 
     JuMP.set_objective_function(js.model, obj)
 
+    return
+end
+
+function add_ph_objective_terms(js::JuMPSubproblem,
+                                vids::Vector{VariableID},
+                                r::Union{Float64,Dict{VariableID,Float64}},
+                                )::Nothing
+    add_lagrange_terms(js, vids)
+    add_proximal_terms(js, vids, r)
     return
 end
 
@@ -142,19 +135,28 @@ function solve(js::JuMPSubproblem)::MOI.TerminationStatusCode
     return JuMP.termination_status(js.model)
 end
 
-function update_ph_terms(js::JuMPSubproblem,
-                         w_vals::Dict{VariableID,Float64},
-                         xhat_vals::Dict{VariableID,Float64}
-                         )::Nothing
+function update_lagrange_terms(js::JuMPSubproblem,
+                               w_vals::Dict{VariableID,Float64}
+                               )::Nothing
+
     for (wid, wval) in pairs(w_vals)
         JuMP.fix(js.w_vars[wid], wval, force=true)
     end
 
-    for (xhid, xhval) in pairs(xhat_vals)
-        JuMP.fix(js.xhat_vars[xhid], xhval, force=true)
-    end
+    return
+
+end
+
+function update_ph_terms(js::JuMPSubproblem,
+                         w_vals::Dict{VariableID,Float64},
+                         xhat_vals::Dict{VariableID,Float64}
+                         )::Nothing
+
+    update_lagrange_terms(js, w_vals)
+    update_proximal_terms(js, xhat_vals)
 
     return
+
 end
 
 function warm_start(js::JuMPSubproblem)::Nothing
@@ -187,15 +189,33 @@ end
 
 ## JuMPSubproblem Specific Functions ##
 
-function objective_coefficients(js::JuMPSubproblem,
-                                vids::Vector{VariableID},
-                                )::Dict{VariableID,Float64}
-    pen_dict = Dict{VariableID,Float64}()
-    obj = JuMP.objective_function(js.model)
+function add_proximal_terms(js::JuMPSubproblem,
+                            vids::Vector{VariableID},
+                            r::Union{Float64,Dict{VariableID,Float64}}
+                            )::Nothing
+
+    obj = JuMP.objective_function(js.model,
+                                  JuMP.GenericQuadExpr{Float64, JuMP.VariableRef}
+                                  )
+
+    jvi = JuMP.VariableInfo(false, NaN,   # lower_bound
+                            false, NaN,   # upper_bound
+                            true, 0.0,    # fixed
+                            false, NaN,   # start value
+                            false, false) # binary, integer
+
     for vid in vids
-        pen_dict[vid] = coefficient(obj, js.vars[vid])
+        var = js.vars[vid]
+        xhat_ref = JuMP.add_variable(js.model, JuMP.build_variable(error, jvi))
+        rho = get_penalty_value(r, vid)
+        JuMP.add_to_expression!(obj, 0.5 * rho * (var - xhat_ref)^2)
+        js.xhat_vars[vid] = xhat_ref
     end
-    return pen_dict
+
+    JuMP.set_objective_function(js.model, obj)
+
+    return
+
 end
 
 function fix_variables(js::JuMPSubproblem,
@@ -207,6 +227,30 @@ function fix_variables(js::JuMPSubproblem,
     end
 
     return
+
+end
+
+function objective_coefficients(js::JuMPSubproblem,
+                                vids::Vector{VariableID},
+                                )::Dict{VariableID,Float64}
+    pen_dict = Dict{VariableID,Float64}()
+    obj = JuMP.objective_function(js.model)
+    for vid in vids
+        pen_dict[vid] = JuMP.coefficient(obj, js.vars[vid])
+    end
+    return pen_dict
+end
+
+function update_proximal_terms(js::JuMPSubproblem,
+                               xhat_vals::Dict{VariableID,Float64}
+                               )::Nothing
+
+    for (xhid, xhval) in pairs(xhat_vals)
+        JuMP.fix(js.xhat_vars[xhid], xhval, force=true)
+    end
+
+    return
+
 end
 
 ## JuMPSubproblem Internal Functions ##

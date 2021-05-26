@@ -224,18 +224,25 @@ end
 end
 
 @testset "Subproblem Callback" begin
-        spcb_text = "SubproblemCallback succesful."
-    function my_subproblem_callback(
-            ext::Dict{Symbol,Any}, sp::JuMPSubproblem, niter::Int, 
-            scenario_id::ScenarioID
-        )
+
+    # TODO: Improve this test
+
+    function my_subproblem_callback(ext::Dict{Symbol,Any},
+                                    sp::JuMPSubproblem,
+                                    niter::Int,
+                                    scenario_id::ScenarioID
+                                    )
+
         if niter == 1 && scenario_id.value == 0
             ext[:check] += 1
             sp.model.ext[:check] = 1
         end
+
         if niter == 2 && scenario_id.value == 0
             ext[:sp_check] = sp.model.ext[:check]
         end
+
+        return
     end
 
     ext = Dict{Symbol,Any}(:check => 0)
@@ -244,11 +251,11 @@ end
                                             create_model,
                                             PH.ScalarPenaltyParameter(25.0),
                                             opt=Ipopt.Optimizer,
-                                            opt_args=(print_level=1,tol=1e-12),
-                                            atol=1e-6,
+                                            opt_args=(print_level=0,tol=1e-12),
+                                            atol=5e-1,
                                             rtol=1e-8,
-                                            max_iter=2,
-                                            report=1,
+                                            max_iter=10,
+                                            report=0,
                                             timing=false,
                                             warm_start=false,
                                             subproblem_callbacks=[my_spcb]

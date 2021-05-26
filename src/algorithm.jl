@@ -8,6 +8,7 @@ function _copy_values(target::Dict{VariableID,Float64},
     end
 
     return
+
 end
 
 function _execute_callbacks(phd::PHData, winf::WorkerInf, niter::Int)::Bool
@@ -24,9 +25,8 @@ end
 
 function _process_reports(phd::PHData,
                           winf::WorkerInf,
-                          report_type::Union{Type{ReportBranch},
-                                             Type{ReportLeaf}},
-                          )::Nothing
+                          report_type::Type{R}
+                          )::Nothing where R <: Report
 
     waiting_on = copy(scenarios(phd))
 
@@ -40,6 +40,36 @@ function _process_reports(phd::PHData,
     end
 
     return
+
+end
+
+function _report(niter::Int,
+                 nsqrt::Float64,
+                 residual::Float64,
+                 xmax::Float64,
+                 xhat_sq::Float64,
+                 x_sq::Float64
+                 )::Nothing
+
+    @printf("Iter: %4d   AbsR: %12.6e   RelR: %12.6e   Xhat: %12.6e   X: %12.6e\n",
+            niter, residual, residual / xmax,
+            sqrt(xhat_sq)/nsqrt, sqrt(x_sq)/nsqrt
+            )
+    flush(stdout)
+
+    return
+
+end
+
+function _report_lower_bound(niter::Int, bound::Float64, gap::Float64)::Nothing
+
+    @printf("Iter: %4d   Bound: %12.4e   Abs Gap: %12.4e   Rel Gap: %8.4g\n",
+            niter, bound, gap, gap/bound
+            )
+    flush(stdout)
+
+    return
+
 end
 
 function _save_iterate(phd::PHData,
@@ -58,7 +88,7 @@ function _save_iterate(phd::PHData,
         end
     end
 
-    _save_iterate(phd.iterate_history,
+    _save_iterate(phd.history,
                   iter,
                   PHIterate(xhd, xd, wd)
                   )
@@ -73,7 +103,7 @@ function _save_residual(phd::PHData,
                         absr::Float64,
                         relr::Float64,
                         )::Nothing
-    _save_residual(phd.residual_history, iter, PHResidual(absr, relr, xhat_sq, x_sq))
+    _save_residual(phd.history, iter, PHResidual(absr, relr, xhat_sq, x_sq))
     return
 end
 
@@ -81,8 +111,11 @@ function _send_solve_commands(phd::PHData,
                               winf::WorkerInf,
                               niter::Int
                               )::Nothing
+
     @sync for (scen, sinfo) in pairs(phd.scenario_map)
+
         (w_dict, xhat_dict) = create_ph_dicts(sinfo)
+
         @async _send_message(winf,
                              sinfo.pid,
                              Solve(scen,
@@ -91,6 +124,20 @@ function _send_solve_commands(phd::PHData,
                                    niter
                                    )
                              )
+
+    end
+
+    return
+
+end
+
+function _send_lb_solve_commands(phd::PHData,
+                                 winf::WorkerInf,
+                                 )::Nothing
+
+    @sync for (scen, sinfo) in pairs(phd.scenario_map)
+        (w_dict, xhat_dict) = create_ph_dicts(sinfo)
+        @async _send_message(winf, sinfo.pid, SolveLowerBound(scen, w_dict))
     end
 
     return
@@ -127,22 +174,53 @@ end
 function _update_values(phd::PHData,
                         msg::ReportLeaf
                         )::Nothing
-    return _copy_values(phd.scenario_map[msg.scen].leaf_vars, msg.vals)
+    _copy_values(phd.scenario_map[msg.scen].leaf_vars, msg.vals)
+    return
+end
+
+function _update_values(phd::PHData,
+                        msg::ReportLowerBound
+                        )::Nothing
+
+    pd = phd.scenario_map[msg.scen].problem_data
+
+    pd.lb_obj = msg.obj
+    pd.lb_sts = msg.sts
+    pd.lb_time = msg.time
+
+    return
+
 end
 
 function _verify_report(msg::ReportBranch)::Nothing
+
     if (msg.sts != MOI.OPTIMAL &&
         msg.sts != MOI.LOCALLY_SOLVED &&
         msg.sts != MOI.ALMOST_LOCALLY_SOLVED)
         # TODO: Create user adjustable/definable behavior for when this happens
         @error("Scenario $(msg.scen) subproblem returned $(msg.sts).")
     end
+
     return
+
 end
 
 function _verify_report(msg::ReportLeaf)::Nothing
     # Intentional no-op
     return
+end
+
+function _verify_report(msg::ReportLowerBound)::Nothing
+
+    if (msg.sts != MOI.OPTIMAL &&
+        msg.sts != MOI.LOCALLY_SOLVED &&
+        msg.sts != MOI.ALMOST_LOCALLY_SOLVED)
+        # TODO: Create user adjustable/definable behavior for when this happens
+        @error("Scenario $(msg.scen) lower-bound subproblem returned $(msg.sts).")
+    end
+
+    return
+
 end
 
 function compute_and_save_xhat(phd::PHData)::Float64
@@ -173,6 +251,7 @@ function compute_and_save_xhat(phd::PHData)::Float64
     end
 
     return xhat_res
+
 end
 
 function compute_and_save_w(phd::PHData)::Float64
@@ -212,37 +291,27 @@ function compute_and_save_w(phd::PHData)::Float64
     end
 
     return kxsq
+
 end
 
-function update_ph_variables(phd::PHData)::NTuple{2,Float64}
+function compute_gap(phd::PHData)::NTuple{2,Float64}
 
-    xhat_sq = compute_and_save_xhat(phd)
-    x_sq = compute_and_save_w(phd)
+    gap = 0.0
+    lb = 0.0
 
-    return (xhat_sq, x_sq)
-end
+    for s in scenarios(phd)
 
-function solve_subproblems(phd::PHData,
-                           winf::WorkerInf,
-                           niter::Int,
-                           )::Nothing
+        sinfo = phd.scenario_map[s]
+        pd = sinfo.problem_data
+        p = sinfo.prob
 
-    # Copy hat values to scenario base structure for easy dispersal
-    @timeit(phd.time_info,
-            "Other",
-            _update_si_xhat(phd))
+        gap += p * abs(pd.obj - pd.lb_obj)
+        lb += p * pd.lb_obj
 
-    # Send solve command to workers
-    @timeit(phd.time_info,
-            "Issuing solve commands",
-            _send_solve_commands(phd, winf, niter))
+    end
 
-    # Wait for and process replies
-    @timeit(phd.time_info,
-            "Collecting results",
-            _process_reports(phd, winf, ReportBranch))
+    return (lb, gap)
 
-    return
 end
 
 function finish(phd::PHData,
@@ -271,6 +340,66 @@ function finish(phd::PHData,
     _wait_for_shutdown(winf)
 
     return
+
+end
+
+function update_gap(phd::PHData, winf::WorkerInf, niter::Int)::NTuple{2,Float64}
+
+    @timeit(phd.time_info,
+            "Issuing lower bound solve commands",
+            _send_lb_solve_commands(phd, winf)
+            )
+
+    @timeit(phd.time_info,
+            "Collecting lower bound results",
+            _process_reports(phd, winf, ReportLowerBound)
+            )
+
+    (lb, gap) = @timeit(phd.time_info,
+                        "Computing gap",
+                        compute_gap(phd)
+                        )
+
+    _save_lower_bound(phd.history,
+                      niter,
+                      PHLowerBound(lb, gap, gap/lb)
+                      )
+
+    return (lb, gap)
+
+end
+
+function update_ph_variables(phd::PHData)::NTuple{2,Float64}
+
+    xhat_sq = compute_and_save_xhat(phd)
+    x_sq = compute_and_save_w(phd)
+
+    return (xhat_sq, x_sq)
+
+end
+
+function solve_subproblems(phd::PHData,
+                           winf::WorkerInf,
+                           niter::Int,
+                           )::Nothing
+
+    # Copy hat values to scenario base structure for easy dispersal
+    @timeit(phd.time_info,
+            "Other",
+            _update_si_xhat(phd))
+
+    # Send solve command to workers
+    @timeit(phd.time_info,
+            "Issuing solve commands",
+            _send_solve_commands(phd, winf, niter))
+
+    # Wait for and process replies
+    @timeit(phd.time_info,
+            "Collecting results",
+            _process_reports(phd, winf, ReportBranch))
+
+    return
+
 end
 
 function hedge(ph_data::PHData,
@@ -278,19 +407,21 @@ function hedge(ph_data::PHData,
                max_iter::Int,
                atol::Float64,
                rtol::Float64,
+               gap_tol::Float64,
                report::Int,
                save_iter::Int,
                save_res::Int,
+               lower_bound::Int,
                )::Tuple{Int,Float64,Float64}
 
     niter = 0
     report_flag = (report > 0)
     save_iter_flag = (save_iter > 0)
     save_res_flag = (save_res > 0)
-    user_continue = true
+    lb_flag = (lower_bound > 0)
 
-    cr = ph_data.residual_history.residuals[-1]
-    delete!(ph_data.residual_history.residuals, -1)
+    cr = ph_data.history.residuals[-1]
+    delete!(ph_data.history.residuals, -1)
     xhat_res_sq = cr.xhat_sq
     x_res_sq = cr.x_sq
 
@@ -306,11 +437,17 @@ function hedge(ph_data::PHData,
                             )
 
     if report_flag
-        @printf("Iter: %4d   AbsR: %12.6e   RelR: %12.6e   Xhat: %12.6e   X: %12.6e\n",
-                niter, residual, residual / xmax,
-                sqrt(xhat_res_sq)/nsqrt, sqrt(x_res_sq)/nsqrt
-                )
-        flush(stdout)
+        _report(niter, nsqrt, residual, xmax, xhat_res_sq, x_res_sq)
+    end
+
+    if lb_flag
+        (lb, gap) = @timeit(ph_data.time_info,
+                            "Update Gap",
+                            update_gap(ph_data, worker_inf, niter)
+                            )
+        if report_flag
+            _report_lower_bound(niter, lb, gap)
+        end
     end
 
     if save_iter_flag
@@ -320,8 +457,15 @@ function hedge(ph_data::PHData,
     if save_res_flag
         _save_residual(ph_data, 0, xhat_res_sq, x_res_sq, residual, residual/xmax)
     end
+
+    running = (user_continue
+               && niter < max_iter
+               && residual > atol
+               && residual > rtol * xmax
+               && (lb_flag ? gap > lb * gap_tol : true)
+               )
     
-    while user_continue && niter < max_iter && residual > atol && residual > rtol * xmax
+    while running
 
         niter += 1
 
@@ -350,12 +494,25 @@ function hedge(ph_data::PHData,
                                 _execute_callbacks(ph_data, worker_inf, niter)
                                 )
 
-        if report_flag && niter % report == 0
-            @printf("Iter: %4d   AbsR: %12.6e   RelR: %12.6e   Xhat: %12.6e   X: %12.6e\n",
-                    niter, residual, residual / xmax,
-                    sqrt(xhat_res_sq)/nsqrt, sqrt(x_res_sq)/nsqrt
-                    )
-            flush(stdout)
+        running = (user_continue
+                   && niter < max_iter
+                   && residual > atol
+                   && residual > rtol * xmax
+                   && (lb_flag ? gap > lb * gap_tol : true)
+                   )
+
+        if report_flag && (niter % report == 0 || !running)
+            _report(niter, nsqrt, residual, xmax, xhat_res_sq, x_res_sq)
+        end
+
+        if lb_flag && (niter % lower_bound == 0 || !running)
+            (lb, gap) = @timeit(ph_data.time_info,
+                                "Update Gap",
+                                update_gap(ph_data, worker_inf, niter)
+                                )
+            if report_flag
+                _report_lower_bound(niter, lb, gap)
+            end
         end
 
         if save_iter_flag && niter % save_iter == 0

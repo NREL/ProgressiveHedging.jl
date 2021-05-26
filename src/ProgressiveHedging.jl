@@ -13,11 +13,10 @@ using TimerOutputs
 
 # High-level Functions
 export solve, solve_extensive
-export two_stage_tree
 
 # Callbacks
 export Callback
-export cb, mean_deviation, variable_reduction
+export cb, mean_deviation, variable_fixing
 export apply_to_subproblem
 export SubproblemCallback, spcb
 
@@ -32,12 +31,13 @@ export ProportionalPenaltyParameter, ScalarPenaltyParameter, SEPPenaltyParameter
 # PHData interaction function
 export consensus_variables, probability, scenarios
 
-# (Consensus) Variable interaction funcitons
+# (Consensus) Variable interaction functions
 export convert_to_variable_ids, convert_to_xhat_id
 export is_leaf, name, value, branch_value, leaf_value, w_value, xhat_value
 
 # Result retrieval functions
-export residuals, relative_residuals, residual_components
+export lower_bounds
+export residuals
 export retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_w
 export retrieve_xhat_history, retrieve_no_hat_history, retrieve_w_history
 
@@ -82,10 +82,13 @@ include("callbacks.jl")
           max_iter::Int=1000,
           atol::Float64=1e-6,
           rtol::Float64=1e-6,
+          gap_tol::Float64=-1.0,
+          lower_bound::Int=0,
           report::Int=0,
           save_iterates::Int=0,
           save_residuals::Bool=false,
           timing::Bool=true,
+          warm_start::Bool=false,
           callbacks::Vector{Callback}=Vector{Callback}(),
           worker_assignments::Dict{Int,Set{ScenarioID}}=Dict{Int,Set{ScenarioID}}(),
           args::Tuple=(),
@@ -105,13 +108,15 @@ Solve the stochastic programming problem described by `tree` and the models crea
 * `max_iter::Int` : Maximum number of iterations to perform before returning. Defaults to 1000.
 * `atol::Float64` : Absolute error tolerance. Defaults to 1e-6.
 * `rtol::Float64` : Relative error tolerance. Defaults to 1e-6.
+* `gap_tol::Float64` : Relative gap tolerance. Terminate when the relative gap between the lower bound and objective are smaller than `gap_tol`. Any value < 0.0 disables this termination condition. Defaults to -1.0. See also the `lower_bound` keyword argument.
+* `lower_bound::Int` : Compute and save a lower-bound using (Gade, et. al. 2016) every `lower_bound` iterations. Any value <= 0 disables lower-bound computation. Defaults to 0.
 * `report::Int` : Print progress to screen every `report` iterations. Any value <= 0 disables printing. Defaults to 0.
 * `save_iterates::Int` : Save PH iterates every `save_iterates` steps. Any value <= 0 disables saving iterates. Defaults to 0.
 * `save_residuals::Int` : Save PH residuals every `save_residuals` steps. Any value <= 0 disables saving residuals. Defaults to 0.
 * `timing::Bool` : Print timing info after solving if true. Defaults to true.
 * `warm_start::Bool` : Flag indicating that solver should be "warm started" by using the previous solution as the starting point (not compatible with all solvers)
 * `callbacks::Vector{Callback}` : Collection of `Callback` structs to call after each PH iteration. Callbacks will be executed in the order they appear. See `Callback` struct for more info. Defaults to empty vector.
-* `subproblem_callbacks::Vector{SubproblemCallback}` : Collection of `SubproblemCallback` structs to call after each PH iteration similarly to `callbacks`. These must not require communication between subproblems, and as such should be more efficient than regular callbacks. 
+* `subproblem_callbacks::Vector{SubproblemCallback}` : Collection of `SubproblemCallback` structs to call before solving each subproblem. Each callback is called on each subproblem but does not affect other subproblems. See `SubproblemCallback` struct for more info. Defaults to empty vector.
 * `worker_assignments::Dict{Int,Set{ScenarioID}}` : Dictionary specifying which scenario subproblems a worker will create and solve. The key values are worker ids as given by Distributed (see `Distributed.workers()`). The user is responsible for ensuring the specified workers exist and that every scenario is assigned to a worker. If no dictionary is given, scenarios are assigned to workers in round robin fashion. Defaults to empty dictionary.
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
 * `kwargs` : Any keyword arguments not specified here that need to be passed to `subproblem_constructor`.  See also `other_args` and `args`.
@@ -123,6 +128,8 @@ function solve(tree::ScenarioTree,
                max_iter::Int=1000,
                atol::Float64=1e-6,
                rtol::Float64=1e-6,
+               gap_tol::Float64=-1.0,
+               lower_bound::Int=0,
                report::Int=0,
                save_iterates::Int=0,
                save_residuals::Int=0,
@@ -162,6 +169,7 @@ function solve(tree::ScenarioTree,
                                      warm_start,
                                      timo,
                                      report,
+                                     lower_bound,
                                      subproblem_callbacks,
                                      (other_args...,args...);
                                      kwargs...)
@@ -175,15 +183,18 @@ function solve(tree::ScenarioTree,
     if report > 0
         println("Solving...")
     end
-    (niter, abs_res, rel_res) = @timeit(timo, "Solution",
+    (niter, abs_res, rel_res) = @timeit(timo,
+                                        "Solution",
                                         hedge(phd,
                                               winf,
                                               max_iter,
                                               atol,
                                               rtol,
+                                              gap_tol,
                                               report,
                                               save_iterates,
-                                              save_residuals)
+                                              save_residuals,
+                                              lower_bound)
                                         )
 
     # Post Processing
@@ -268,7 +279,6 @@ end # module
 
 #### TODOs ####
 
-# 1. Add tests for unimplemented subproblem error throwing?
-# 2. Add flag to solve call to turn off parallelism
-# 3. Add handling of nonlinear objective functions
-# 4. Add tests for nonlinear constraints (these should work currently but testing is needed)
+# 1. Add flag to solve call to turn off parallelism
+# 2. Add handling of nonlinear objective functions
+# 3. Add tests for nonlinear constraints (these should work currently but testing is needed)

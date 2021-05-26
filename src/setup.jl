@@ -44,35 +44,41 @@ function _initialize_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
     # Wait for and process initialization replies
     var_maps = Dict{ScenarioID,Dict{VariableID,VariableInfo}}()
     remaining_maps = copy(scenarios(scen_tree))
-    msg_waiting = Vector{Union{ReportBranch,PenaltyInfo}}()
 
     while !isempty(remaining_maps)
 
-        msg = _retrieve_message_type(wi, Union{ReportBranch,VariableMap,PenaltyInfo})
+        msg = _retrieve_message_type(wi, VariableMap)
+        var_maps[msg.scen] = msg.var_info
 
-        if typeof(msg) <: ReportBranch || typeof(msg) <: PenaltyInfo
+        delete!(remaining_maps, msg.scen)
 
-            push!(msg_waiting, msg)
-
-        elseif typeof(msg) <: VariableMap
-
-            var_maps[msg.scen] = msg.var_info
-            delete!(remaining_maps, msg.scen)
-
-        else
-
-            error("Inconceivable!!!!")
-
-        end
-
-    end
-
-    # Put any other messages back
-    for msg in msg_waiting
-        put!(wi.output, msg)
     end
 
     return var_maps
+end
+
+function _initialize_lb_subproblems(sp_map::Dict{Int,Set{ScenarioID}},
+                                    wi::WorkerInf,
+                                    scen_tree::ScenarioTree,
+                                    constructor::Function,
+                                    constructor_args::Tuple,
+                                    warm_start::Bool;
+                                    kwargs...
+                                    )::Nothing
+
+    @sync for (wid, scenarios) in pairs(sp_map)
+        @async _send_message(wi,
+                             wid,
+                             InitializeLowerBound(constructor,
+                                                  constructor_args,
+                                                  (;kwargs...),
+                                                  scenarios,
+                                                  scen_tree,
+                                                  warm_start)
+                             )
+    end
+
+    return
 end
 
 function _set_initial_values(phd::PHData,
@@ -81,34 +87,16 @@ function _set_initial_values(phd::PHData,
 
     # Wait for and process mapping replies
     remaining_init = copy(scenarios(phd.scenario_tree))
-    msg_waiting = Vector{PenaltyInfo}()
 
     while !isempty(remaining_init)
 
-        msg = _retrieve_message_type(wi, Union{ReportBranch,PenaltyInfo})
+        msg = _retrieve_message_type(wi, ReportBranch)
 
-        if typeof(msg) <: PenaltyInfo
+        _verify_report(msg)
+        _update_values(phd, msg)
 
-            push!(msg_waiting, msg)
+        delete!(remaining_init, msg.scen)
 
-        elseif typeof(msg) <: ReportBranch
-
-            _verify_report(msg)
-            _update_values(phd, msg)
-
-            delete!(remaining_init, msg.scen)
-
-        else
-
-            error("Recieved unexpected message of type $(typeof(msg)).")
-
-        end
-
-    end
-
-    # Put any penalty messages back
-    for msg in msg_waiting
-        put!(wi.output, msg)
     end
 
     # Start computation of initial PH values -- W values are computed at
@@ -190,6 +178,7 @@ function initialize(scen_tree::ScenarioTree,
                     warm_start::Bool,
                     timo::TimerOutputs.TimerOutput,
                     report::Int,
+                    lower_bound::Int,
                     subproblem_callbacks::Vector{SubproblemCallback},
                     constructor_args::Tuple,;
                     kwargs...
@@ -206,14 +195,15 @@ function initialize(scen_tree::ScenarioTree,
     end
     worker_inf = @timeit(timo,
                          "Launch Workers",
-                         _launch_workers(scen_per_worker, n_scenarios)
+                         _launch_workers(2*scen_per_worker, n_scenarios)
                          )
 
-    # Initialize workers
+    # Initialize subproblems
     if report > 0
         println("...initializing subproblems...")
         flush(stdout)
     end
+
     var_map = @timeit(timo,
                       "Initialize Subproblems",
                       _initialize_subproblems(scen_proc_map,
@@ -226,6 +216,26 @@ function initialize(scen_tree::ScenarioTree,
                                               subproblem_callbacks;
                                               kwargs...)
                       )
+
+    if lower_bound > 0
+
+        if report > 0
+            println("...initializing lower-bound subproblems...")
+            flush(stdout)
+        end
+
+        @timeit(timo,
+                "Initialze Lower Bound Subproblems",
+                _initialize_lb_subproblems(scen_proc_map,
+                                           worker_inf,
+                                           scen_tree,
+                                           model_constructor,
+                                           constructor_args,
+                                           warm_start;
+                                           kwargs...)
+                )
+
+    end
 
     # Construct master ph object
     phd = @timeit(timo,
