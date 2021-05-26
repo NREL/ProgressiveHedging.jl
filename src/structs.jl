@@ -422,19 +422,39 @@ function add_variable(a::HatVariable, vid::VariableID)
     return
 end
 
+"""
+    is_integer(a::HatVariable)::Bool
+
+Returns true if the consensus variable is an integer variable. The consensus variable is an integer if the contributing subproblem variables are all integer variables.
+"""
 function is_integer(a::HatVariable)::Bool
     return a.is_integer
 end
 
+"""
+    set_value(a::HatVariable, v::Float64)
+
+Sets the current value of `a` to `v`.
+"""
 function set_value(a::HatVariable, v::Float64)::Nothing
     a.value = v
     return
 end
 
+"""
+   value(a::HatVariable)::Float64
+
+Returns the current value of `a`.
+"""
 function value(a::HatVariable)::Float64
     return a.value
 end
 
+"""
+    variables(a::HatVariable)::Set{VariableID}
+
+Returns the variable ids for all subproblem variables contributing to this variable.
+"""
 function variables(a::HatVariable)::Set{VariableID}
     return a.vars
 end
@@ -470,7 +490,6 @@ end
 
 Applies the function `to_apply` to the subproblem with scenario id `scid`.
 """
-
 function apply_to_subproblem(to_apply::Function,
                              phd::PHData,
                              winf::WorkerInf,

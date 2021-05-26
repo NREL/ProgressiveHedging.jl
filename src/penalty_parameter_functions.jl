@@ -53,6 +53,7 @@ end
 Performs any computations for the penalty parameter based on the initial solutions of the subproblems.
 
 **Arguments**
+
 *`r::AbstractPenaltyParameter` : penalty parameter struct (replace with appropriate type)
 *`phd::PHData` : PH data structure used for obtaining any required variable values. See help on `PHData` for details on available functions.
 """

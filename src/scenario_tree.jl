@@ -31,6 +31,16 @@ struct ScenarioNode
     children::Set{ScenarioNode}
 end
 
+function stringify(node::ScenarioNode)
+    node_str = "$(value(node.id)):{"
+    for s in sort!(collect(node.scenario_bundle))
+        node_str *= "$(value(s)),"
+    end
+    rstrip(node_str, ',')
+    node_str *= "}"
+    return node_str
+end
+
 Base.show(io::IO, sn::ScenarioNode) = print(io, "ScenarioNode($(sn.id), $(sn.stage), $(sn.scenario_bundle))")
 
 function _add_child(parent::ScenarioNode,
