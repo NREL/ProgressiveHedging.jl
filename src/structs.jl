@@ -232,7 +232,7 @@ end
 """
 Data structure used to store information and results for a stochastic programming problem.
 
-See the following functions may be used to interact with this object:
+See the following functions make use of this object:
 * [`apply_to_subproblem`](@ref)
 * [`branch_value`](@ref)
 * [`consensus_variables`](@ref)

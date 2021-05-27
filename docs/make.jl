@@ -1,6 +1,6 @@
 
 using Pkg
-Pkg.activate("..")
+Pkg.activate(joinpath(@__DIR__, "..", "examples"))
 
 using Documenter
 using ProgressiveHedging
