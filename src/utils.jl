@@ -19,23 +19,30 @@ end
 
 ## Generic Utility Functions ##
 
-"""
-    two_stage_tree(n::Int;
-                   pvect::Union{Nothing,Vector{R}}=nothing
-                   )::ScenarioTree where R <: Real
-
-Construct and return a two-stage scenario tree with `n` scenarios. `pvect` contains the probabilities for the scenarios.  If not given, each scenario is assigned probability `1/n`.
-"""
-function two_stage_tree(n::Int;
-                        pvect::Union{Nothing,Vector{R}}=nothing
-                        )::ScenarioTree where R <: Real
-    p = isnothing(pvect) ? [1.0/n for k in 1:n] : pvect
-
+function _two_stage_tree(n::Int, p::Vector{R})::ScenarioTree where R <: Real
     st = ScenarioTree()
-    for k in 1:n
-        add_leaf(st, root(st), p[k])
+    for s in 1:n
+        add_leaf(st, root(st), p[s])
     end
     return st
+end
+
+"""
+    two_stage_tree(n::Int)::ScenarioTree
+    two_stage_tree(p::Vector{R})::ScenarioTree where R <: Real
+
+Construct and return a two-stage scenario tree with `n` scenarios with equal probability or a two-stage scenario tree with `length(p)` scenarios where probability of scenario s is `p[s+1]`.
+"""
+function two_stage_tree(n::Int)::ScenarioTree
+    return _two_stage_tree(n, [1.0/n for k in 1:n])
+end
+
+function two_stage_tree(p::Vector{R})::ScenarioTree where R <: Real
+    if !isapprox(sum(p), 1.0, atol=1e-8)
+        @warn("Given probability vector has total probability $(sum(p)). Normalizing to 1.")
+        p /= sum(p)
+    end
+    return _two_stage_tree(length(p), p)
 end
 
 function visualize_tree(phd::PHData)

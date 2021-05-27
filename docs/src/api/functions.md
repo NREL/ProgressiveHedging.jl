@@ -37,6 +37,7 @@ value(::StageID)
 
 ```@docs
 lower_bounds
+print_timing
 residuals
 retrieve_soln
 retrieve_aug_obj_value

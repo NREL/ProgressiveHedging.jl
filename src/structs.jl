@@ -693,6 +693,16 @@ function stage_id(phd::PHData, xid::XhatID)::StageID
 end
 
 """
+    print_timing(phd::PHData)
+
+Prints timining information from the Progressive Hedging solve.
+"""
+function print_timing(phd::PHData)
+    println(phd)
+    return
+end
+
+"""
    value(phd::PHData, vid::VariableID)
 
 Returns the value of the variable associated with `vid`.

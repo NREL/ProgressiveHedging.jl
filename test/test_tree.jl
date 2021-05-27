@@ -59,11 +59,18 @@ end
     N = 10
     p = rand(N)
     p /= sum(p)
-    st = PH.two_stage_tree(N, pvect=p)
+    st = PH.two_stage_tree(p)
 
     @test PH.last_stage(st) == PH.stid(2)
     @test length(st.tree_map) == N + 1
     for (scen, prob) in pairs(st.prob_map)
         @test prob == p[PH.value(scen) + 1]
+    end
+
+    st = PH.two_stage_tree(N)
+    @test PH.last_stage(st) == PH.stid(2)
+    @test length(st.tree_map) == N + 1
+    for (scen, prob) in pairs(st.prob_map)
+        @test prob == 1.0 / 10.0
     end
 end

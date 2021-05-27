@@ -1,6 +1,8 @@
 # Basic Example
 
-A basic example on using ProgressiveHedging.jl. This example is also available as a jupyter notebook under the examples directory.
+A basic example on using ProgressiveHedging.jl.
+
+This example is also available as the script basic_example.jl in the example directory.
 
 Here we will use ProgressiveHedging.jl to solve the simple problem
 

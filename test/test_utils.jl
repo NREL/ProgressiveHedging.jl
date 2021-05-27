@@ -41,7 +41,7 @@ end
     @test isapprox(sum(values(st.prob_map)), 1.0)
 
     p = [0.8, 0.2]
-    st = two_stage_tree(2, pvect=p)
+    st = two_stage_tree(p)
     @test st.prob_map[PH.scid(0)] == p[1]
     @test st.prob_map[PH.scid(1)] == p[2]
 end

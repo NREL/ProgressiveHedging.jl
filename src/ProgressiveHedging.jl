@@ -47,6 +47,7 @@ export get_callback, get_callback_ext
 
 # Result retrieval functions
 export lower_bounds
+export print_timing
 export residuals
 export retrieve_aug_obj_value, retrieve_obj_value
 export retrieve_soln, retrieve_no_hats, retrieve_w
