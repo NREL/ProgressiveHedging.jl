@@ -1,8 +1,6 @@
 # Basic Example
 
-A basic example on using ProgressiveHedging.jl.
-
-This example is also available as the script basic_example.jl in the example directory.
+A basic example using ProgressiveHedging.jl to solve a stochastic program. This example is also available as the script basic_example.jl in the example directory.
 
 Here we will use ProgressiveHedging.jl to solve the simple problem
 
@@ -38,7 +36,9 @@ import Ipopt
 
 We will need JuMP to build the model for each subproblem and we will use Ipopt to solve it.
 
-**Note:** There are some functions that both JuMP and ProgressiveHedging export. To avoid confusion (and warnings) it is best to import one or both of these packages.
+!!! Note
+
+There are some functions that both JuMP and ProgressiveHedging export. To avoid confusion (and warnings) it is best to import one or both of these packages.
 
 Next, we write a function that will generate the subproblems for each scenario. The following creates the subproblem for a simple two stage stochastic program.
 
@@ -149,4 +149,6 @@ end
 nothing # hide
 ```
 
-**NOTE:** The subscripts in the variable names are the scenarios to which the variable belongs.
+!!! Note
+
+The subscripts in the variable names are the scenarios to which the variable belongs.

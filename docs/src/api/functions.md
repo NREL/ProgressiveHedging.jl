@@ -1,4 +1,4 @@
-# Functions
+# Low-Level Functions
 
 ```@index
 Pages = ["functions.md"]

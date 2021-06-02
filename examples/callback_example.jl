@@ -1,10 +1,7 @@
-# Callback Example
 
-An example of creating and adding a callback to a ProgressiveHedging.jl run. This example is also available as the script callback_example.jl in the example directory.
+using Pkg
+Pkg.activate(@__DIR__)
 
-In this example, we will use the same setup as in the [Basic Example](@ref).
-
-```@example callback
 using ProgressiveHedging
 import JuMP
 import Ipopt
@@ -39,12 +36,7 @@ function two_stage_model(scenario_id::ScenarioID)
 end
 
 scen_tree = two_stage_tree(2)
-nothing # hide
-```
 
-We now write a function to get called as PH executes and wrap it in the [`Callback`](@ref) type.
-
-```@example callback
 function my_callback(ext::Dict{Symbol,Any},
                      phd::PHData,
                      winf::ProgressiveHedging.WorkerInf,
@@ -67,17 +59,7 @@ function my_callback(ext::Dict{Symbol,Any},
 end
 
 my_cb = Callback(my_callback)
-nothing # hide
-```
 
-Several things are worth noting here:
-* All callback functions must have the signature given here
-* The `ext` dictionary is unique to each callback and can be used to pass information from one iteration to the next
-* Returning false from the callback will terminate PH
-
-Now we call the [`solve`](@ref) function as before but giving it the callback object we created.
-
-```@example callback
 (niter, abs_res, rel_res, obj, soln_df, phd) = solve(scen_tree,
                                                      two_stage_model,
                                                      ScalarPenaltyParameter(1.0),
@@ -88,7 +70,3 @@ Now we call the [`solve`](@ref) function as before but giving it the callback ob
 @show rel_res
 @show obj
 @show soln_df
-nothing # hide
-```
-
-The callbacks can be used to implement solution heuristics and alternative termination criteria.  There are two callbacks are included with ProgressiveHedging.jl that do this.  [`variable_fixing`](@ref) is a heuristic that fixes variables whose values remain (approximately) the same over a set number of iterations. It is hoped that this speeds the convergence of PH. [`mean_deviation`](@ref) is an alternative termination criteria. It is a form of mean relative absolute deviation from the consensus variable value. These are both implmentations of ideas found in [(Watson & Woodruff 2010)](https://link.springer.com/article/10.1007/s10287-010-0125-4).

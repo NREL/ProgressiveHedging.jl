@@ -1,4 +1,4 @@
-# High Level Functions
+# High-Level Functions
 
 ```@index
 Pages = ["high-level.md"]
