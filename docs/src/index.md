@@ -11,7 +11,7 @@ ProgressiveHedging.jl is a [Julia](https://julialang.org/) implementation of the
 
 ``\min_X \sum_{s=1}^S p_s f_s(X)``
 
-To solve this problem, ProgressiveHedging.jl makes use of [JuMP](https://github.com/JuliaOpt/JuMP.jl). Specifically, the user constructs a wrapped JuMP model for a single subproblem as well as a scenario tree which describes the structure of the stochastic program. Through the use of Julia's [Distributed](https://docs.julialang.org/en/v1/stdlib/Distributed/) package, PH may be run in parallel either on a single multi-core platform or in a distributed fashion across multiple compute nodes.
+To solve this problem, ProgressiveHedging.jl makes use of [JuMP](https://github.com/JuliaOpt/JuMP.jl). Specifically, the user constructs a wrapped JuMP model for a single subproblem as well as a scenario tree which describes the structure of the stochastic program. For more details on the process see this [Basic Example](@ref). Through the use of Julia's [Distributed](https://docs.julialang.org/en/v1/stdlib/Distributed/) package, PH may be run in parallel either on a single multi-core platform or in a distributed fashion across multiple compute nodes. See the [Distributed Example](@ref) for more details.
 
 In addition to providing an easily accessible solver for stochastic programs, ProgressiveHedging.jl is designed to be extensible to enable research on the PH algorithm itself.  Abstract interfaces exist for the penalty parameter and subproblem types so that the user may implement their own penalty parameter selection method or use an Julia enabled algebraic modeling language.
 

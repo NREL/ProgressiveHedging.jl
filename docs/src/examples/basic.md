@@ -1,5 +1,8 @@
 # Basic Example
 
+
+## Problem
+
 A basic example using ProgressiveHedging.jl to solve a stochastic program. This example is also available as the script basic_example.jl in the example directory.
 
 Here we will use ProgressiveHedging.jl to solve the simple problem
@@ -26,6 +29,8 @@ c_s = \begin{cases} 0.5, & s=0 \\ 10, & s=1 \end{cases}
 
 and for now we will take equally probable scenarios, that is, ``p_0 = p_1 = 0.5``.
 
+## Setup
+
 First we need to bring in the needed packages
 
 ```@example basic
@@ -34,11 +39,13 @@ import JuMP
 import Ipopt
 ```
 
-We will need JuMP to build the model for each subproblem and we will use Ipopt to solve it.
+We will need JuMP to build the model for each subproblem and we will use Ipopt to solve each subproblem.
 
-!!! Note
+!!! note
 
-There are some functions that both JuMP and ProgressiveHedging export. To avoid confusion (and warnings) it is best to import one or both of these packages.
+    There are some functions that both JuMP and ProgressiveHedging export. To avoid confusion (and warnings) it is best to import one or both of these packages.
+
+## Subproblem Creation Function
 
 Next, we write a function that will generate the subproblems for each scenario. The following creates the subproblem for a simple two stage stochastic program.
 
@@ -80,20 +87,45 @@ There are a few things to note here:
 * The function returns a [`JuMPSubproblem`](@ref). This is an implementation of the [`AbstractSubproblem`](@ref) interface which uses JuMP as the algebraic modeling language.
 * In addition to the model, the subproblem also requires the [`ScenarioID`](@ref) and a dictionary identifying which variables belong in which stage.
 
+## Scenario Tree Construction
+
 Second we need to construct a [`ScenarioTree`](@ref) that captures the structure of our stochastic program. We can do this using the [`ScenarioTree`](@ref) constructor and the function [`add_leaf`](@ref):
 
 ```@example basic
 scen_tree = ScenarioTree()
-add_leaf(scen_tree, root(scen_tree), 0.5)
-add_leaf(scen_tree, root(scen_tree), 0.5)
+scenario_id_0 = add_leaf(scen_tree, root(scen_tree), 0.5)
+scenario_id_1 = add_leaf(scen_tree, root(scen_tree), 0.5)
 nothing # hide
 ```
 
-Here we created a scenario tree and added two leaf nodes each representing the two scenarios in our problem. We specified both occur with probability 0.5.
+Here we created a scenario tree and added two leaf nodes each representing the two scenarios in our problem. We specified both occur with probability 0.5. The other thing to note is that [`add_leaf`](@ref) returns a [`ScenarioID`](@ref). This is a type-safe integer that PH uses to uniquely indentify the each scenario and subproblem. Note that the numbering starts at 0.
 
-Since two-stage stochastic programs are extremely common, ProgressiveHedging.jl provides a convenience function to generate two-stage trees with arbitrarily many scenarios: [`two_stage_tree`](@ref).
+```@example basic
+@show scenario_id_0
+@show scenario_id_1
+nothing # hide
+```
 
-We are now ready to solve the problem. To do so we just use the [`solve`](@ref) function.
+The subproblem created by the subproblem creation function should correspond to the path in the scenario tree that leads to this leaf. In our case, we have a two-stage tree and it does not matter which scenario is identified as scenario 0 and scenario 1.
+
+Since two-stage stochastic programs are extremely common, ProgressiveHedging.jl provides a convenience function to generate two-stage trees with arbitrarily many scenarios: [`two_stage_tree`](@ref). So we could have used
+```@example
+using ProgressiveHedging # hide
+scen_tree = two_stage_tree(2)
+nothing # hide
+```
+
+## Solution
+
+We are now ready to solve the problem. To do so we just use the [`solve`](@ref) function and provide it with our scenario tree, the subproblem creation function and a penalty parameter.
+
+```@setup basic
+# Hack to avoid having the Ipopt inclusion message in the documentation...
+(niter, abs_res, rel_res, obj, soln_df, phd) = solve(scen_tree,
+                                                     two_stage_model,
+                                                     ScalarPenaltyParameter(1.0)
+                                                     )
+```
 
 ```@example basic
 (niter, abs_res, rel_res, obj, soln_df, phd) = solve(scen_tree,
@@ -126,6 +158,14 @@ raw_values_df = retrieve_no_hats(phd)
 nothing # hide
 ```
 
+## Determining the Consensus Variables
+
+!!! note "Determining the Consensus Variables"
+
+    You may notice that we never specifically indicated which variables needed nonanticipativity constraints. ProgressiveHedging determines this automatically for us using the scenario tree we constructed, the stage the variable is in and the name the variable is given. When using the [`JuMPSubproblem`](@ref), the name of the variable is determined by calling the function `JuMP.name` on each `JuMP.VariableRef` object. The stage is given by the dictionary given to the [`JuMPSubproblem`](@ref) constructor as seen in the subproblem creation function above. This is possible because the combination of a [`ScenarioID`](@ref) and a [`StageID`](@ref) uniquely determine a node on the scenario tree. Any variables with the same names that belong to this node are assumed to require nonanticipativity constraints and so are identified as consensus variables.
+
+## Extensive Solve
+
 For smaller problems, it is also possible to solve the extensive form of the problem directly. ProgressiveHedging.jl is capable of building the extensive form from the previously defined function and scenario tree.
 
 ```@example basic
@@ -149,6 +189,6 @@ end
 nothing # hide
 ```
 
-!!! Note
+!!! note
 
-The subscripts in the variable names are the scenarios to which the variable belongs.
+    The subscripts in the variable names are the scenarios to which the variable belongs.
