@@ -1,4 +1,7 @@
 
+using Pkg
+Pkg.status()
+
 using Documenter
 using ProgressiveHedging
 
