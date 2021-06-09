@@ -415,6 +415,7 @@ cb(f::Function, ext::Dict{Symbol,Any}) = Callback(f, ext)
 cb(f::Function, initialize::Function) = Callback(f, initialize)
 cb(f::Function, initialize::Function, ext::Dict{Symbol,Any}) = Callback(f, initialize, ext)
 cb(name::String, f::Function, ext::Dict{Symbol,Any}) = Callback(name, f, ext)
+cb(name::String, f::Function, initialize::Function, ext::Dict{Symbol,Any}) = Callback(name, f, initialize, ext)
 
 ## Consensus Variable Functions ##
 
@@ -693,12 +694,17 @@ function stage_id(phd::PHData, xid::XhatID)::StageID
 end
 
 """
-    print_timing(phd::PHData)
+    print_timing([io::IO], phd::PHData)
 
 Prints timining information from the Progressive Hedging solve.
 """
 function print_timing(phd::PHData)
-    println(phd)
+    print(phd.time_info)
+    return
+end
+
+function print_timing(io::IO, phd::PHData)
+    print(io, phd.time_info)
     return
 end
 

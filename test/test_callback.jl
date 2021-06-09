@@ -1,4 +1,69 @@
 
+macro cb_gen(name, num)
+    fn = Symbol(name * "_" * string(num))
+    quote
+        function $(esc(fn))(ext::Dict{Symbol,Any},
+                            phd::PH.PHData,
+                            winfo::PH.WorkerInf,
+                            niter::Int
+                            )::Bool
+            return true
+        end
+    end
+end
+
+function fake_init(ext::Dict{Symbol,Any}, phd::PHData)
+    ext[:fake] = rand() + 1.0
+    return
+end
+
+
+@testset "Callback Utilities" begin
+    
+    @cb_gen("cb", 1)
+    @cb_gen("cb", 2)
+    @cb_gen("cb", 3)
+    @cb_gen("cb", 4)
+    @cb_gen("cb", 5)
+    @cb_gen("cb", 6)
+    my_cbs = [cb(cb_1),
+              cb(cb_2, Dict{Symbol,Any}(:b=>"TESTING!")),
+              cb(cb_3, fake_init),
+              cb(cb_4, fake_init, Dict{Symbol,Any}(:d => "Still a test")),
+              cb("Fifth CB", cb_5, Dict{Symbol,Any}(:e => "More of a test")),
+              cb("Sixth CB", cb_6, fake_init, Dict{Symbol,Any}(:f => "This is only a test")),
+              ]
+
+    phd = fake_phdata(3,4)
+    for (k,cb) in enumerate(my_cbs)
+        PH.add_callback(phd, cb)
+        if k == 1
+            @test isempty(cb.ext)
+        elseif k == 2
+            @test cb.ext[:b] == "TESTING!"
+        elseif k == 3
+            @test cb.ext[:fake] > 1.0
+        elseif k == 4
+            @test cb.ext[:d] == "Still a test"
+            @test cb.ext[:fake] > 1.0
+        elseif k == 5
+            @test cb.name == "Fifth CB"
+            @test cb.ext[:e] == "More of a test"
+        else
+            @test cb.name == "Sixth CB"
+            @test cb.ext[:f] == "This is only a test"
+            @test cb.ext[:fake] > 1.0
+        end
+    end
+
+    for cb in my_cbs
+        @test cb === get_callback(phd, cb.name)
+        @test cb.ext === get_callback_ext(phd, cb.name)
+    end
+
+    @test_throws ErrorException get_callback(phd, "'Tis but a flesh wound")
+end
+
 @testset "Callback Termination" begin
     function my_term_cb(ext::Dict{Symbol,Any},
                         phd::PH.PHData,
@@ -8,6 +73,11 @@
         return niter < 5
     end
 
+    the_cb = cb(my_term_cb)
+    io = IOBuffer()
+    Base.show(io, the_cb)
+    @test String(take!(io)) == "my_term_cb"
+
     (n, err, rerr, obj, soln, phd) = PH.solve(PH.two_stage_tree(2),
                                               two_stage_model,
                                               PH.ScalarPenaltyParameter(2.0),
@@ -16,7 +86,7 @@
                                               max_iter=500,
                                               timing=false,
                                               warm_start=false,
-                                              callbacks=[PH.Callback(my_term_cb)]
+                                              callbacks=[the_cb]
                                               )
 
     @test err > 1e-8

@@ -34,6 +34,18 @@ end
     @test xhid2 < xhid3
 end
 
+@testset "Consensus variable functions" begin
+    tv = PH.HatVariable(true)
+    @test PH.is_integer(tv)
+    vid = PH.VariableID(PH.scid(3), PH.stid(2), PH.index(392))
+    PH.add_variable(tv, vid)
+    @test PH.variables(tv) == Set([vid])
+    rv = rand()
+    PH.set_value(tv, rv)
+    @test tv.value == rv
+    @test PH.value(tv) == rv
+end
+
 @testset "Convenience functions" begin
     st = two_stage_tree(3)
     @test length(st.tree_map) == 4
@@ -73,6 +85,17 @@ nscen = length(PH.scenarios(phd))
     @test PH.value(phd, scid, stid, index) == val
     @test PH.leaf_value(phd, vid) == val
     @test PH.leaf_value(phd, scid, stid, index) == val
+
+    @test_throws ErrorException PH.name(phd, PH.VariableID(PH.scid(8303), stid, index))
+
+    @test scenario_tree(phd) === phd.scenario_tree
+
+    # TODO: capture output of below and compare it to the string from the IOBuffer
+    print_timing(phd)
+    io = IOBuffer()
+    print_timing(io, phd)
+    @test length(String(take!(io))) > 0
+
 end
 
 @testset "Conversion utilities" begin
@@ -115,4 +138,9 @@ end
     @test PH.xhat_value(phd, xhid) == rval
     @test PH.xhat_value(phd, vid) == rval
     @test PH.xhat_value(phd, scid, stid, index) == rval
+
+    @test PH.is_leaf(phd, xhid) == false
+    vid = PH.VariableID(PH.scid(0), PH.stid(2), PH.index(0))
+    xhid = PH.convert_to_xhat_id(phd, vid)
+    @test PH.is_leaf(phd, xhid) == true
 end
