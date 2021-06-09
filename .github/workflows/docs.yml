@@ -21,4 +21,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
-        run: julia --projects=examples/ --color=yes docs/make.jl
+        run: julia --project=examples/ --color=yes docs/make.jl
