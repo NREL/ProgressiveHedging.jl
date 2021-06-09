@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Distributed Example · ProgressiveHedging.jl</title><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit">ProgressiveHedging.jl</span></div><form class="docs-search" action="../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../">Overview</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../basic/">Basic Example</a></li><li><a class="tocitem" href="../callback/">Callback Example</a></li><li class="is-active"><a class="tocitem" href>Distributed Example</a></li><li><a class="tocitem" href="../multi-stage/">Multi-Stage Example</a></li></ul></li><li><span class="tocitem">Reference</span><ul><li><a class="tocitem" href="../../api/functions/">Low-Level Functions</a></li><li><a class="tocitem" href="../../api/high-level/">High-Level Functions</a></li><li><a class="tocitem" href="../../api/interfaces/">Interfaces</a></li><li><a class="tocitem" href="../../api/types/">Types</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Distributed Example</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Distributed Example</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/NREL/ProgressiveHedging.jl/blob/master/docs/src/examples/distributed.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Distributed-Example"><a class="docs-heading-anchor" href="#Distributed-Example">Distributed Example</a><a id="Distributed-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Distributed-Example" title="Permalink"></a></h1><p>An example of how to enable distributed computation within ProgressiveHedging.jl. This example is also available as the script distributed_example.jl in the example directory.</p><p>Our first step here is to setup the worker processes. To do this we will use the Julia native <a href="https://docs.julialang.org/en/v1/stdlib/Distributed/">Distributed</a> package.</p><pre><code class="language-julia">using Distributed
+addprocs(2) # add 2 workers</code></pre><p>Now we need to setup the environment as before but the worker processes need to load the packages too. However, the worker processes are in the default julia environment when launched. If the necessary packages are not installed in this environment, or you want to use a different environment, you&#39;ll nee to explicitly activate it for the workers. Here we will activate the examples environment. Activating the proper environment on each worker can be done first by loading <code>Pkg</code> on every worker using the <code>@everywhere</code> macro and then using <code>Pkg.activate</code> to actually activate the environment.</p><pre><code class="language-julia">@everywhere using Pkg
+@everywhere Pkg.activate(joinpath(@__DIR__, &quot;..&quot;, &quot;examples&quot;))</code></pre><p>Finally, we again use the Distributed package&#39;s <code>@everywhere</code> macro to load the needed packages.</p><pre><code class="language-julia">@everywhere using ProgressiveHedging
+@everywhere import JuMP
+@everywhere import Ipopt</code></pre><p>Just as in every other case we define the function that is used to create a subproblem. In this case, however, we need to make sure that the worker processes are aware of the function. We once more do this with the <code>@everywhere</code> macro.</p><pre><code class="language-julia">@everywhere function two_stage_model(scenario_id::ScenarioID)
+
+    model = JuMP.Model(()-&gt;Ipopt.Optimizer())
+    JuMP.set_optimizer_attribute(model, &quot;print_level&quot;, 0)
+    JuMP.set_optimizer_attribute(model, &quot;tol&quot;, 1e-12)
+    JuMP.set_optimizer_attribute(model, &quot;acceptable_tol&quot;, 1e-12)
+
+    scen = value(scenario_id)
+
+    ref = JuMP.@variable(model, x &gt;= 0.0)
+    stage1 = [ref]
+
+    ref = JuMP.@variable(model, y &gt;= 0.0)
+    stage2 = [ref]
+
+    b_s = scen == 0 ? 11.0 : 4.0
+	c_s = scen == 0 ? 0.5 : 10.0
+
+    JuMP.@constraint(model, x + y == b_s)
+
+    JuMP.@objective(model, Min, 1.0*x + c_s*y)
+
+    return JuMPSubproblem(model,
+                          scenario_id,
+                          Dict(stid(1) =&gt; stage1,
+                               stid(2) =&gt; stage2)
+                          )
+end</code></pre><p>Now we proceed just as before. Create the scenario tree and call the solve function. This is all done locally. The rest of the computation distribution will be handled by PH.</p><pre><code class="language-julia">scen_tree = two_stage_tree(2)
+
+(niter, abs_res, rel_res, obj, soln_df, phd) = solve(scen_tree,
+                                                     two_stage_model,
+                                                     ScalarPenaltyParameter(1.0)
+                                                     )
+@show niter
+@show abs_res
+@show rel_res
+@show obj
+@show soln_df</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../callback/">« Callback Example</a><a class="docs-footer-nextpage" href="../multi-stage/">Multi-Stage Example »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Wednesday 9 June 2021 19:16">Wednesday 9 June 2021</span>. Using Julia version 1.6.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
