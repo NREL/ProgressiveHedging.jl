@@ -35,7 +35,11 @@ abstract type AbstractPenaltyParameter end
 """
 Variable dependent penalty parameter given by `k * c_i` where `c_i` is the linear coefficient of variable `i` in the objective function.  If `c_i == 0` (that is, the variable has no linear coefficient in the objective function), then the penalty value is taken to be `k`.
 
-Requires subproblem type to have implemented `report_penalty_info` for this type. This implementation should return the linear coefficient in the objective function for each variable.
+!!! warning
+
+    The coefficients in the objective function **must** match across scenarios. An error will result if they do not.
+
+Requires subproblem type to have implemented [`report_penalty_info`](@ref) for this type. This implementation should return the linear coefficient in the objective function for each variable.
 """
 struct ProportionalPenaltyParameter <: AbstractPenaltyParameter
     constant::Float64
@@ -52,7 +56,11 @@ end
 """
 Penalty parameter set with Watson-Woodruff SEP method. See (Watson and Woodruff 2011) for more details.
 
-Requires subproblem type to have implemented `report_penalty_info` for this type. This implementation should return the linear coefficient in the objective function for each variable.
+!!! warning
+
+    The coefficients in the objective function **must** match across scenarios. An error will result if they do not.
+
+Requires subproblem type to have implemented [`report_penalty_info`](@ref) for this type. This implementation should return the linear coefficient in the objective function for each variable.
 """
 struct SEPPenaltyParameter <: AbstractPenaltyParameter
     default::Float64

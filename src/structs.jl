@@ -641,7 +641,7 @@ end
 """
     name(phd::PHData, xid::XhatID)::String
 
-Returns the name of the consensus variable for the given `XhatID`. The name is the same given to the individual scenario variables.
+Returns the name of the consensus variable for the given [`XhatID`](@ref). The name is the same given to the individual scenario variables.
 """
 function name(phd::PHData, xid::XhatID)::String
     return name(phd, first(convert_to_variable_ids(phd, xid)))
@@ -686,7 +686,7 @@ end
 """
     stage_id(phd::PHData, xid::XhatID)::StageID
 
-Returns the `StageID` in which the given consensus variable is.
+Returns the [`StageID`](@ref) in which the given consensus variable is.
 """
 function stage_id(phd::PHData, xid::XhatID)::StageID
     return phd.scenario_tree.tree_map[xid.node].stage

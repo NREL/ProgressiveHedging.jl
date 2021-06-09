@@ -114,7 +114,7 @@ function process_penalty_subproblem(r::ProportionalPenaltyParameter,
 
         if haskey(r.penalties, xhid)
             if !isapprox(r.penalties[xhid], r_value)
-                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(r_value).")
+                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty) for variable $(name(phd, xhid)). This error likely means the coefficients in the objective function do not match in the scenario subproblems.")
             end
         else
             r.penalties[xhid] = r_value
@@ -246,7 +246,7 @@ function process_penalty_subproblem(r::SEPPenaltyParameter,
 
         if haskey(r.penalties, xhid)
             if !isapprox(r.penalties[xhid], penalty)
-                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty).")
+                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty) for variable $(name(phd, xhid)). This error likely means the coefficients in the objective function do not match in the scenario subproblems.")
             end
         else
             r.penalties[xhid] = penalty
