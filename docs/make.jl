@@ -19,4 +19,4 @@ makedocs(modules=[ProgressiveHedging],
                 ]
          )
 
-deploydocs(repo = "github.com/jmaack/ProgressiveHedging.jl.git")
+deploydocs(repo = "github.com/NREL/ProgressiveHedging.jl.git")
