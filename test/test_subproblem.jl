@@ -19,7 +19,7 @@
         IF(PH.objective_value),
         IF(PH.report_values, Vector{PH.VariableID}()),
         IF(PH.report_variable_info, build_scen_tree()),
-        IF(PH.solve),
+        IF(PH.solve_subproblem),
         IF(PH.update_ph_terms, Dict{PH.VariableID,Float64}(), Dict{PH.VariableID,Float64}()),
         IF(PH.warm_start),
         IF(PH.report_penalty_info, PH.ProportionalPenaltyParameter),
@@ -77,7 +77,7 @@ end
 
     (br_vids, lf_vids) = PH._split_variables(st, collect(keys(vid_name_map)))
 
-    sts = PH.solve(js)
+    sts = PH.solve_subproblem(js)
     @test sts == MOI.LOCALLY_SOLVED
     @test sts == JuMP.termination_status(js.model)
     @test PH.objective_value(js) == JuMP.objective_value(js.model)
@@ -115,7 +115,7 @@ end
     PH.update_ph_terms(js, w_vals, xhat_vals)
 
     PH.warm_start(js)
-    sts = PH.solve(js)
+    sts = PH.solve_subproblem(js)
     @test sts == MOI.LOCALLY_SOLVED
     @test org_obj_val != PH.objective_value(js)
 
@@ -261,7 +261,7 @@ end
     end
 
     PH.fix_variables(js, is_fixed)
-    sts = PH.solve(js)
+    sts = PH.solve_subproblem(js)
     @test sts == MOI.LOCALLY_SOLVED
 
     for (vid,var) in pairs(js.vars)
@@ -305,7 +305,7 @@ end
     end
     PH.update_lagrange_terms(js, w_vals)
 
-    sts = PH.solve(js)
+    sts = PH.solve_subproblem(js)
     @test sts == MOI.LOCALLY_SOLVED
 
     for (wid, wref) in pairs(js.w_vars)

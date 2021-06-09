@@ -53,6 +53,7 @@ end
 Performs any computations for the penalty parameter based on the initial solutions of the subproblems.
 
 **Arguments**
+
 *`r::AbstractPenaltyParameter` : penalty parameter struct (replace with appropriate type)
 *`phd::PHData` : PH data structure used for obtaining any required variable values. See help on `PHData` for details on available functions.
 """
@@ -113,7 +114,7 @@ function process_penalty_subproblem(r::ProportionalPenaltyParameter,
 
         if haskey(r.penalties, xhid)
             if !isapprox(r.penalties[xhid], r_value)
-                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(r_value).")
+                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty) for variable $(name(phd, xhid)). This error likely means the coefficients in the objective function do not match in the scenario subproblems.")
             end
         else
             r.penalties[xhid] = r_value
@@ -245,7 +246,7 @@ function process_penalty_subproblem(r::SEPPenaltyParameter,
 
         if haskey(r.penalties, xhid)
             if !isapprox(r.penalties[xhid], penalty)
-                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty).")
+                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty) for variable $(name(phd, xhid)). This error likely means the coefficients in the objective function do not match in the scenario subproblems.")
             end
         else
             r.penalties[xhid] = penalty

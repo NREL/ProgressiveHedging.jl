@@ -211,7 +211,6 @@ Type representing a consensus variable.
 
 The following functions are available to the user to interact with consensus variables
 * [`is_integer`](@ref)
-* [`set_value`](@ref)
 * [`value`](@ref)
 * [`variables`](@ref)
 """
@@ -221,12 +220,19 @@ mutable struct HatVariable
     is_integer::Bool # Flag indicating that this variable is an integer (includes binary)
 end
 
+HatVariable(is_int::Bool)::HatVariable = HatVariable(0.0, Set{VariableID}(),is_int)
+
+function HatVariable(val::Float64,vid::VariableID, is_int::Bool)
+    return HatVariable(val, Set{VariableID}([vid]), is_int)
+end
+
+
 ## Primary PH Data Structure ##
 
 """
 Data structure used to store information and results for a stochastic programming problem.
 
-See the following functions may be used to interact with this object:
+See the following functions make use of this object:
 * [`apply_to_subproblem`](@ref)
 * [`branch_value`](@ref)
 * [`consensus_variables`](@ref)
@@ -360,21 +366,6 @@ function Callback(f::Function)
 end
 
 """
-    cb(f::Function)
-    cb(f::Function, ext::Dict{Symbol,Any})
-    cb(f::Function, initialize::Function)
-    cb(f::Function, initialize::Function, ext::Dict{Symbol,Any})
-    cb(name::String, f::Function, ext::Dict{Symbol,Any})
-
-Shorthand for [`Callback`](@ref) functions with the same signature.
-"""
-cb(f::Function) = Callback(f)
-cb(f::Function, ext::Dict{Symbol,Any}) = Callback(f, ext)
-cb(f::Function, initialize::Function) = Callback(f, initialize)
-cb(f::Function, initialize::Function, ext::Dict{Symbol,Any}) = Callback(f, initialize, ext)
-cb(name::String, f::Function, ext::Dict{Symbol,Any}) = Callback(name, f, ext)
-
-"""
     Callback(f::Function, ext::Dict{Symbol,Any})
 
 Creates a `Callback` structure for function `f` with the external data dictionary `ext`.
@@ -410,31 +401,61 @@ function Callback(f::Function, initialize::Function, ext::Dict{Symbol,Any})
     return Callback(string(f), f, initialize, ext)
 end
 
-## Consensus Variable Functions ##
+"""
+    cb(f::Function)
+    cb(f::Function, ext::Dict{Symbol,Any})
+    cb(f::Function, initialize::Function)
+    cb(f::Function, initialize::Function, ext::Dict{Symbol,Any})
+    cb(name::String, f::Function, ext::Dict{Symbol,Any})
 
-HatVariable(is_int::Bool)::HatVariable = HatVariable(0.0, Set{VariableID}(),is_int)
-function HatVariable(val::Float64,vid::VariableID, is_int::Bool)
-    return HatVariable(val, Set{VariableID}([vid]), is_int)
-end
+Shorthand for [`Callback`](@ref) functions with the same signature.
+"""
+cb(f::Function) = Callback(f)
+cb(f::Function, ext::Dict{Symbol,Any}) = Callback(f, ext)
+cb(f::Function, initialize::Function) = Callback(f, initialize)
+cb(f::Function, initialize::Function, ext::Dict{Symbol,Any}) = Callback(f, initialize, ext)
+cb(name::String, f::Function, ext::Dict{Symbol,Any}) = Callback(name, f, ext)
+
+## Consensus Variable Functions ##
 
 function add_variable(a::HatVariable, vid::VariableID)
     push!(a.vars, vid)
     return
 end
 
+"""
+    is_integer(a::HatVariable)::Bool
+
+Returns true if the consensus variable is an integer variable. The consensus variable is an integer if the contributing subproblem variables are all integer variables.
+"""
 function is_integer(a::HatVariable)::Bool
     return a.is_integer
 end
 
+"""
+    set_value(a::HatVariable, v::Float64)
+
+Sets the current value of `a` to `v`.
+"""
 function set_value(a::HatVariable, v::Float64)::Nothing
     a.value = v
     return
 end
 
+"""
+   value(a::HatVariable)::Float64
+
+Returns the current value of `a`.
+"""
 function value(a::HatVariable)::Float64
     return a.value
 end
 
+"""
+    variables(a::HatVariable)::Set{VariableID}
+
+Returns the variable ids for all subproblem variables contributing to this variable.
+"""
 function variables(a::HatVariable)::Set{VariableID}
     return a.vars
 end
@@ -470,7 +491,6 @@ end
 
 Applies the function `to_apply` to the subproblem with scenario id `scid`.
 """
-
 function apply_to_subproblem(to_apply::Function,
                              phd::PHData,
                              winf::WorkerInf,
@@ -621,7 +641,7 @@ end
 """
     name(phd::PHData, xid::XhatID)::String
 
-Returns the name of the consensus variable for the given `XhatID`. The name is the same given to the individual scenario variables.
+Returns the name of the consensus variable for the given [`XhatID`](@ref). The name is the same given to the individual scenario variables.
 """
 function name(phd::PHData, xid::XhatID)::String
     return name(phd, first(convert_to_variable_ids(phd, xid)))
@@ -646,6 +666,15 @@ function scenario_bundle(phd::PHData, xid::XhatID)::Set{ScenarioID}
 end
 
 """
+    scenario_tree(phd::PHData)::ScenarioTree
+
+Returns the scenario tree for created stochastic programming problem.
+"""
+function scenario_tree(phd::PHData)::ScenarioTree
+    return phd.scenario_tree
+end
+
+"""
     scenarios(phd::PHData)::Set{ScenarioID}
 
 Returns the set of all scenarios for the stochastic problem.
@@ -657,10 +686,20 @@ end
 """
     stage_id(phd::PHData, xid::XhatID)::StageID
 
-Returns the `StageID` in which the given consensus variable is.
+Returns the [`StageID`](@ref) in which the given consensus variable is.
 """
 function stage_id(phd::PHData, xid::XhatID)::StageID
     return phd.scenario_tree.tree_map[xid.node].stage
+end
+
+"""
+    print_timing(phd::PHData)
+
+Prints timining information from the Progressive Hedging solve.
+"""
+function print_timing(phd::PHData)
+    println(phd)
+    return
 end
 
 """
@@ -675,7 +714,7 @@ function value(phd::PHData, vid::VariableID)::Float64
 end
 
 """
-   value(phd::PHData, vid::VariableID)
+   value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
 
 Returns the value of the variable associated with scenario `scen`, stage `stage` and index `idx`.
 
@@ -696,7 +735,7 @@ function w_value(phd::PHData, vid::VariableID)::Float64
 end
 
 """
-   value(phd::PHData, vid::VariableID)
+    w_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Float64
 
 Returns the value of the variable associated with scenario `scen`, stage `stage` and index `idx`. Only available for branch variables.
 """
@@ -705,7 +744,7 @@ function w_value(phd::PHData, scen::ScenarioID, stage::StageID, idx::Index)::Flo
 end
 
 """
-   xhat_value(phd::PHData, xhid::VariableID)
+   xhat_value(phd::PHData, xhid::VariableID)::Float64
 
 Returns the value of the consensus variable associated with `xhid`. Only available for leaf variables after calling `solve`.  Available for branch variables at any time.
 """
@@ -714,7 +753,7 @@ function xhat_value(phd::PHData, xhat_id::XhatID)::Float64
 end
 
 """
-   xhat_value(phd::PHData, vid::VariableID)
+   xhat_value(phd::PHData, vid::VariableID)::Float64
 
 Returns the value of the consensus variable associated with `vid`. Only available for leaf variables after calling `solve`.  Available for branch variables at any time.
 """

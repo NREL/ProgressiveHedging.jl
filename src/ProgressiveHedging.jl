@@ -20,33 +20,60 @@ export cb, mean_deviation, variable_fixing
 export apply_to_subproblem
 export SubproblemCallback, spcb
 
+# Exceptions
+export UnimplementedError
+
 # ID types and functions
 export Index, NodeID, ScenarioID, StageID, VariableID, XhatID
 export index, scenario, stage, value
+export scid, stid, index
+export convert_to_variable_ids, convert_to_xhat_id, stage_id
 
-# Penalty Parameter types and functions
+# Penalty Parameter Interface
 export AbstractPenaltyParameter
+export get_penalty_value
+export is_initial_value_dependent, is_subproblem_dependent, is_variable_dependent
+export penalty_map
+export process_penalty_initial_value
+export process_penalty_subproblem
+
+# Penalty Parameter (Concrete)
 export ProportionalPenaltyParameter, ScalarPenaltyParameter, SEPPenaltyParameter
 
 # PHData interaction function
-export consensus_variables, probability, scenarios
-
-# (Consensus) Variable interaction functions
-export convert_to_variable_ids, convert_to_xhat_id
-export is_leaf, name, value, branch_value, leaf_value, w_value, xhat_value
+export PHData
+export consensus_variables, probability, scenario_tree, scenarios
+export get_callback, get_callback_ext
 
 # Result retrieval functions
 export lower_bounds
+export print_timing
 export residuals
-export retrieve_soln, retrieve_obj_value, retrieve_no_hats, retrieve_w
+export retrieve_aug_obj_value, retrieve_obj_value
+export retrieve_soln, retrieve_no_hats, retrieve_w
 export retrieve_xhat_history, retrieve_no_hat_history, retrieve_w_history
 
 # Scenario tree types and functions
-export ScenarioTree
+export ScenarioNode, ScenarioTree
 export add_node, add_leaf, root, two_stage_tree
 
-# Subproblems types and functions
-export AbstractSubproblem, JuMPSubproblem
+# Subproblem Interface
+export AbstractSubproblem, VariableInfo
+export add_ph_objective_terms, objective_value, report_values, report_variable_info
+export solve_subproblem, update_ph_terms
+export warm_start
+export ef_copy_model
+export ef_node_dict_constructor
+export report_penalty_info
+export add_lagrange_terms, update_lagrange_terms
+
+# Subproblems Types (Concrete)
+export JuMPSubproblem
+
+# (Consensus) Variable interaction functions
+export HatVariable
+export is_leaf, name, value, branch_value, leaf_value, w_value, xhat_value
+export is_integer, scenario_bundle, value, variables
 
 #### Includes ####
 
@@ -133,7 +160,7 @@ function solve(tree::ScenarioTree,
                report::Int=0,
                save_iterates::Int=0,
                save_residuals::Int=0,
-               timing::Bool=true,
+               timing::Bool=false,
                warm_start::Bool=false,
                callbacks::Vector{Callback}=Vector{Callback}(),
                subproblem_callbacks::Vector{SubproblemCallback}=Vector{SubproblemCallback}(),
