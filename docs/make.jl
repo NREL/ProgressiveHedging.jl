@@ -1,7 +1,4 @@
 
-using Pkg
-Pkg.activate(joinpath(@__DIR__, "..", "examples"))
-
 using Documenter
 using ProgressiveHedging
 
@@ -18,3 +15,5 @@ makedocs(modules=[ProgressiveHedging],
                                    ),
                 ]
          )
+
+deploydocs(repo = "github.com/jmaack/ProgressiveHedging.jl.git")
