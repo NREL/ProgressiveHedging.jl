@@ -107,8 +107,6 @@ function process_penalty_subproblem(r::ProportionalPenaltyParameter,
                                     penalties::Dict{VariableID,Float64}
                                     )::Nothing
 
-    @error r.penalties
-    @error "HELLO"
     for (vid, penalty) in pairs(penalties)
 
         xhid = convert_to_xhat_id(phd, vid)
