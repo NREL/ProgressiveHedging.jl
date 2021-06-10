@@ -233,7 +233,7 @@ function solve(tree::ScenarioTree,
     obj = retrieve_obj_value(phd)
 
     if timing
-        println(timo)
+        print_timing(phd)
     end
 
     return (niter, abs_res, rel_res, obj, soln_df, phd)

@@ -64,7 +64,7 @@ end
 function _report_lower_bound(niter::Int, bound::Float64, gap::Float64)::Nothing
 
     @printf("Iter: %4d   Bound: %12.4e   Abs Gap: %12.4e   Rel Gap: %8.4g\n",
-            niter, bound, gap, gap/bound
+            niter, bound, gap, abs(gap/bound)
             )
     flush(stdout)
 
@@ -362,7 +362,7 @@ function update_gap(phd::PHData, winf::WorkerInf, niter::Int)::NTuple{2,Float64}
 
     _save_lower_bound(phd.history,
                       niter,
-                      PHLowerBound(lb, gap, gap/lb)
+                      PHLowerBound(lb, gap, abs(gap/lb))
                       )
 
     return (lb, gap)

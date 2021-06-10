@@ -17,7 +17,7 @@ If `is_initial_value_dependent` returns `true`, then the concrete subtype must i
 
 If `is_subproblem_dependent` returns `true`, then the concrete subtype must implement
 * `process_penalty_subproblem(r::<ConcreteSubtype>, ph_data::PHData, scenario::ScenarioID, penalties::Dict{VariableID,Float64})::Nothing`
-Additionally, the concrete subproblem type must implement the function
+Additionally, the concrete **subproblem type** must implement the function
 * `report_penalty_info(as::AbstractSubproblem, pp<:AbstractPenaltyParameter)::Dict{VariableID,Float64}`
 
 If `is_variable_dependent` returns `true`, then the concrete subtype must implement

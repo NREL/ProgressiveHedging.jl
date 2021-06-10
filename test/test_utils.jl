@@ -90,12 +90,12 @@ nscen = length(PH.scenarios(phd))
 
     @test scenario_tree(phd) === phd.scenario_tree
 
-    # TODO: capture output of below and compare it to the string from the IOBuffer
-    print_timing(phd)
+    time_str_1 = @capture_out(print_timing(phd))
+    @test length(time_str_1) > 0
     io = IOBuffer()
     print_timing(io, phd)
-    @test length(String(take!(io))) > 0
-
+    time_str_2 = String(take!(io))
+    @test length(time_str_2) > 0
 end
 
 @testset "Conversion utilities" begin

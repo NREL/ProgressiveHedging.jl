@@ -699,12 +699,12 @@ end
 Prints timining information from the Progressive Hedging solve.
 """
 function print_timing(phd::PHData)
-    print(phd.time_info)
+    println(phd.time_info)
     return
 end
 
 function print_timing(io::IO, phd::PHData)
-    print(io, phd.time_info)
+    println(io, phd.time_info)
     return
 end
 
