@@ -1,4 +1,75 @@
 
+macro cb_gen(name, num)
+    fn = Symbol(name * "_" * string(num))
+    quote
+        function $(esc(fn))(ext::Dict{Symbol,Any},
+                            phd::PH.PHData,
+                            winfo::PH.WorkerInf,
+                            niter::Int
+                            )::Bool
+            return true
+        end
+    end
+end
+
+function fake_init(ext::Dict{Symbol,Any}, phd::PHData)
+    ext[:fake] = rand() + 1.0
+    return
+end
+
+
+@testset "Callback Utilities" begin
+    
+    @cb_gen("cb", 1)
+    @cb_gen("cb", 2)
+    @cb_gen("cb", 3)
+    @cb_gen("cb", 4)
+    @cb_gen("cb", 5)
+    @cb_gen("cb", 6)
+    my_cbs = [cb(cb_1),
+              cb(cb_2, Dict{Symbol,Any}(:b=>"TESTING!")),
+              cb(cb_3, fake_init),
+              cb(cb_4, fake_init, Dict{Symbol,Any}(:d => "Still a test")),
+              cb("Fifth CB", cb_5, Dict{Symbol,Any}(:e => "More of a test")),
+              cb("Sixth CB", cb_6, fake_init, Dict{Symbol,Any}(:f => "This is only a test")),
+              ]
+
+    phd = fake_phdata(3,4)
+    for (k,cb) in enumerate(my_cbs)
+        PH.add_callback(phd, cb)
+        if k == 1
+            @test isempty(cb.ext)
+            @test cb.h === cb_1
+        elseif k == 2
+            @test cb.ext[:b] == "TESTING!"
+            @test cb.h === cb_2
+        elseif k == 3
+            @test cb.ext[:fake] > 1.0
+            @test cb.h === cb_3
+        elseif k == 4
+            @test cb.ext[:d] == "Still a test"
+            @test cb.ext[:fake] > 1.0
+            @test cb.h === cb_4
+        elseif k == 5
+            @test cb.name == "Fifth CB"
+            @test cb.ext[:e] == "More of a test"
+            @test cb.h === cb_5
+        else
+            @test cb.name == "Sixth CB"
+            @test cb.ext[:f] == "This is only a test"
+            @test cb.ext[:fake] > 1.0
+            @test cb.h === cb_6
+        end
+    end
+
+    for cb in my_cbs
+        @test cb === get_callback(phd, cb.name)
+        @test cb.ext === get_callback_ext(phd, cb.name)
+    end
+
+    @test_throws ErrorException get_callback(phd, "'Tis but a flesh wound")
+end
+
 @testset "Callback Termination" begin
     function my_term_cb(ext::Dict{Symbol,Any},
                         phd::PH.PHData,
@@ -8,6 +79,11 @@
         return niter < 5
     end
 
+    the_cb = cb(my_term_cb)
+    io = IOBuffer()
+    Base.show(io, the_cb)
+    @test String(take!(io)) == "my_term_cb"
+
     (n, err, rerr, obj, soln, phd) = PH.solve(PH.two_stage_tree(2),
                                               two_stage_model,
                                               PH.ScalarPenaltyParameter(2.0),
@@ -16,7 +92,7 @@
                                               max_iter=500,
                                               timing=false,
                                               warm_start=false,
-                                              callbacks=[PH.Callback(my_term_cb)]
+                                              callbacks=[the_cb]
                                               )
 
     @test err > 1e-8
@@ -223,9 +299,52 @@ end
 
 end
 
-@testset "Subproblem Callback" begin
+macro spcb_gen(name, num)
+    fn = Symbol(name * "_" * string(num))
+    quote
+        function $(esc(fn))(ext::Dict{Symbol,Any},
+                            sp::T,
+                            niter::Int,
+                            scid::PH.ScenarioID
+                            )::Bool where T <: AbstractSubproblem
+            return
+        end
+    end
+end
 
-    # TODO: Improve this test
+@testset "Subproblem Callback Utilities" begin
+    @spcb_gen("spcb", 1)
+    @spcb_gen("spcb", 2)
+    @spcb_gen("spcb", 3)
+    my_spcbs = [spcb(spcb_1),
+                spcb(spcb_2, Dict{Symbol,Any}(:b=>"TESTING!")),
+                spcb("Third CB", spcb_3, Dict{Symbol,Any}(:c => "This is a test.",
+                                                          :d => "This is only a test.")
+                     ),
+              ]
+
+    for (k,spcb) in enumerate(my_spcbs)
+        io = IOBuffer()
+        Base.show(io, spcb)
+        @test String(take!(io)) == spcb.name
+        if k == 1
+            @test isempty(spcb.ext)
+            @test spcb.h === spcb_1
+        elseif k == 2
+            @test length(spcb.ext) == 1
+            @test spcb.ext[:b] == "TESTING!"
+            @test spcb.h === spcb_2
+        else
+            @test length(spcb.ext) == 2
+            @test spcb.ext[:c] == "This is a test."
+            @test spcb.ext[:d] == "This is only a test."
+            @test spcb.name == "Third CB"
+            @test spcb.h === spcb_3
+        end
+    end
+end
+
+@testset "Subproblem Callback" begin
 
     function my_subproblem_callback(ext::Dict{Symbol,Any},
                                     sp::JuMPSubproblem,
@@ -233,13 +352,23 @@ end
                                     scenario_id::ScenarioID
                                     )
 
-        if niter == 1 && scenario_id.value == 0
+        if niter == 1 && PH.value(scenario_id) == 0
             ext[:check] += 1
-            sp.model.ext[:check] = 1
+            sp.model.ext[:check] = 5
         end
 
-        if niter == 2 && scenario_id.value == 0
+        if niter == 2 && PH.value(scenario_id) == 0
             ext[:sp_check] = sp.model.ext[:check]
+        end
+
+        if niter == 3
+            for vref in values(sp.vars)
+                if JuMP.name(vref) == "u"
+                    JuMP.@constraint(sp.model, vref == 1.0)
+                elseif JuMP.name(vref) == "x"
+                    JuMP.@constraint(sp.model, vref == 3.0)
+                end
+            end
         end
 
         return
@@ -247,19 +376,19 @@ end
 
     ext = Dict{Symbol,Any}(:check => 0)
     my_spcb = SubproblemCallback(my_subproblem_callback, ext)
-    n, err, rerr, obj, soln, phd = PH.solve(build_scen_tree(),
-                                            create_model,
-                                            PH.ScalarPenaltyParameter(25.0),
-                                            opt=Ipopt.Optimizer,
-                                            opt_args=(print_level=0,tol=1e-12),
-                                            atol=5e-1,
-                                            rtol=1e-8,
-                                            max_iter=10,
-                                            report=0,
-                                            timing=false,
-                                            warm_start=false,
-                                            subproblem_callbacks=[my_spcb]
-                                            )
+    (n, err, rerr, obj, soln, phd) = PH.solve(PH.two_stage_tree(2),
+                                              two_stage_model,
+                                              PH.ScalarPenaltyParameter(1.0),
+                                              atol=1e-8,
+                                              rtol=1e-8,
+                                              max_iter=10,
+                                              report=0,
+                                              timing=false,
+                                              warm_start=false,
+                                              subproblem_callbacks=[my_spcb]
+                                              )
     @test ext[:check] == 1
-    @test ext[:sp_check] == 1
+    @test ext[:sp_check] == 5
+    @test n == 4
+    @test err < 1e-8
 end

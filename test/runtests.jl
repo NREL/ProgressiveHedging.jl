@@ -1,4 +1,3 @@
-using Pkg
 
 using ProgressiveHedging
 const PH = ProgressiveHedging
@@ -12,6 +11,7 @@ using JuMP
 using MathOptInterface
 const MOI = MathOptInterface
 
+using Suppressor
 using TimerOutputs
 
 macro optional_using(pkg)
@@ -60,5 +60,8 @@ include("common.jl")
     end
     @testset "Distributed" begin
         include("test_distributed.jl")
+    end
+    @testset "Post Processing" begin
+        include("test_post.jl")
     end
 end

@@ -22,22 +22,22 @@ end
 """
 Returns true if the penalty parameter value is dependent on the initial solutions of the subproblems.
 """
-function is_initial_value_dependent(::Type{AbstractPenaltyParameter})::Bool
-    throw(UnimplementedError("is_initial_value_dependent is unimplemented for penalty parameter of type $(typeof(r))."))
+function is_initial_value_dependent(p::Type{P})::Bool where P <: AbstractPenaltyParameter
+    throw(UnimplementedError("is_initial_value_dependent is unimplemented for penalty parameter of type $(p)."))
 end
 
 """
 Returns true if the penalty parameter value is dependent on any data or values in the subproblems (e.g., the coefficients in the objective function).
 """
-function is_subproblem_dependent(::Type{AbstractPenaltyParameter})::Bool
-    throw(UnimplementedError("is_subproblem_dependent is unimplemented for penalty parameter of type $(typeof(r))."))
+function is_subproblem_dependent(p::Type{P})::Bool where P <: AbstractPenaltyParameter
+    throw(UnimplementedError("is_subproblem_dependent is unimplemented for penalty parameter of type $(p)."))
 end
 
 """
 Returns true if the penalty parameter value may differ for different consensus variables.
 """
-function is_variable_dependent(::Type{AbstractPenaltyParameter})::Bool
-    throw(UnimplementedError("is_variable_dependent is unimplemented for penalty parameter of type $(typeof(r))."))
+function is_variable_dependent(p::Type{P})::Bool where P <: AbstractPenaltyParameter
+    throw(UnimplementedError("is_variable_dependent is unimplemented for penalty parameter of type $(p)."))
 end
 
 """

@@ -9,7 +9,7 @@ Struct for user supbroblem callbacks.
 
 The callback function `h` must have the signature
     `h(ext::Dict{Symbol,Any}, sp::T, niter::Int, scenario_id::ScenarioID)  where T <: AbstractSubproblem`
-where `ext` is the same dictionary given to the `Callback` constructor, `sp` is a concrete type of `AbstractSubproblem` (see `AbstractSubproblem`), `niter` is the current iteration and `scenario_id` is a scenario identifier (see `ScenarioID`). The callback may return `false` to stop PH.
+where `ext` is the same dictionary given to the `Callback` constructor, `sp` is a concrete type of `AbstractSubproblem` (see `AbstractSubproblem`), `niter` is the current iteration and `scenario_id` is a scenario identifier (see `ScenarioID`).
 """
 struct SubproblemCallback
     name::String
@@ -32,13 +32,6 @@ function SubproblemCallback(f::Function)
 end
 
 """
-    spcb(f::Function)
-
-Shorthand for `SubproblemCallback(f)`.
-"""
-spcb(f::Function) = SubproblemCallback(f)
-
-"""
     SubproblemCallback(f::Function, ext::Dict{Symbol,Any})
 
 Creates a `SubproblemCallback` structure for function `f` with the external data dictionary `ext`.
@@ -48,10 +41,12 @@ function SubproblemCallback(f::Function, ext::Dict{Symbol,Any})
 end
 
 """
-    SubproblemCallback(f::Function, ext::Dict{Symbol,Any}, name::String)
+    spcb(f::Function)
+    spcb(f::Function, ext::Dict{Symbol,Any})
+    spcb(name::String, f::Function, ext::Dict{Symbol,Any})
 
-Creates a `SubproblemCallback` structure for function `f` with the external data dictionary `ext` and name `name`.
+Shorthand for `SubproblemCallback`.
 """
-function SubproblemCallback(f::Function, ext::Dict{Symbol,Any}, name::String)
-    return SubproblemCallback(string(f), f, ext, name)
-end
+spcb(f::Function) = SubproblemCallback(f)
+spcb(f::Function, ext::Dict{Symbol,Any}) = SubproblemCallback(f, ext)
+spcb(name::String, f::Function, ext::Dict{Symbol,Any}) = SubproblemCallback(name, f, ext)
