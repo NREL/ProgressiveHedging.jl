@@ -147,6 +147,15 @@ Solve the stochastic programming problem described by `tree` and the models crea
 * `worker_assignments::Dict{Int,Set{ScenarioID}}` : Dictionary specifying which scenario subproblems a worker will create and solve. The key values are worker ids as given by Distributed (see `Distributed.workers()`). The user is responsible for ensuring the specified workers exist and that every scenario is assigned to a worker. If no dictionary is given, scenarios are assigned to workers in round robin fashion. Defaults to empty dictionary.
 * `args::Tuple` : Tuple of arguments to pass to `model_cosntructor`. Defaults to (). See also `other_args` and `kwargs`.
 * `kwargs` : Any keyword arguments not specified here that need to be passed to `subproblem_constructor`.  See also `other_args` and `args`.
+
+**Return Arguments**
+
+* `niter` : Number of iterations performed.
+* `abs_res` : Absolute residual (of what?).
+* `rel_res` : Relative residual (of what?).
+* `obj` : Objective value (not including augmented terms?).
+* `soln_df` : `DataFrame` containing variables, their values and their stage and scenario IDs.
+* `phd` : A data structure used for the progressive hedging algorithm. See `PHData` for more information.
 """
 function solve(tree::ScenarioTree,
                subproblem_constructor::Function,
