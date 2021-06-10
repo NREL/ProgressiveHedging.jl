@@ -107,6 +107,8 @@ function process_penalty_subproblem(r::ProportionalPenaltyParameter,
                                     penalties::Dict{VariableID,Float64}
                                     )::Nothing
 
+    @error r.penalties
+    @error "HELLO"
     for (vid, penalty) in pairs(penalties)
 
         xhid = convert_to_xhat_id(phd, vid)
@@ -114,7 +116,10 @@ function process_penalty_subproblem(r::ProportionalPenaltyParameter,
 
         if haskey(r.penalties, xhid)
             if !isapprox(r.penalties[xhid], r_value)
-                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty) for variable $(name(phd, xhid)). This error likely means the coefficients in the objective function do not match in the scenario subproblems.")
+                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty) for variable $(name(phd, xhid)) when processing penalty parameter for scenario $(scid). This error could mean that:
+                    1. The coefficients in the objective function do not match in the scenario subproblems
+                    2. The variable specific penalties were set in the penalty parameter before the call to `PH.solve`."
+                    )
             end
         else
             r.penalties[xhid] = r_value
@@ -246,7 +251,10 @@ function process_penalty_subproblem(r::SEPPenaltyParameter,
 
         if haskey(r.penalties, xhid)
             if !isapprox(r.penalties[xhid], penalty)
-                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty) for variable $(name(phd, xhid)). This error likely means the coefficients in the objective function do not match in the scenario subproblems.")
+                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty) for variable $(name(phd, xhid)) when processing penalty parameter for scenario $(scid). This error could mean that:
+                    1. The coefficients in the objective function do not match in the scenario subproblems
+                    2. The variable specific penalties were set in the penalty parameter before the call to `PH.solve`."
+                    )
             end
         else
             r.penalties[xhid] = penalty
