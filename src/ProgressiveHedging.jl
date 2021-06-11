@@ -151,9 +151,9 @@ Solve the stochastic programming problem described by `tree` and the models crea
 **Return Arguments**
 
 * `niter` : Number of iterations performed.
-* `abs_res` : Absolute residual (of what?).
-* `rel_res` : Relative residual (of what?).
-* `obj` : Objective value (not including augmented terms?).
+* `abs_res` : Absolute residual. The sum of the L2 norm of movement between consensus variables from one iteration to the next and the L2 norm of the lack of consensus divided by the number of consensus variables.
+* `rel_res` : Relative residual. The absolute residual divided by the maximum consensus variable value.
+* `obj` : Objective value with progressive hedging terms removed.
 * `soln_df` : `DataFrame` containing variables, their values and their stage and scenario IDs.
 * `phd` : A data structure used for the progressive hedging algorithm. See `PHData` for more information.
 """
