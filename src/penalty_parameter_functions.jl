@@ -114,10 +114,7 @@ function process_penalty_subproblem(r::ProportionalPenaltyParameter,
 
         if haskey(r.penalties, xhid)
             if !isapprox(r.penalties[xhid], r_value)
-                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty) for variable $(name(phd, xhid)) when processing penalty parameter for scenario $(scid). This error could mean that:
-                    1. The coefficients in the objective function do not match in the scenario subproblems
-                    2. The variable specific penalties were set in the penalty parameter before the call to `PH.solve`."
-                    )
+                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty) for variable $(name(phd, xhid)) when processing penalty parameter for scenario $(scid). This error likely means the coefficients in the objective function do not match in the scenario subproblems.")
             end
         else
             r.penalties[xhid] = r_value
@@ -138,6 +135,10 @@ end
 
 function is_variable_dependent(::Type{ProportionalPenaltyParameter})::Bool
     return true
+end
+
+function reset_penalty_parameter(r::ProportionalPenaltyParameter)::ProportionalPenaltyParameter
+    return ProportionalPenaltyParameter(r.constant, Dict{XhatID,Float64}())
 end
 
 ## Scalar Penalty Parameter ##
@@ -162,6 +163,10 @@ end
 
 function is_variable_dependent(::Type{ScalarPenaltyParameter})::Bool
     return false
+end
+
+function reset_penalty_parameter(r::ScalarPenaltyParameter)::ScalarPenaltyParameter
+    return r
 end
 
 ## SEP Penalty Parameter ##
@@ -249,10 +254,7 @@ function process_penalty_subproblem(r::SEPPenaltyParameter,
 
         if haskey(r.penalties, xhid)
             if !isapprox(r.penalties[xhid], penalty)
-                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty) for variable $(name(phd, xhid)) when processing penalty parameter for scenario $(scid). This error could mean that:
-                    1. The coefficients in the objective function do not match in the scenario subproblems
-                    2. The variable specific penalties were set in the penalty parameter before the call to `PH.solve`."
-                    )
+                error("Penalty parameter must match across scenarios. Got $(r.penalties[xhid]) instead of $(penalty) for variable $(name(phd, xhid)) when processing penalty parameter for scenario $(scid). This error likely means the coefficients in the objective function do not match in the scenario subproblems.")
             end
         else
             r.penalties[xhid] = penalty
@@ -265,4 +267,8 @@ end
 
 function is_variable_dependent(::Type{SEPPenaltyParameter})::Bool
     return true
+end
+
+function reset_penalty_parameter(r::SEPPenaltyParameter)::SEPPenaltyParameter
+    return SEPPenaltyParameter(r.default, Dict{XhatID,Float64}())
 end
