@@ -83,6 +83,13 @@ function process_penalty_subproblem(r::AbstractPenaltyParameter,
     throw(UnimplementedError("process_penalty_subproblem is unimplemented for penalty parameter of type $(typeof(r))."))
 end
 
+"""
+Resets any mapping of consensus variable ids to penalty parameter values which `r` may have. This avoids potential bugs caused by the same instance of a penalty parameter being used for several calls to `solve`.
+"""
+function reset_penalty_parameter(r::AbstractPenaltyParameter)::Nothing
+    throw(UnimplementedError("reset_penalty_parameter is unimplemented for penalty parameter of type $(typeof(r))."))
+end
+
 #### Concrete Implementations ####
 
 ## Proportional Penalty Parameter ##
@@ -137,8 +144,11 @@ function is_variable_dependent(::Type{ProportionalPenaltyParameter})::Bool
     return true
 end
 
-function reset_penalty_parameter(r::ProportionalPenaltyParameter)::ProportionalPenaltyParameter
-    return ProportionalPenaltyParameter(r.constant, Dict{XhatID,Float64}())
+function reset_penalty_parameter(r::ProportionalPenaltyParameter)::Nothing
+    for k in keys(r.penalties)
+        delete!(r.penalties, k)
+    end
+    return nothing
 end
 
 ## Scalar Penalty Parameter ##
@@ -165,8 +175,8 @@ function is_variable_dependent(::Type{ScalarPenaltyParameter})::Bool
     return false
 end
 
-function reset_penalty_parameter(r::ScalarPenaltyParameter)::ScalarPenaltyParameter
-    return r
+function reset_penalty_parameter(r::ScalarPenaltyParameter)::Nothing
+    return nothing
 end
 
 ## SEP Penalty Parameter ##
@@ -269,6 +279,9 @@ function is_variable_dependent(::Type{SEPPenaltyParameter})::Bool
     return true
 end
 
-function reset_penalty_parameter(r::SEPPenaltyParameter)::SEPPenaltyParameter
-    return SEPPenaltyParameter(r.default, Dict{XhatID,Float64}())
+function reset_penalty_parameter(r::SEPPenaltyParameter)::Nothing
+    for k in keys(r.penalties)
+        delete!(r.penalties, k)
+    end
+    return nothing
 end

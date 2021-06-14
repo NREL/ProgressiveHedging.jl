@@ -11,6 +11,7 @@ All concrete subtypes must implement the following methods:
 * `is_initial_value_dependent(::Type{<ConcreteSubtype>})::Bool`
 * `is_subproblem_dependent(::Type{<ConcreteSubtype>})::Bool`
 * `is_variable_dependent(::Type{<ConcreateSubtype>})::Bool`
+* `reset_penalty_parameter(r::<ConcreteSubtype>)::Nothing`
 
 If `is_initial_value_dependent` returns `true`, then the concrete subtype must implement
 * `process_penalty_initial_value(r::<ConcreteSubtype>, ph_data::PHData)::Nothing`

@@ -180,7 +180,7 @@ function solve(tree::ScenarioTree,
                
     timo = TimerOutputs.TimerOutput()
     
-    r = reset_penalty_parameter(r)
+    reset_penalty_parameter(r)
 
     if length(scenarios(tree)) == 1
         @warn("Given scenario tree indicates a deterministic problem (only one scenario).")
