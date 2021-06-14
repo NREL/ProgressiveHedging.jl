@@ -1,4 +1,24 @@
 
+@testset "Penalty Parameter Interface" begin
+    struct Fake <: PH.AbstractPenaltyParameter end
+    fake = Fake()
+    xhid = PH.XhatID(PH.NodeID(0), PH.Index(0))
+    phd = fake_phdata(3, 4; add_leaves=false)
+    @test_throws PH.UnimplementedError PH.get_penalty_value(fake)
+    @test_throws PH.UnimplementedError PH.get_penalty_value(fake, xhid)
+    @test_throws PH.UnimplementedError PH.is_initial_value_dependent(Fake)
+    @test_throws PH.UnimplementedError PH.is_subproblem_dependent(Fake)
+    @test_throws PH.UnimplementedError PH.is_variable_dependent(Fake)
+    @test_throws PH.UnimplementedError PH.penalty_map(fake)
+    @test_throws PH.UnimplementedError PH.process_penalty_initial_value(fake, phd)
+    @test_throws PH.UnimplementedError PH.process_penalty_subproblem(fake,
+                                                                     phd,
+                                                                     PH.scid(0),
+                                                                     Dict{PH.VariableID,
+                                                                          Float64}()
+                                                                  )
+end
+
 @testset "Scalar Penalty" begin
     @test PH.is_initial_value_dependent(PH.ScalarPenaltyParameter) == false
     @test PH.is_subproblem_dependent(PH.ScalarPenaltyParameter) == false
