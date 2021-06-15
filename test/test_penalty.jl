@@ -164,7 +164,7 @@ end
         @test isempty(r.penalties) == true
         r.penalties[PH.XhatID(PH.NodeID(0), PH.Index(0))] = 1.0
         @test isempty(r.penalties) == false
-        PH.reset_penalty_parameter(r)
+        PH.reset_penalty_map(r)
         @test isempty(r.penalties) == true
     end
 end
