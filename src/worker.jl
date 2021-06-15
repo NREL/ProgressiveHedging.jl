@@ -172,13 +172,14 @@ function process_message(msg::Solve,
 
     _execute_subproblem_callbacks(sub, msg.niter, msg.scen)
 
-    if record.warm_start
-        warm_start(sub.problem)
-    end
-
     start = time()
     sts = solve_subproblem(sub.problem)
     stop = time()
+    
+    if record.warm_start == true
+        warm_start(sub.problem)
+    end
+    
     var_vals = report_values(sub.problem, sub.branch_vars)
 
     put!(output, ReportBranch(msg.scen,
@@ -204,13 +205,13 @@ function process_message(msg::SolveLowerBound,
     lb_sub = record.lb_subproblems[msg.scen]
     update_lagrange_terms(lb_sub.problem, msg.w_vals)
 
-    if record.warm_start
-        warm_start(lb_sub.problem)
-    end
-
     start = time()
     sts = solve_subproblem(lb_sub.problem)
     stop = time()
+        
+    if record.warm_start == true
+        warm_start(sub.problem)
+    end
 
     put!(output, ReportLowerBound(msg.scen,
                                   sts,
@@ -310,6 +311,11 @@ function _initial_solve(output::RemoteChannel,
         start = time()
         sts = solve_subproblem(sub.problem)
         stop = time()
+        
+        if record.warm_start == true
+            warm_start(sub.problem)
+        end
+        
         var_vals = report_values(sub.problem, sub.branch_vars)
         put!(output, ReportBranch(scen,
                                   sts,

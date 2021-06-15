@@ -158,3 +158,13 @@ end
         println("Skipping SEP integer setting tests.")
     end
 end
+
+@testset "Reset penalty parameters" begin
+    for r in (PH.ProportionalPenaltyParameter(1.0), PH.SEPPenaltyParameter(1.0))
+        @test isempty(r.penalties) == true
+        r.penalties[PH.XhatID(PH.NodeID(0), PH.Index(0))] = 1.0
+        @test isempty(r.penalties) == false
+        PH.reset_penalty_parameter(r)
+        @test isempty(r.penalties) == true
+    end
+end

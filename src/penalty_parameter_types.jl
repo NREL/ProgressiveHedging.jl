@@ -22,6 +22,7 @@ Additionally, the concrete **subproblem type** must implement the function
 
 If `is_variable_dependent` returns `true`, then the concrete subtype must implement
 * `penalty_map(r::<ConcreteSubtype>)::Dict{XhatID,Float64}`
+* `reset_penalty_map(r::<ConcreteSubtype>)::Nothing`
 If `is_variable_dependent` returns `false`, then the concrete subtype must implement
 * `get_penalty_value(r::<ConcreteSubtype>)::Float64`
 
