@@ -86,8 +86,8 @@ end
 """
 Resets any mapping of consensus variable ids to penalty parameter values which `r` may have. This avoids potential bugs caused by the same instance of a penalty parameter being used for several calls to `solve`.
 """
-function reset_penalty_parameter(r::AbstractPenaltyParameter)::Nothing
-    throw(UnimplementedError("reset_penalty_parameter is unimplemented for penalty parameter of type $(typeof(r))."))
+function reset_penalty_map(r::AbstractPenaltyParameter)::Nothing
+    return 
 end
 
 #### Concrete Implementations ####
@@ -144,11 +144,11 @@ function is_variable_dependent(::Type{ProportionalPenaltyParameter})::Bool
     return true
 end
 
-function reset_penalty_parameter(r::ProportionalPenaltyParameter)::Nothing
+function reset_penalty_map(r::ProportionalPenaltyParameter)::Nothing
     for k in keys(r.penalties)
         delete!(r.penalties, k)
     end
-    return nothing
+    return
 end
 
 ## Scalar Penalty Parameter ##
@@ -173,10 +173,6 @@ end
 
 function is_variable_dependent(::Type{ScalarPenaltyParameter})::Bool
     return false
-end
-
-function reset_penalty_parameter(r::ScalarPenaltyParameter)::Nothing
-    return nothing
 end
 
 ## SEP Penalty Parameter ##
@@ -279,9 +275,9 @@ function is_variable_dependent(::Type{SEPPenaltyParameter})::Bool
     return true
 end
 
-function reset_penalty_parameter(r::SEPPenaltyParameter)::Nothing
+function reset_penalty_map(r::SEPPenaltyParameter)::Nothing
     for k in keys(r.penalties)
         delete!(r.penalties, k)
     end
-    return nothing
+    return
 end
