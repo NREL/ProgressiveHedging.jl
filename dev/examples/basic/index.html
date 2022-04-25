@@ -41,16 +41,16 @@ scenario_id_1 = ScenarioID(1)</pre><p>The subproblem created by the subproblem c
 @show rel_res
 @show obj
 @show soln_df</code></pre><pre class="documenter-example-output">niter = 39
-abs_res = 3.3717478904804885e-6
-rel_res = 8.429376739147918e-7
-obj = 5.749998288558977
+abs_res = 3.3717478994300154e-6
+rel_res = 8.429376761521772e-7
+obj = 5.749998288558974
 soln_df = 3×4 DataFrame
- Row │ variable  value    stage  scenarios
-     │ String    Float64  Int64  String
-─────┼─────────────────────────────────────
-   1 │ x         4.0          1  0,1
-   2 │ y         7.00001      2  0
-   3 │ y         0.0          2  1</pre><p>The solve function returns the number of iteration, the absolute and relative residual, the objective value, a <code>DataFrame</code> containing the solution and, lastly, a <a href="../../api/types/#ProgressiveHedging.PHData"><code>PHData</code></a> instance.</p><p>The <a href="../../api/types/#ProgressiveHedging.PHData"><code>PHData</code></a> contains additional information like the dual (Lagrange multiplier) values for the nonanticipativity constraints</p><pre><code class="language-julia">dual_df = retrieve_w(phd)
+ Row │ variable  value        stage  scenarios
+     │ String    Float64      Int64  String
+─────┼─────────────────────────────────────────
+   1 │ x          4.0             1  0,1
+   2 │ y          7.00001         2  0
+   3 │ y         -9.99999e-9      2  1</pre><p>The solve function returns the number of iteration, the absolute and relative residual, the objective value, a <code>DataFrame</code> containing the solution and, lastly, a <a href="../../api/types/#ProgressiveHedging.PHData"><code>PHData</code></a> instance.</p><p>The <a href="../../api/types/#ProgressiveHedging.PHData"><code>PHData</code></a> contains additional information like the dual (Lagrange multiplier) values for the nonanticipativity constraints</p><pre><code class="language-julia">dual_df = retrieve_w(phd)
 @show dual_df</code></pre><pre class="documenter-example-output">dual_df = 2×5 DataFrame
  Row │ variable  value    stage  scenario  index
      │ String    Float64  Int64  Int64     Int64
@@ -58,13 +58,13 @@ soln_df = 3×4 DataFrame
    1 │ W_x          -0.5      1         0      1
    2 │ W_x           0.5      1         1      1</pre><p>as well as the raw values of the consensus contributing variables</p><pre><code class="language-julia">raw_values_df = retrieve_no_hats(phd)
 @show raw_values_df</code></pre><pre class="documenter-example-output">raw_values_df = 4×5 DataFrame
- Row │ variable  value    stage  scenario  index
-     │ String    Float64  Int64  Int64     Int64
-─────┼───────────────────────────────────────────
-   1 │ x         3.99999      1         0      1
-   2 │ x         4.0          1         1      1
-   3 │ y         7.00001      2         0      1
-   4 │ y         0.0          2         1      1</pre><h2 id="Determining-the-Consensus-Variables"><a class="docs-heading-anchor" href="#Determining-the-Consensus-Variables">Determining the Consensus Variables</a><a id="Determining-the-Consensus-Variables-1"></a><a class="docs-heading-anchor-permalink" href="#Determining-the-Consensus-Variables" title="Permalink"></a></h2><div class="admonition is-info"><header class="admonition-header">Determining the Consensus Variables</header><div class="admonition-body"><p>You may notice that we never specifically indicated which variables needed nonanticipativity constraints. ProgressiveHedging determines this automatically for us using the scenario tree we constructed, the stage the variable is in and the name the variable is given. When using the <a href="../../api/types/#ProgressiveHedging.JuMPSubproblem"><code>JuMPSubproblem</code></a>, the name of the variable is determined by calling the function <code>JuMP.name</code> on each <code>JuMP.VariableRef</code> object. The stage is given by the dictionary given to the <a href="../../api/types/#ProgressiveHedging.JuMPSubproblem"><code>JuMPSubproblem</code></a> constructor as seen in the subproblem creation function above. This is possible because the combination of a <a href="../../api/types/#ProgressiveHedging.ScenarioID"><code>ScenarioID</code></a> and a <a href="../../api/types/#ProgressiveHedging.StageID"><code>StageID</code></a> uniquely determine a node on the scenario tree. Any variables with the same names that belong to this node are assumed to require nonanticipativity constraints and so are identified as consensus variables.</p></div></div><h2 id="Extensive-Solve"><a class="docs-heading-anchor" href="#Extensive-Solve">Extensive Solve</a><a id="Extensive-Solve-1"></a><a class="docs-heading-anchor-permalink" href="#Extensive-Solve" title="Permalink"></a></h2><p>For smaller problems, it is also possible to solve the extensive form of the problem directly. ProgressiveHedging.jl is capable of building the extensive form from the previously defined function and scenario tree.</p><pre><code class="language-julia">ef_model = solve_extensive(scen_tree,
+ Row │ variable  value        stage  scenario  index
+     │ String    Float64      Int64  Int64     Int64
+─────┼───────────────────────────────────────────────
+   1 │ x          3.99999         1         0      1
+   2 │ x          4.0             1         1      1
+   3 │ y          7.00001         2         0      1
+   4 │ y         -9.99999e-9      2         1      1</pre><h2 id="Determining-the-Consensus-Variables"><a class="docs-heading-anchor" href="#Determining-the-Consensus-Variables">Determining the Consensus Variables</a><a id="Determining-the-Consensus-Variables-1"></a><a class="docs-heading-anchor-permalink" href="#Determining-the-Consensus-Variables" title="Permalink"></a></h2><div class="admonition is-info"><header class="admonition-header">Determining the Consensus Variables</header><div class="admonition-body"><p>You may notice that we never specifically indicated which variables needed nonanticipativity constraints. ProgressiveHedging determines this automatically for us using the scenario tree we constructed, the stage the variable is in and the name the variable is given. When using the <a href="../../api/types/#ProgressiveHedging.JuMPSubproblem"><code>JuMPSubproblem</code></a>, the name of the variable is determined by calling the function <code>JuMP.name</code> on each <code>JuMP.VariableRef</code> object. The stage is given by the dictionary given to the <a href="../../api/types/#ProgressiveHedging.JuMPSubproblem"><code>JuMPSubproblem</code></a> constructor as seen in the subproblem creation function above. This is possible because the combination of a <a href="../../api/types/#ProgressiveHedging.ScenarioID"><code>ScenarioID</code></a> and a <a href="../../api/types/#ProgressiveHedging.StageID"><code>StageID</code></a> uniquely determine a node on the scenario tree. Any variables with the same names that belong to this node are assumed to require nonanticipativity constraints and so are identified as consensus variables.</p></div></div><h2 id="Extensive-Solve"><a class="docs-heading-anchor" href="#Extensive-Solve">Extensive Solve</a><a id="Extensive-Solve-1"></a><a class="docs-heading-anchor-permalink" href="#Extensive-Solve" title="Permalink"></a></h2><p>For smaller problems, it is also possible to solve the extensive form of the problem directly. ProgressiveHedging.jl is capable of building the extensive form from the previously defined function and scenario tree.</p><pre><code class="language-julia">ef_model = solve_extensive(scen_tree,
                            two_stage_model,
                            ()-&gt;Ipopt.Optimizer(),
                            opt_args=(print_level=0, tol=1e-12, acceptable_tol=1e-12)
@@ -73,7 +73,7 @@ soln_df = 3×4 DataFrame
 for v in JuMP.all_variables(ef_model)
     println(&quot;$v = $(JuMP.value(v))&quot;)
 end</code></pre><pre class="documenter-example-output">JuMP.termination_status(ef_model) = MathOptInterface.LOCALLY_SOLVED
-JuMP.objective_value(ef_model) = 5.749999957500125
+JuMP.objective_value(ef_model) = 5.749999957500126
+y_{1} = -9.99997048395611e-9
 x_{0,1} = 4.000000009999971
-y_{0} = 6.999999990000029
-y_{1} = 0.0</pre><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>The subscripts in the variable names are the scenarios to which the variable belongs.</p></div></div></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Overview</a><a class="docs-footer-nextpage" href="../callback/">Callback Example »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Thursday 17 June 2021 17:14">Thursday 17 June 2021</span>. Using Julia version 1.6.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+y_{0} = 6.999999990000029</pre><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>The subscripts in the variable names are the scenarios to which the variable belongs.</p></div></div></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Overview</a><a class="docs-footer-nextpage" href="../callback/">Callback Example »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Monday 25 April 2022 17:26">Monday 25 April 2022</span>. Using Julia version 1.6.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
