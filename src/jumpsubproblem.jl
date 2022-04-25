@@ -163,12 +163,15 @@ function update_ph_terms(js::JuMPSubproblem,
 end
 
 function warm_start(js::JuMPSubproblem)::Nothing
-    for var in JuMP.all_variables(js.model)
-        if !JuMP.is_fixed(var)
-            JuMP.set_start_value(var, JuMP.value(var))
-        end
-    end
+
+    @assert(JuMP.has_values(js.model))
+
+    vars = JuMP.all_variables(js.model)
+    vals = JuMP.value.(vars)
+    JuMP.set_start_value.(vars, vals)
+
     return
+
 end
 
 function ef_copy_model(efm::JuMP.Model,

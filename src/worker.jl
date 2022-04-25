@@ -82,7 +82,7 @@ function process_message(msg::Initialize,
                          output::RemoteChannel
                          )::Bool
 
-    record.warm_start = msg.warm_start
+    # record.warm_start = msg.warm_start
 
     # Master process needs the variable map messages to proceed. Initial solves are
     # not needed until much later in the process. So get all variable maps back first
@@ -168,6 +168,10 @@ function process_message(msg::Solve,
 
     sub = record.subproblems[msg.scen]
 
+    if record.warm_start == true
+        warm_start(sub.problem)
+    end
+
     update_ph_terms(sub.problem, msg.w_vals, msg.xhat_vals)
 
     _execute_subproblem_callbacks(sub, msg.niter, msg.scen)
@@ -175,10 +179,6 @@ function process_message(msg::Solve,
     start = time()
     sts = solve_subproblem(sub.problem)
     stop = time()
-    
-    if record.warm_start == true
-        warm_start(sub.problem)
-    end
     
     var_vals = report_values(sub.problem, sub.branch_vars)
 
@@ -203,15 +203,16 @@ function process_message(msg::SolveLowerBound,
     end
 
     lb_sub = record.lb_subproblems[msg.scen]
+
+    if record.warm_start == true
+        warm_start(lb_sub.problem)
+    end
+
     update_lagrange_terms(lb_sub.problem, msg.w_vals)
 
     start = time()
     sts = solve_subproblem(lb_sub.problem)
     stop = time()
-        
-    if record.warm_start == true
-        warm_start(sub.problem)
-    end
 
     put!(output, ReportLowerBound(msg.scen,
                                   sts,
@@ -312,10 +313,6 @@ function _initial_solve(output::RemoteChannel,
         sts = solve_subproblem(sub.problem)
         stop = time()
         
-        if record.warm_start == true
-            warm_start(sub.problem)
-        end
-        
         var_vals = report_values(sub.problem, sub.branch_vars)
         put!(output, ReportBranch(scen,
                                   sts,
@@ -323,6 +320,10 @@ function _initial_solve(output::RemoteChannel,
                                   stop - start,
                                   var_vals)
              )
+
+        # if record.warm_start == true
+        #     warm_start(sub.problem)
+        # end
 
     end
 
