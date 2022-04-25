@@ -214,7 +214,8 @@
             error("Test timedout")
         end
 
-        PH._shutdown(wi)
+        # PH._shutdown(wi)
+        PH._abort(wi)
         PH._wait_for_shutdown(wi)
     end
 
@@ -386,7 +387,8 @@
             error("Test timedout")
         end
 
-        PH._shutdown(wi)
+        # PH._shutdown(wi)
+        PH._abort(wi)
         PH._wait_for_shutdown(wi)
     end
 
@@ -558,7 +560,8 @@
             error("Test timedout")
         end
 
-        PH._shutdown(wi)
+        # PH._shutdown(wi)
+        PH._abort(wi)
         PH._wait_for_shutdown(wi)
     end
 
@@ -597,7 +600,8 @@
             @test length(sub.leaf_vars) == 2
         end
 
-        PH._shutdown(wi)
+        # PH._shutdown(wi)
+        PH._abort(wi)
         PH._wait_for_shutdown(wi)
 
     end

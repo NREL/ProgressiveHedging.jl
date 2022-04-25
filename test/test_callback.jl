@@ -207,7 +207,7 @@ end
 
     @test err == 0.0
     @test rerr == 0.0
-    @test obj == 0.0
+    @test isapprox(obj, 0.0; atol=1e-12)
     @test n == 3
 
     cb_ext = phd.callbacks[1].ext 

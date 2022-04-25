@@ -114,7 +114,7 @@ end
     end
     PH.update_ph_terms(js, w_vals, xhat_vals)
 
-    PH.warm_start(js)
+    # PH.warm_start(js)
     sts = PH.solve_subproblem(js)
     @test sts == MOI.LOCALLY_SOLVED
     @test org_obj_val != PH.objective_value(js)

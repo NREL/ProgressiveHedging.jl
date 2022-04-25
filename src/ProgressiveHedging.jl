@@ -182,6 +182,10 @@ function solve(tree::ScenarioTree,
     
     reset_penalty_map(r)
 
+    if warm_start
+        @warn("Warm start has been disabled due issues with the JuMP interface.")
+    end
+
     if length(scenarios(tree)) == 1
         @warn("Given scenario tree indicates a deterministic problem (only one scenario).")
     elseif length(scenarios(tree)) <= 0
@@ -260,7 +264,7 @@ end
           args::Tuple=(),
           kwargs...)
 
-Solve given problem using Progressive Hedging.
+Solve given minimization problem given by `tree` and `subproblem_constructor` by forming and solving the extensive form. Returns a `JuMP.Model` of the extensive form model after `JuMP.optimize!` has been called.
 
 **Arguments**
 

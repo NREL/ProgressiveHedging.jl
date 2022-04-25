@@ -39,7 +39,13 @@ var_vals = Dict([
     @test isapprox(JuMP.objective_value(efm), obj_val)
 
     for var in JuMP.all_variables(efm)
-        @test isapprox(JuMP.value(var), var_vals[JuMP.name(var)])
+        if (abs(JuMP.value(var)) < 1e-8 ||
+            abs(var_vals[JuMP.name(var)]) < 1e-8
+            )
+            @test isapprox(JuMP.value(var), var_vals[JuMP.name(var)], atol=1e-8)
+        else
+            @test isapprox(JuMP.value(var), var_vals[JuMP.name(var)], rtol=1e-8)
+        end
     end
 
     struct FakeSubproblem <: AbstractSubproblem end
@@ -170,7 +176,7 @@ end
 @testset "Max iteration termination" begin
     max_iter = 4
     regex = r".*"
-    @info "Ignore the following warning."
+    # @info "Ignore the following warning."
     (n, err, rerr, obj, soln, phd) = @test_warn(regex,
                                                 PH.solve(build_scen_tree(),
                                                          create_model,

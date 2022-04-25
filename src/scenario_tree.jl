@@ -31,15 +31,15 @@ struct ScenarioNode
     children::Set{ScenarioNode}
 end
 
-function stringify(node::ScenarioNode)
-    node_str = "$(value(node.id)):{"
-    for s in sort!(collect(node.scenario_bundle))
-        node_str *= "$(value(s)),"
-    end
-    rstrip(node_str, ',')
-    node_str *= "}"
-    return node_str
-end
+# function stringify(node::ScenarioNode)
+#     node_str = "$(value(node.id)):{"
+#     for s in sort!(collect(node.scenario_bundle))
+#         node_str *= "$(value(s)),"
+#     end
+#     rstrip(node_str, ',')
+#     node_str *= "}"
+#     return node_str
+# end
 
 Base.show(io::IO, sn::ScenarioNode) = print(io, "ScenarioNode($(sn.id), $(sn.stage), $(sn.scenario_bundle))")
 
@@ -138,10 +138,6 @@ end
 
 function is_leaf(tree::ScenarioTree, nid::NodeID)::Bool
     return is_leaf(tree.tree_map[nid])
-end
-
-function is_leaf(tree::ScenarioTree, node::ScenarioNode)::Bool
-    return is_leaf(tree.tree_map[node.id])
 end
 
 function _add_node(tree::ScenarioTree, node::ScenarioNode)::Nothing
